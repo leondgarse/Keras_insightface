@@ -54,7 +54,7 @@
 ## Evaluting bin files
   - Bin files include jpeg image data pairs, and a label indicating if it's a same person, so there are double images than labels
     ```sh
-    # bins | issame_list
+    #    bins   | issame_list
     img_1 img_2 | 1
     img_3 img_4 | 1
     img_5 img_6 | 0

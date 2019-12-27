@@ -220,4 +220,81 @@
               print("label: %d, pos: %d, %f, neg: %d, %f" % (label, labels[pos], dist[pos], labels[neg_random], dist[neg_random]))
       return anchors, poses, negs
   ```
+## Online Triplet loss train
+  ```py
+  import pickle
+  import pandas as pd
+  with open('faces_emore_img_class_shuffle.pkl', 'rb') as ff:
+      aa = pickle.load(ff)
+  image_names, image_classes = aa['image_names'], aa['image_classes']
+  classes = np.max(image_classes) + 1
+  print(len(image_names), len(image_classes), classes)
+  # 5822653 5822653 85742
+
+  class Triplet_datasets:
+      def __init__(self, image_names, image_classes, batch_size=48, image_per_class=4, img_shape=(112, 112, 3)):
+          self.AUTOTUNE = tf.data.experimental.AUTOTUNE
+          image_dataframe = pd.DataFrame({'image_names': image_names, "image_classes" : image_classes})
+          image_dataframe = image_dataframe.groupby("image_classes").apply(lambda xx: xx.image_names.values)
+          aa = image_dataframe.map(len)
+          self.image_dataframe = image_dataframe[aa > image_per_class]
+          self.split_func = lambda xx: np.array(np.split(np.random.permutation(xx)[:len(xx) // image_per_class * image_per_class], len(xx) // image_per_class))
+          self.image_per_class = image_per_class
+          self.batch_size = batch_size
+          self.img_shape = img_shape[:2]
+          self.channels = img_shape[2] if len(img_shape) > 2 else 3
+          print("The final train_dataset batch will be %s" % ([batch_size * image_per_class, * self.img_shape, self.channels]))
+
+      def random_init_triplet_dataset(self):
+          shuffle_dataset = self.image_dataframe.map(self.split_func)
+          tt = np.vstack(shuffle_dataset.values)
+          total = len(tt)
+          print("%d paired images found" % (total))
+          train_dataset = tf.data.Dataset.from_tensor_slices(tt)
+          train_dataset = train_dataset.shuffle(total)
+          train_dataset = train_dataset.batch(self.batch_size)
+          train_dataset = train_dataset.map(self.process_batch_path, num_parallel_calls=self.AUTOTUNE)
+          train_dataset = train_dataset.prefetch(buffer_size=self.AUTOTUNE)
+          steps_per_epoch = np.ceil(total / self.batch_size)
+          return train_dataset, steps_per_epoch
+
+      def process_batch_path(self, image_name_batch):
+          image_names = tf.reshape(image_name_batch, [-1])
+          images, labels = tf.map_fn(self.process_single_path, image_names, dtype=(tf.float32, tf.int32))
+          return images, labels
+
+      def process_single_path(self, img_name):
+          parts = tf.strings.split(img_name, os.path.sep)[-2]
+          label = tf.cast(tf.strings.to_number(parts), tf.int32)
+          img = tf.io.read_file(img_name)
+          img = tf.image.decode_jpeg(img, channels=self.channels)
+          img = tf.image.convert_image_dtype(img, tf.float32)
+          img = tf.image.resize(img, self.img_shape)
+          img = tf.image.random_flip_left_right(img)
+          return img, label
+
+  def batch_hard_triplet_loss(labels, embeddings, alpha=0.3):
+      labels = tf.squeeze(labels)
+      labels.set_shape([None])
+      pos_mask = tf.equal(tf.expand_dims(labels, 0), tf.expand_dims(labels, 1))
+      norm_emb = tf.nn.l2_normalize(embeddings, 1)
+      dists = tf.matmul(norm_emb, tf.transpose(norm_emb))
+      # pos_dists = tf.ragged.boolean_mask(dists, pos_mask)
+      pos_dists = tf.where(pos_mask, dists, tf.ones_like(dists))
+      hardest_pos_dist = tf.reduce_min(pos_dists, -1)
+      # neg_dists = tf.ragged.boolean_mask(dists, tf.logical_not(pos_mask))
+      neg_dists = tf.where(pos_mask, tf.ones_like(dists) * -1, dists)
+      hardest_neg_dist = tf.reduce_max(neg_dists, -1)
+      basic_loss = hardest_neg_dist - hardest_pos_dist + alpha
+      return tf.reduce_mean(tf.maximum(basic_loss, 0.0))
+
+  basic_model.compile(optimizer='adamax', loss=batch_hard_triplet_loss)
+  triplet_datasets = Triplet_datasets(image_names, image_classes, batch_size=48, image_per_class=4)
+  for epoch in range(20, 100):
+      train_dataset, steps_per_epoch = triplet_datasets.random_init_triplet_dataset()
+      basic_model.fit(train_dataset, epochs=epoch+1, verbose=1, callbacks=callbacks, steps_per_epoch=steps_per_epoch, initial_epoch=epoch, use_multiprocessing=True, workers=4)
+      del train_dataset
+
+  basic_model = keras.models.load_model('ff.h5', custom_objects={'batch_hard_triplet_loss': batch_hard_triplet_loss})
+  ```
 ***
