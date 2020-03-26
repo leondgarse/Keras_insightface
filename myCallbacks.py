@@ -1,0 +1,52 @@
+import sys
+import select
+import os
+import numpy as np
+from tensorflow import keras
+from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, LearningRateScheduler
+
+
+class Gently_stop_callback(keras.callbacks.Callback):
+    def __init__(self, prompt="Continue? ([Y]/n)", time_out=3):
+        super(Gently_stop_callback, self).__init__()
+        self.yes_or_no = lambda: "n" not in self.timeout_input(prompt, time_out, default="y")[1].lower()
+
+    def on_epoch_end(self, epoch, logs={}):
+        print()
+        if not self.yes_or_no():
+            self.model.stop_training = True
+
+    def timeout_input(self, prompt, timeout=3, default=""):
+        print(prompt, end=": ", flush=True)
+        inputs, outputs, errors = select.select([sys.stdin], [], [], timeout)
+        print()
+        return (0, sys.stdin.readline().strip()) if inputs else (-1, default)
+
+
+class My_history(keras.callbacks.Callback):
+    def __init__(self, initial_hist=None):
+        super(My_history, self).__init__()
+        self.history = initial_hist if initial_hist else {}
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        for k, v in logs.items():
+            self.history.setdefault(k, []).append(v)
+
+
+def scheduler(epoch, lr_base):
+    lr = lr_base if epoch < 10 else lr_base * np.exp(0.1 * (10 - epoch))
+    print("\nLearning rate for epoch {} is {}".format(epoch + 1, lr))
+    return lr
+
+
+def basic_callbacks(checkpoint="keras_checkpoints.h5", lr=0.001):
+    checkpoint_base = "./checkpoints"
+    if not os.path.exists(checkpoint_base):
+        os.mkdir(checkpoint_base)
+    checkpoint = os.path.join(checkpoint_base, checkpoint)
+    model_checkpoint = ModelCheckpoint(checkpoint, verbose=1)
+    ss = lambda epoch: scheduler(epoch, lr)
+    lr_scheduler = LearningRateScheduler(ss)
+    my_history = My_history(None)
+    return [model_checkpoint, lr_scheduler, my_history, Gently_stop_callback()]
