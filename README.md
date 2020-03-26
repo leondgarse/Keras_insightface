@@ -30,7 +30,7 @@
   | -------------- | -------- | -------- | -------- |
   | ResNet50V2     | 0.995833 | 0.951143 | 0.959333 |
   | MobileNetV2    | 0.993000 | 0.930429 | 0.930000 |
-  | Mobilefacenet  | 0.991000 | 0.926714 | 0.934667 |
+  | Mobilefacenet  | 0.991000 | 0.926714 | 0.936000 |
 ***
 
 # Usage
@@ -89,6 +89,7 @@
     import losses
     import train
     # basic_model = train.buildin_models("MobileNet", dropout=0.4, emb_shape=256)
+    # basic_model = train.buildin_models("ResNet101V2", dropout=0.4, emb_shape=512)
     basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="mobile_facenet_256")
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
@@ -124,6 +125,7 @@
     sch = [{"loss": losses.Centerloss(num_classes=85742), "optimizer": "adam", "centerloss": True, "epoch": 1}]
     sch = [{"loss": losses.batch_hard_triplet_loss, "optimizer": "adam", "epoch": 1}]
     ```
+	Some combinations are errors, like `centerloss` + `triplet`, and training `bottleneckOnly` + `triplet` will change nothing.
     ```py
     ''' Continue training from last saved file '''
     from tensorflow import keras
@@ -153,7 +155,6 @@
   - **Initialize training from scratch**
     ```py
     from tensorflow import keras
-    import mobile_facenet
     import losses
     import train
     basic_model = train.buildin_models("MobileNet", dropout=0.4, emb_shape=256)
