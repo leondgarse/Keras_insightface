@@ -186,70 +186,78 @@
 | center batch_hard_triplet_loss |         |          |          |            |          |               |          |                 |            |          |
 
 ## Mobilefacenet
-```py
-'''
->>>> Softmax 15
-Epoch 1/15
-36392/36392 [==============================] - 12820s 352ms/step - loss: 5.0583 - accuracy: 0.2964
-'''
-lfw = [0.971500,0.980000,0.986000,0.988000,0.988333,0.989667,0.989000,0.989833,0.988833,0.988500,0.987667,0.988667,0.988833,0.988167,0.989000,]
-cfp_fp = [0.865714,0.893000,0.898857,0.910000,0.908571,0.913857,0.912143,0.913000,0.913143,0.916143,0.920143,0.920857,0.924429,0.921571,0.927429,]
-agedb_30 = [0.829167,0.877500,0.892667,0.903167,0.903500,0.915167,0.910000,0.917167,0.917833,0.919833,0.919833,0.929167,0.920333,0.933333,0.928000,]
-loss = [5.0583, 1.6944, 1.2544, 1.0762, 0.9791, 0.9118, 0.8605, 0.8217, 0.7900, 0.7641, 0.7432, 0.6879, 0.6580, 0.6354, 0.6199,]
-accuracy = [0.2964, 0.6755, 0.7532, 0.7862, 0.8047, 0.8174, 0.8273, 0.8348, 0.8410, 0.8460, 0.8501, 0.8611, 0.8671, 0.8714, 0.8746,]
+  - Training script is the last exampled one.
+  ```py
+  '''
+  >>>> Softmax 15
+  Epoch 1/15
+  36392/36392 [==============================] - 12820s 352ms/step - loss: 5.0583 - accuracy: 0.2964
+  '''
+  lfw = [0.971500,0.980000,0.986000,0.988000,0.988333,0.989667,0.989000,0.989833,0.988833,0.988500,0.987667,0.988667,0.988833,0.988167,0.989000,]
+  cfp_fp = [0.865714,0.893000,0.898857,0.910000,0.908571,0.913857,0.912143,0.913000,0.913143,0.916143,0.920143,0.920857,0.924429,0.921571,0.927429,]
+  agedb_30 = [0.829167,0.877500,0.892667,0.903167,0.903500,0.915167,0.910000,0.917167,0.917833,0.919833,0.919833,0.929167,0.920333,0.933333,0.928000,]
+  loss = [5.0583, 1.6944, 1.2544, 1.0762, 0.9791, 0.9118, 0.8605, 0.8217, 0.7900, 0.7641, 0.7432, 0.6879, 0.6580, 0.6354, 0.6199,]
+  accuracy = [0.2964, 0.6755, 0.7532, 0.7862, 0.8047, 0.8174, 0.8273, 0.8348, 0.8410, 0.8460, 0.8501, 0.8611, 0.8671, 0.8714, 0.8746,]
 
-'''
->>>> margin_softmax 10
-Epoch 16/25
-36392/36392 [==============================] - 12623s 347ms/step - loss: 0.7236 - accuracy: 0.8861
-'''
-lfw_2 = [0.989000,0.989500,0.989167,0.990333,0.989500,0.991000,0.989667,]
-cfp_fp_2 = [0.925857,0.919571,0.926286,0.929286,0.927000,0.926714,0.926857,]
-agedb_30_2 = [0.932000,0.931333,0.932333,0.933500,0.933333,0.934667,0.933667,]
-loss_2 = [0.7236,0.6785, 0.6545, 0.6401, 0.6290, 0.6199, 0.6115, ]
-accuracy_2 = [0.8861,0.8934, 0.8973, 0.8995, 0.9015, 0.9030, 0.9043, ]
+  '''
+  >>>> margin_softmax 10
+  Epoch 16/25
+  36392/36392 [==============================] - 12623s 347ms/step - loss: 0.7236 - accuracy: 0.8861
+  '''
+  lfw_2 = [0.989000,0.989500,0.989167,0.990333,0.989500,0.991000,0.989667,]
+  cfp_fp_2 = [0.925857,0.919571,0.926286,0.929286,0.927000,0.926714,0.926857,]
+  agedb_30_2 = [0.932000,0.931333,0.932333,0.933500,0.933333,0.934667,0.933667,]
+  loss_2 = [0.7236,0.6785, 0.6545, 0.6401, 0.6290, 0.6199, 0.6115, ]
+  accuracy_2 = [0.8861,0.8934, 0.8973, 0.8995, 0.9015, 0.9030, 0.9043, ]
 
-def peak_scatter(ax, array, splits, peak_method, color):
-  for nn, ss in splits.items():
-    if ss[1] == -1:
-      pp = peak_method(array[ss[0]:])
-    else:
-      pp = peak_method(array[ss[0]:ss[1]])
-    ax.scatter(pp + ss[0], array[pp + ss[0]], color=color)
-    ax.text(pp + ss[0], array[pp + ss[0]], str(array[pp + ss[0]]))
+  def peak_scatter(ax, array, peak_method, color):
+    start = 0
+    for ii in array:
+      pp = peak_method(ii)
+      ax.scatter(pp + start, ii[pp], color=color)
+      ax.text(pp + start, ii[pp], str(ii[pp]))
+      start += len(ii)
 
-def add_plot(lfw, cfp_fp, agedb_30, loss, accuracy, splits, fig=None, axes=None):
-  if fig == None:
-    fig, axes = plt.subplots(1, 3, sharex=True, figsize=(15, 5))
+  def add_plot(lfws, cfp_fps, agedb_30s, losses, accuracies, names, fig=None, axes=None):
+    if fig == None:
+      fig, axes = plt.subplots(1, 3, sharex=True, figsize=(15, 5))
 
-  xx = np.arange(len(loss))
-  for ss, aa, cc in zip(['lfw', 'cfp_fp', 'agedb_30'], [lfw, cfp_fp, agedb_30], ["b", "g", "r"]):
-    axes[0].plot(xx, aa, label=ss, color=cc)
-    peak_scatter(axes[0], aa, splits, np.argmax, cc)
-  axes[0].set_title('eval accuracy')
-  axes[0].legend()
+    tt = []
+    for ii in losses: tt += ii
+    xx = np.arange(len(tt))
+    axes[0].plot(xx, tt, color="y")
+    peak_scatter(axes[0], losses, np.argmin, "y")
+    axes[0].set_title('loss')
 
-  axes[1].plot(xx, loss, color="b")
-  peak_scatter(axes[1], loss, splits, np.argmin, "b")
-  axes[1].set_title('loss')
+    tt = []
+    for ii in accuracies: tt += ii
+    axes[1].plot(xx, tt, color="g")
+    peak_scatter(axes[1], accuracies, np.argmax, "g")
+    axes[1].set_title('accuracy')
 
-  axes[2].plot(xx, accuracy, color="b")
-  peak_scatter(axes[2], accuracy, splits, np.argmax, "b")
-  axes[2].set_title('accuracy')
+    for ss, aa, cc in zip(['lfw', 'cfp_fp', 'agedb_30'], [lfws, cfp_fps, agedb_30s], ["b", "g", "r"]):
+      tt = []
+      for ii in aa: tt += ii
+      axes[2].plot(xx, tt, label=ss, color=cc)
+      peak_scatter(axes[2], aa, np.argmax, cc)
+    axes[2].set_title('eval accuracy')
+    axes[2].legend(loc='lower right')
 
-  for ax in axes:
-    ymin, ymax = ax.get_ylim()
-    mm = (ymax - ymin) * 0.05
-    for nn, ss in splits.items():
-      ax.plot([xx[ss[0]], xx[ss[0]]], [ymin + mm, ymax - mm], color='k', linestyle='--')
-      # ax.text(xx[ss[0]], np.mean(ax.get_ylim()), nn)
-      ax.text(ss[0] + len(xx[ss[0]:ss[1]]) * 0.4, ymin + mm * 4, nn)
+    for ax in axes:
+      ymin, ymax = ax.get_ylim()
+      mm = (ymax - ymin) * 0.05
+      start = 0
+      for nn, loss in zip(names, losses):
+        ax.plot([xx[start], xx[start]], [ymin + mm, ymax - mm], color='k', linestyle='--')
+        # ax.text(xx[ss[0]], np.mean(ax.get_ylim()), nn)
+        ax.text(start + len(loss) * 0.4, ymin + mm * 4, nn)
+        start += len(loss)
 
-  fig.tight_layout()
+    fig.tight_layout()
 
-add_plot(lfw + lfw_2, cfp_fp + cfp_fp_2, agedb_30 + agedb_30_2, loss + loss_2, accuracy + accuracy_2, {"Softmax": [0, 15], "margin_softmax": [15, -1]})
-```
-![](mobilefacenet_loss_acc.png)
+  add_plot([lfw, lfw_2], [cfp_fp, cfp_fp_2], [agedb_30, agedb_30_2], [loss, loss_2], [accuracy, accuracy_2], ["softmax", "margin_softmax"])
+  ```
+  ![](mobilefacenet_loss_acc.png)
 ***
 
 # Related Projects
