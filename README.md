@@ -1,21 +1,36 @@
-# Keras_insightface
-- Keras Insightface implementation.
-- This is still under working, many things are still testing here, so there may lots of errors atm.
-- **Environment**
-  ```py
-  $ ipython
-  Python 3.7.6 (default, Jan  8 2020, 19:59:22)
-  In [1]: tf.__version__
-  Out[1]: '2.1.0'
-  ```
+# ___Keras_insightface____
+  - Keras Insightface implementation.
+  - This is still under working, many things are still testing here, so there may lots of errors atm.
+  - **Environment**
+    ```py
+    # $ ipython
+    Python 3.7.6 (default, Jan  8 2020, 19:59:22)
+    In [1]: tf.__version__
+    Out[1]: '2.1.0'
+    ```
+# Catalog
+  <!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
+
+  - [___Keras_insightface____](#kerasinsightface)
+  - [Catalog](#catalog)
+  - [Current accuracy](#current-accuracy)
+  - [Usage](#usage)
+  	- [Beforehand Data Prepare](#beforehand-data-prepare)
+  	- [Training scripts](#training-scripts)
+  - [Training Record](#training-record)
+  	- [Loss function test on Mobilenet](#loss-function-test-on-mobilenet)
+  	- [Mobilefacenet](#mobilefacenet)
+  - [Related Projects](#related-projects)
+
+  <!-- /TOC -->
 ***
 
 # Current accuracy
-| Model backbone | lfw      | cfp_fp   | agedb_30 |
-| -------------- | -------- | -------- | -------- |
-| ResNet50V2     | 0.995833 | 0.951143 | 0.959333 |
-| MobileNetV2    | 0.993000 | 0.930429 | 0.930000 |
-| Mobilefacenet  | 0.991000 | 0.926714 | 0.934667 |
+  | Model backbone | lfw      | cfp_fp   | agedb_30 |
+  | -------------- | -------- | -------- | -------- |
+  | ResNet50V2     | 0.995833 | 0.951143 | 0.959333 |
+  | MobileNetV2    | 0.993000 | 0.930429 | 0.930000 |
+  | Mobilefacenet  | 0.991000 | 0.926714 | 0.934667 |
 ***
 
 # Usage
@@ -165,25 +180,23 @@
     sch = [{"loss": losses.arcface_loss, "optimizer": "adam", "centerloss": True, "epoch": 1}]
     sch = [{"loss": losses.batch_hard_triplet_loss, "optimizer": "adam", "epoch": 1}]
     sch = [{"loss": losses.batch_all_triplet_loss, "optimizer": "adam", "epoch": 1}]
-    sch = [{"loss": losses.batch_hard_triplet_loss, "optimizer": "adam", "centerloss": True, "epoch": 1}]
 
     ''' Train '''
     tt.train(sch, 6)
     ```
   - **Loss and accuracy**
 
-| Loss type                      | loss    | accuracy | lfw      | lfw thresh | cfp_fp   | cfp_fp thresh | agedb_30 | agedb_30 thresh | total time | per step |
-| ------------------------------ | ------- | -------- | -------- | ---------- | -------- | ------------- | -------- | --------------- | ---------- | -------- |
-| **Original Epoch 6**           | 22.6342 | 0.7855   | 0.987833 | 0.307455   | 0.891714 | 0.201755      | 0.900333 | 0.229057        | 5653s      | 124ms    |
-| **Train Epoch 7**              | adam    | lr 0.001 | bs 128   | random 3   |          |               |          |                 |            |          |
-| softmax                        | 1.8196  | 0.6941   | 0.987333 | 0.345970   | 0.895286 | 0.204387      | 0.901667 | 0.265905        | 5677s      | 125ms    |
-| margin_softmax                 | 3.8359  | 0.6294   | 0.989000 | 0.317540   | 0.889000 | 0.210142      | 0.897833 | 0.246658        | 5716s      | 126ms    |
-| scale_softmax                  | 2.2430  | 0.6779   | 0.987333 | 0.340417   | 0.887857 | 0.204122      | 0.900333 | 0.273266        | 5702s      | 125ms    |
-| arcface_loss                   | 22.3337 | 0.7928   | 0.987500 | 0.293580   | 0.886857 | 0.199602      | 0.904833 | 0.247436        | 6133s      | 135ms    |
-| center arcface_loss            | 22.5102 | 0.7924   | 0.987833 | 0.321488   | 0.884000 | 0.200262      | 0.894833 | 0.263254        | 5861s      | 129ms    |
-| batch_hard_triplet_loss        | 0.2276  |          | 0.986333 | 0.386425   | 0.910571 | 0.245836      | 0.891333 | 0.354833        | 4622s      | 156ms    |
-| batch_all_triplet_loss         |         |          |          |            |          |               |          |                 |            |          |
-| center batch_hard_triplet_loss |         |          |          |            |          |               |          |                 |            |          |
+    | Loss type                      | loss    | accuracy | lfw      | lfw thresh | cfp_fp   | cfp_fp thresh | agedb_30 | agedb_30 thresh | total time | per step |
+    | ------------------------------ | ------- | -------- | -------- | ---------- | -------- | ------------- | -------- | --------------- | ---------- | -------- |
+    | **Original Epoch 6**           | 22.6342 | 0.7855   | 0.987833 | 0.307455   | 0.891714 | 0.201755      | 0.900333 | 0.229057        | 5653s      | 124ms    |
+    | **Train Epoch 7**              | adam    | lr 0.001 | bs 128   | rd 3   |          |               |          |                 |            |          |
+    | softmax                        | 1.8196  | 0.6941   | 0.987333 | 0.345970   | 0.895286 | 0.204387      | 0.901667 | 0.265905        | 5677s      | 125ms    |
+    | margin_softmax                 | 3.8359  | 0.6294   | 0.989000 | 0.317540   | 0.889000 | 0.210142      | 0.897833 | 0.246658        | 5716s      | 126ms    |
+    | scale_softmax                  | 2.2430  | 0.6779   | 0.987333 | 0.340417   | 0.887857 | 0.204122      | 0.900333 | 0.273266        | 5702s      | 125ms    |
+    | arcface_loss                   | 22.3337 | 0.7928   | 0.987500 | 0.293580   | 0.886857 | 0.199602      | 0.904833 | 0.247436        | 6133s      | 135ms    |
+    | center arcface_loss            | 22.5102 | 0.7924   | 0.987833 | 0.321488   | 0.884000 | 0.200262      | 0.894833 | 0.263254        | 5861s      | 129ms    |
+    | batch_hard_triplet_loss        | 0.2276  |          | 0.986333 | 0.386425   | 0.910571 | 0.245836      | 0.891333 | 0.354833        | 4622s      | 156ms    |
+    | batch_all_triplet_loss         | 0.4749  |          | 0.984333 | 0.417722   | 0.902571 | 0.240187      | 0.837167 | 0.475637        | 4708s      | 159ms    |
 
 ## Mobilefacenet
   - Training script is the last exampled one.
@@ -204,11 +217,11 @@
   Epoch 16/25
   36392/36392 [==============================] - 12623s 347ms/step - loss: 0.7236 - accuracy: 0.8861
   '''
-  lfw_2 = [0.989000,0.989500,0.989167,0.990333,0.989500,0.991000,0.989667,]
-  cfp_fp_2 = [0.925857,0.919571,0.926286,0.929286,0.927000,0.926714,0.926857,]
-  agedb_30_2 = [0.932000,0.931333,0.932333,0.933500,0.933333,0.934667,0.933667,]
-  loss_2 = [0.7236,0.6785, 0.6545, 0.6401, 0.6290, 0.6199, 0.6115, ]
-  accuracy_2 = [0.8861,0.8934, 0.8973, 0.8995, 0.9015, 0.9030, 0.9043, ]
+  lfw_2 = [0.989000,0.989500,0.989167,0.990333,0.989500,0.991000,0.989667,0.991000,]
+  cfp_fp_2 = [0.925857,0.919571,0.926286,0.929286,0.927000,0.926714,0.926857,0.927571,]
+  agedb_30_2 = [0.932000,0.931333,0.932333,0.933500,0.933333,0.934667,0.933667,0.936000,]
+  loss_2 = [0.7236,0.6785, 0.6545, 0.6401, 0.6290, 0.6199, 0.6115, 0.6046, ]
+  accuracy_2 = [0.8861,0.8934, 0.8973, 0.8995, 0.9015, 0.9030, 0.9043, 0.9054, ]
 
   def peak_scatter(ax, array, peak_method, color):
     start = 0
@@ -225,8 +238,8 @@
     tt = []
     for ii in losses: tt += ii
     xx = np.arange(len(tt))
-    axes[0].plot(xx, tt, color="y")
-    peak_scatter(axes[0], losses, np.argmin, "y")
+    axes[0].plot(xx, tt, color="r")
+    peak_scatter(axes[0], losses, np.argmin, "r")
     axes[0].set_title('loss')
 
     tt = []

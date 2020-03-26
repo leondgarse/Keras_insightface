@@ -16,7 +16,7 @@ def buildin_models(name, dropout=1, emb_shape=512, **kwargs):
     elif name == "ResNet50V2":
         xx = keras.applications.ResNet50V2(input_shape=(112, 112, 3), include_top=False, weights='imagenet', **kwargs)
     elif name == "ResNet101V2":
-        xx = keras.applications.ResNet101V2(include_top=False, weights='imagenet', **kwargs)
+        xx = keras.applications.ResNet101V2(input_shape=(112, 112, 3), include_top=False, weights='imagenet', **kwargs)
     elif name == "NASNetMobile":
         xx = keras.applications.NASNetMobile(input_shape=(112, 112, 3), include_top=False, weights=None, **kwargs)
     else:
