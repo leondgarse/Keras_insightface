@@ -25,6 +25,7 @@ class epoch_eval_callback(tf.keras.callbacks.Callback):
         self.eval_freq = eval_freq
         self.flip = flip
         self.basic_model = basic_model
+        self.cur_acc = 0.0
 
     # def on_batch_end(self, batch=0, logs=None):
     def on_epoch_end(self, epoch=0, logs=None):
@@ -59,6 +60,7 @@ class epoch_eval_callback(tf.keras.callbacks.Callback):
         acc_max_indx = np.argmax(acc_count)
         acc_max = acc_count[acc_max_indx] / dists.shape[0]
         acc_thresh = ff[acc_max_indx - t_steps]
+        self.cur_acc = acc_max
 
         tf.print(
             "\n>>>> %s evaluation max accuracy: %f, thresh: %f, previous max accuracy: %f"

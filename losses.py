@@ -2,25 +2,23 @@ import tensorflow as tf
 import numpy as np
 import os
 
+
 def scale_softmax(y_true, y_pred, scale=64.0, from_logits=True):
     return tf.keras.losses.categorical_crossentropy(y_true, y_pred * scale, from_logits=from_logits)
 
-def margin_softmax(y_true, y_pred, scale=0.4, from_logits=False):
-    margin_soft = tf.where(tf.cast(y_true, dtype=tf.bool), y_pred * scale, y_pred)
-    return tf.keras.losses.categorical_crossentropy(y_true, margin_soft, from_logits=from_logits)
 
-def power_softmax(y_true, y_pred, power=2, scale=0.4, from_logits=False):
+def margin_softmax(y_true, y_pred, power=2, scale=0.4, from_logits=False):
     margin_soft = tf.where(tf.cast(y_true, dtype=tf.bool), (y_pred ** power + y_pred * scale) / 2, y_pred)
     return tf.keras.losses.categorical_crossentropy(y_true, margin_soft, from_logits=from_logits)
 
 
-''' ArcfaceLoss class '''
+# ArcfaceLoss class
 class ArcfaceLoss(tf.keras.losses.Loss):
     def __init__(self, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True, **kwargs):
         super(ArcfaceLoss, self).__init__(**kwargs)
         self.margin1, self.margin2, self.margin3, self.scale = margin1, margin2, margin3, scale
         self.from_logits = from_logits
-        self.threshold =  np.cos((np.pi - margin2) / margin1)   # grad(theta) == 0
+        self.threshold = np.cos((np.pi - margin2) / margin1)  # grad(theta) == 0
         self.theta_min = (-1 - margin3) * 2
 
     def call(self, y_true, y_pred):
@@ -43,24 +41,28 @@ class ArcfaceLoss(tf.keras.losses.Loss):
         arcface_logits = (theta_one_hot + norm_logits) * self.scale
         # tf.assert_equal(tf.math.is_nan(tf.reduce_mean(arcface_logits)), False)
         return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits)
+
     def get_config(self):
         config = super(ArcfaceLoss, self).get_config()
-        config.update({
-            "margin1": self.margin1,
-            "margin2": self.margin2,
-            "margin3": self.margin3,
-            "scale": self.scale,
-            "from_logits": self.from_logits,
-        })
+        config.update(
+            {
+                "margin1": self.margin1,
+                "margin2": self.margin2,
+                "margin3": self.margin3,
+                "scale": self.scale,
+                "from_logits": self.from_logits,
+            }
+        )
         return config
 
     @classmethod
     def from_config(cls, config):
         return cls(**config)
 
-''' Single function one '''
+
+# Single function one
 def arcface_loss(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True):
-    threshold =  np.cos((np.pi - margin2) / margin1)
+    threshold = np.cos((np.pi - margin2) / margin1)
     theta_min = (-1 - margin3) * 2
     norm_logits = y_pred
     y_pred_vals = norm_logits[tf.cast(y_true, dtype=tf.bool)]
@@ -74,7 +76,7 @@ def arcface_loss(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=64
     return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=from_logits)
 
 
-''' Simplified one '''
+# Simplified one
 def arcface_loss_2(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True):
     theta = tf.cos(tf.acos(y_pred) * margin1 + margin2) - margin3
     cond = tf.logical_and(tf.cast(y_true, dtype=tf.bool), theta < y_pred)
@@ -82,7 +84,7 @@ def arcface_loss_2(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=
     return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=from_logits)
 
 
-''' Callback to save center values on each epoch end '''
+# Callback to save center values on each epoch end
 class Save_Numpy_Callback(tf.keras.callbacks.Callback):
     def __init__(self, save_file, save_tensor):
         super(Save_Numpy_Callback, self).__init__()
@@ -92,10 +94,12 @@ class Save_Numpy_Callback(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch=0, logs=None):
         np.save(self.save_file, self.save_tensor.numpy())
 
+
 class Center_loss(tf.keras.losses.Loss):
     def __init__(self, num_classes, feature_dim=512, alpha=0.5, factor=1.0, initial_file=None, logits_loss=None, **kwargs):
         super(Center_loss, self).__init__(**kwargs)
-        self.num_classes, self.feature_dim, self.alpha, self.factor, self.initial_file = num_classes, feature_dim, alpha, factor, initial_file
+        self.num_classes, self.feature_dim, self.alpha, self.factor = num_classes, feature_dim, alpha, factor
+        self.initial_file = initial_file
         centers = tf.Variable(tf.zeros([num_classes, feature_dim]), trainable=False)
         if initial_file:
             if os.path.exists(initial_file):
@@ -106,7 +110,7 @@ class Center_loss(tf.keras.losses.Loss):
         self.logits_loss = logits_loss
 
     def call(self, y_true, y_pred):
-        embedding = y_pred[:, :self.feature_dim]
+        embedding = y_pred[:, : self.feature_dim]
         labels = tf.argmax(y_true, axis=1)
         centers_batch = tf.gather(self.centers, labels)
         # loss = tf.reduce_mean(tf.square(embedding - centers_batch))
@@ -125,30 +129,33 @@ class Center_loss(tf.keras.losses.Loss):
         self.centers.assign(tf.tensor_scatter_nd_sub(self.centers, tf.expand_dims(labels, 1), diff))
         # centers_batch = tf.gather(self.centers, labels)
         if self.logits_loss:
-            return self.logits_loss(y_true, y_pred[:, self.feature_dim:]) + loss * self.factor
+            return self.logits_loss(y_true, y_pred[:, self.feature_dim :]) + loss * self.factor
         else:
             return loss * self.factor
 
-    def logits_accuracy(self, y_true, y_pred):
-        ''' Accuracy function for logits only '''
-        logits = y_pred[:, self.feature_dim:]
+    def accuracy(self, y_true, y_pred):
+        """ Accuracy function for logits only """
+        logits = y_pred[:, self.feature_dim :]
         return tf.keras.metrics.categorical_accuracy(y_true, logits)
 
     def get_config(self):
         config = super(Center_loss, self).get_config()
-        config.update({
-            "num_classes": self.num_classes,
-            "feature_dim": self.feature_dim,
-            "alpha": self.alpha,
-            "factor": self.factor,
-            "initial_file": self.initial_file,
-            "logits_loss": self.logits_loss,
-        })
+        config.update(
+            {
+                "num_classes": self.num_classes,
+                "feature_dim": self.feature_dim,
+                "alpha": self.alpha,
+                "factor": self.factor,
+                "initial_file": self.initial_file,
+                "logits_loss": self.logits_loss,
+            }
+        )
         return config
 
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
 
 def batch_hard_triplet_loss(labels, embeddings, alpha=0.35):
     labels = tf.squeeze(labels)

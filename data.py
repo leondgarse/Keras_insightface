@@ -9,7 +9,7 @@ import tensorflow as tf
 def pre_process_folder(data_path):
     if not os.path.exists(data_path):
         return np.array([]), np.array([]), 0
-    while data_path.endswith('/'):
+    while data_path.endswith("/"):
         data_path = data_path[:-1]
     dest_pickle = os.path.join("./", os.path.basename(data_path) + "_shuffle.pkl")
     if os.path.exists(dest_pickle):
@@ -54,14 +54,14 @@ def prepare_for_training(data_path, batch_size=128, random_status=2, cache=True,
     print(len(image_names), len(image_classes), classes)
 
     ds = tf.data.Dataset.from_tensor_slices(image_names)
-    batch_size = batch_size * len(tf.config.experimental.get_visible_devices("GPU"))
+    # batch_size = batch_size * len(tf.config.experimental.get_visible_devices("GPU"))
     AUTOTUNE = tf.data.experimental.AUTOTUNE
-    if cache:
-        ds = ds.cache(cache) if isinstance(cache, str) else ds.cache()
     if shuffle_buffer_size == None:
         shuffle_buffer_size = batch_size * 100
 
     ds = ds.shuffle(buffer_size=shuffle_buffer_size)
+    if cache:
+        ds = ds.cache(cache) if isinstance(cache, str) else ds.cache()
     ds = ds.repeat()
     ds = ds.map(lambda xx: process_path(xx, classes, random_status=random_status), num_parallel_calls=AUTOTUNE)
     ds = ds.batch(batch_size)

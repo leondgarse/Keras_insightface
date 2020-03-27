@@ -79,7 +79,7 @@ def mobile_facenet(emb_shape=128, dropout=1, name="mobile_facenet"):
         M = Dropout(rate=dropout)(M)
     M = Flatten()(M)
     M = Dense(emb_shape, activation=None, use_bias=False, kernel_initializer="glorot_normal")(M)
-    M = BatchNormalization(axis=channel_axis, name='embedding')(M)
+    M = BatchNormalization(axis=channel_axis, name="embedding")(M)
 
     model = Model(inputs=X, outputs=M, name=name)
     return model
