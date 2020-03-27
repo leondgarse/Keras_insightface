@@ -1,4 +1,4 @@
-# ___Keras_insightface____
+# ___Keras insightface___
   - Keras Insightface implementation.
   - This is still under working, many things are still testing here, so there may lots of errors atm.
   - **Environment**
@@ -251,7 +251,7 @@
   accuracy_4 = [0.9529,0.9552,]
 
   import train
-  train.hist_plot([lfw, lfw_2, lfw_3, lfw_4], [cfp_fp, cfp_fp_2, cfp_fp_3, cfp_fp_4], [agedb_30, agedb_30_2, agedb_30_3, agedb_30_4], [loss, loss_2, loss_3, loss_4], [accuracy, accuracy_2, accuracy_3, accuracy_4], ["Softmax", "Margin softmax", "Bottleneck arcface", "arcface"])
+  train.hist_plot([lfw, lfw_2, lfw_3, lfw_4], [cfp_fp, cfp_fp_2, cfp_fp_3, cfp_fp_4], [agedb_30, agedb_30_2, agedb_30_3, agedb_30_4], [loss, loss_2, loss_3, loss_4], [accuracy, accuracy_2, accuracy_3, accuracy_4], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface"])
   ```
   ![](mobilefacenet_loss_acc.png)
 ## ResNet101V2
