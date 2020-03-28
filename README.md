@@ -102,11 +102,12 @@
     tt = train.Train(data_path, eval_paths, 'keras_mobilefacenet_256.h5', basic_model=basic_model, model=None, compile=False, lr_base=0.001, batch_size=160, random_status=3)
     sch = [
       {"loss": keras.losses.categorical_crossentropy, "optimizer": "nadam", "epoch": 15},
-      {"loss": losses.margin_softmax, "optimizer": None, "epoch": 10},
-      {"loss": losses.ArcfaceLoss(), "optimizer": None, "bottleneckOnly": True, "epoch": 4},
-      {"loss": losses.ArcfaceLoss(), "optimizer": None, "epoch": 15},
-      {"loss": losses.ArcfaceLoss(scale=32.0), "optimizer": None, "epoch": 15},
-      {"loss": losses.batch_hard_triplet_loss, "optimizer": None, "epoch": 30},
+      {"loss": losses.margin_softmax, "epoch": 10},
+      {"loss": losses.ArcfaceLoss(), "bottleneckOnly": True, "epoch": 4},
+      {"loss": losses.ArcfaceLoss(), "epoch": 15},
+      {"loss": losses.ArcfaceLoss(scale=32.0), "epoch": 15},
+      {"loss": losses.ArcfaceLoss(scale=32.0), "optimizer": keras.optimizers.SGD(momentum=0.9), "epoch": 10},
+      {"loss": losses.batch_hard_triplet_loss, "optimizer": "nadam", "epoch": 30},
     ]
     tt.train(sch, 0)
     ```
@@ -144,11 +145,12 @@
     tt = train.Train(data_path, eval_paths, 'keras_mobilefacenet_256_II.h5', basic_model=-2, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=160, random_status=3, custom_objects={'margin_softmax': losses.margin_softmax})
     sch = [
       # {"loss": keras.losses.categorical_crossentropy, "optimizer": "nadam", "epoch": 15},
-      {"loss": losses.margin_softmax, "optimizer": None, "epoch": 6},
-      {"loss": losses.ArcfaceLoss(), "optimizer": None, "bottleneckOnly": True, "epoch": 4},
-      {"loss": losses.ArcfaceLoss(), "optimizer": None, "epoch": 15},
-      {"loss": losses.ArcfaceLoss(scale=32.0), "optimizer": None, "epoch": 15},
-      {"loss": losses.batch_hard_triplet_loss, "optimizer": None, "epoch": 30},
+      {"loss": losses.margin_softmax, "epoch": 10},
+      {"loss": losses.ArcfaceLoss(), "bottleneckOnly": True, "epoch": 4},
+      {"loss": losses.ArcfaceLoss(), "epoch": 15},
+      {"loss": losses.ArcfaceLoss(scale=32.0), "epoch": 15},
+      {"loss": losses.ArcfaceLoss(scale=32.0), "optimizer": keras.optimizers.SGD(momentum=0.9), "epoch": 10},
+      {"loss": losses.batch_hard_triplet_loss, "optimizer": "nadam", "epoch": 30},
     ]
     tt.train(sch, 19) # 19 is the initial_epoch
     ```
@@ -156,7 +158,10 @@
     - **Model** will save on every epoch end to local path `./checkpoints`, name is specified from `train.Train`.
     - **basic_model** will be saved monitoring on the last `eval_paths` evaluating `bin` item, and save the best only.
   - **Gently stop** is a callback to stop training gently. Input an `n` and `<Enter>` anytime during training, will set training stop on that epoch ends.
-  - **My history** is a callback collecting training `loss` and `accuracy`, and evaluating `accuracy`, then backup to the path `save_path` defined in `train.Train` with suffix `_hist.json`.
+  - **My history**
+    - This is a callback collecting training `loss` and `accuracy`, and evaluating `accuracy`.
+    - On every epoch end, backup to the path `save_path` defined in `train.Train` with suffix `_hist.json`.
+    - Reload when initializing, if the backup `<save_path>_hist.json` file exists.
 ***
 
 # Training Record
@@ -244,20 +249,26 @@
   >>>> arcface 15 epochs
   Epoch 26/40 36392/36392 [==============================] - 12638s 347ms/step - loss: 15.1014 - accuracy: 0.9529
   '''
-  lfw_4 = [0.993167,0.993500,]
-  cfp_fp_4 = [0.936000,0.933143,]
-  agedb_30_4 = [0.941000,0.939833,]
-  loss_4 = [15.1014,14.4578,]
-  accuracy_4 = [0.9529,0.9552,]
+  lfw_4 = [0.993167,0.993500,0.993333,0.992833,0.993000,0.992833,0.992667,]
+  cfp_fp_4 = [0.936000,0.933143,0.931286,0.930143,0.930571,0.929429,0.929000,]
+  agedb_30_4 = [0.941000,0.939833,0.940333,0.941667,0.941333,0.941833,0.941500,]
+  loss_4 = [15.1014,14.4578,14.2564,14.1583,14.0530,13.9718,13.9070]
+  accuracy_4 = [0.9529,0.9552,0.9559,0.9562,0.9568,0.9571,0.9575]
 
   import train
-  train.hist_plot([lfw, lfw_2, lfw_3, lfw_4], [cfp_fp, cfp_fp_2, cfp_fp_3, cfp_fp_4], [agedb_30, agedb_30_2, agedb_30_3, agedb_30_4], [loss, loss_2, loss_3, loss_4], [accuracy, accuracy_2, accuracy_3, accuracy_4], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface"])
+  loss_lists = [loss, loss_2, loss_3, loss_4]
+  accuracy_lists = [accuracy, accuracy_2, accuracy_3, accuracy_4]
+  evals_dict = {"lfw": [lfw, lfw_2, lfw_3, lfw_4], "cfp_fp": [cfp_fp, cfp_fp_2, cfp_fp_3, cfp_fp_4], "agedb_30": [agedb_30, agedb_30_2, agedb_30_3, agedb_30_4]}
+  loss_names = ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface"]
+  train.hist_plot(loss_lists, accuracy_lists, evals_dict, loss_names)
+  # train.hist_plot_split("./checkpoints/keras_mobilefacenet_256_II_hist.json", {"Softmax": [0, 15], "Margin Softmax": [15, 25], "Bottleneck Arcface": [25, 29], "Arcface": [29, -1]})
   ```
   ![](mobilefacenet_loss_acc.png)
 ## ResNet101V2
-  - **Training script** is similar with `Mobilefacenet`, just replace `basic_model` with `ResNet101V2`
+  - **Training script** is similar with `Mobilefacenet`, just replace `basic_model` with `ResNet101V2`, and set a new `save_path`
     ```py
     basic_model = train.buildin_models("ResNet101V2", dropout=0.4, emb_shape=512)
+    tt = train.Train(data_path, eval_paths, 'keras_resnet101_512.h5', basic_model=basic_model, batch_size=128)
     ```
   - **Record**
     ```py
@@ -265,14 +276,83 @@
     >>>> Softmax 15 epochs
     Epoch 1/15 45490/45490 [==============================] - 12824s 282ms/step - loss: 6.3005 - accuracy: 0.2196
     '''
-    lfw = [0.97, 0.983, 0.981667, 0.986167, 0.986]
-    cfp_fp = [0.865571, 0.894714, 0.903571, 0.910714, 0.9102857142857143]
-    agedb_30 = [0.831833, 0.870167, 0.886333, 0.895833, 0.909]
-    loss = [6.3005, 1.6274, 1.0608, 0.8506, 0.7360634337846172]
-    accuracy = [0.2196, 0.6881, 0.7901, 0.8293, 0.85114825]
-    train.hist_plot_split(lfw, cfp_fp, agedb_30, loss, accuracy, {"Softmax": [0, -1]})
+    lfw = [0.97, 0.983, 0.981667, 0.986167, 0.986, 0.9845, 0.987667, 0.988667, 0.9865, 0.987833, 0.988833]
+    cfp_fp = [0.865571, 0.894714, 0.903571, 0.910714, 0.910286, 0.915714, 0.914428, 0.919285, 0.918428, 0.924571, 0.922714]
+    agedb_30 = [0.831833, 0.870167, 0.886333, 0.895833, 0.909, 0.912667, 0.9145, 0.911333, 0.921167, 0.9185, 0.924]
+    loss = [6.3005, 1.6274, 1.0608, 0.8506, 0.736063, 0.660961, 0.605392, 0.561005, 0.526049, 0.496918, 0.480309]
+    accuracy = [0.2196, 0.6881, 0.7901, 0.8293, 0.85114825, 0.865831, 0.876776, 0.885279, 0.891887, 0.897714, 0.901246]
+
+    import train
+    train.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", {"Softmax": [0, 15], "Margin Softmax": [15, 25], "Bottleneck Arcface": [25, 29], "Arcface": [29, -1]})
     ```
     ![](resnet101v2_loss_acc.png)
+***
+
+# Model conversion
+## ONNX
+  - Currently most frameworks support `tf1.x` only, so better convert it under `tf1.x` environment
+    ```py
+    tf.__version__
+    # '1.15.0'
+
+    # Convert to saved model first
+    import glob2
+    mm = tf.keras.models.load_model(glob2.glob('./keras_mobilefacenet_256_basic_*.h5')[0], compile=False)
+    keras.experimental.export_saved_model(mm, './saved_model')
+    ```
+    `tf2onnx` convert `saved model` to `tflite`, also `tf1.15.0`
+    ```sh
+    pip install -U tf2onnx
+    python -m tf2onnx.convert --saved-model ./saved_model --output model.onnx
+    ```
+## TFlite
+  - Convert to TFlite
+    ```py
+    tf.__version__
+    # '1.15.0'
+
+    import glob2
+    converter = tf.lite.TFLiteConverter.from_keras_model_file(glob2.glob('./keras_mobilefacenet_256_basic_*.h5')[0])
+    tflite_model = converter.convert()
+    open('./model.tflite', 'wb').write(tflite_model)
+    ```
+    ```py
+    tf.__version__
+    # '2.1.0'
+
+    import glob2
+    mm = tf.keras.models.load_model(glob2.glob('./keras_mobilefacenet_256_basic_*.h5')[0], compile=False)
+    converter = tf.lite.TFLiteConverter.from_keras_model(mm)
+    tflite_model = converter.convert()
+    open('./model_tf2.tflite', 'wb').write(tflite_model)
+    ```
+  - interpreter test
+    ```py
+    tf.__version__
+    # '2.1.0'
+
+    import glob2
+    interpreter = tf.lite.Interpreter('./model.tflite')
+    interpreter.allocate_tensors()
+    input_index = interpreter.get_input_details()[0]["index"]
+    output_index = interpreter.get_output_details()[0]["index"]
+
+    def tf_imread(file_path):
+        img = tf.io.read_file(file_path)
+        img = tf.image.decode_jpeg(img, channels=3)
+        img = tf.image.convert_image_dtype(img, tf.float32)
+        img = (img - 0.5) * 2
+        return tf.expand_dims(img, 0)
+
+    imm = tf_imread('/datasets/faces_emore_112x112_folders/0/1.jpg')
+    interpreter.set_tensor(input_index, imm)
+    interpreter.invoke()
+    aa = interpreter.get_tensor(output_index)[0]
+
+    mm = tf.keras.models.load_model(glob2.glob('./keras_mobilefacenet_256_basic_*.h5')[0], compile=False)
+    bb = mm(imm).numpy()
+    assert np.allclose(aa, bb, rtol=1e-3)
+    ```
 ***
 
 # Related Projects

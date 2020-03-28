@@ -267,6 +267,8 @@ class Train:
                 break
             print()
 
+    # def plot_hist(self):
+
 
 # Hist plot functions
 def peak_scatter(ax, array, peak_method, color="r"):
@@ -287,23 +289,24 @@ def arrays_plot(ax, arrays, color=None, label=None):
     ax.set_xticks(xx[::len(xx) // 16 + 1])
 
 
-def hist_plot(lfws, cfp_fps, agedb_30s, losses, accuracies, names, fig=None, axes=None):
+def hist_plot(loss_lists, accuracy_lists, evals_dict, loss_names, fig=None, axes=None):
     import matplotlib.pyplot as plt
     import numpy as np
     if fig == None:
         fig, axes = plt.subplots(1, 3, sharex=True, figsize=(15, 5))
 
-    arrays_plot(axes[0], losses)
-    peak_scatter(axes[0], losses, np.argmin)
+    arrays_plot(axes[0], loss_lists)
+    peak_scatter(axes[0], loss_lists, np.argmin)
     axes[0].set_title("loss")
 
-    arrays_plot(axes[1], accuracies)
-    peak_scatter(axes[1], accuracies, np.argmax)
+    arrays_plot(axes[1], accuracy_lists)
+    peak_scatter(axes[1], accuracy_lists, np.argmax)
     axes[1].set_title("accuracy")
 
-    for ss, aa in zip(["lfw", "cfp_fp", "agedb_30"], [lfws, cfp_fps, agedb_30s]):
-        arrays_plot(axes[2], aa, label=ss)
-        peak_scatter(axes[2], aa, np.argmax)
+    # for ss, aa in zip(["lfw", "cfp_fp", "agedb_30"], [lfws, cfp_fps, agedb_30s]):
+    for kk, vv in evals_dict.items():
+        arrays_plot(axes[2], vv, label=kk)
+        peak_scatter(axes[2], vv, np.argmax)
     axes[2].set_title("eval accuracy")
     axes[2].legend(loc="lower right")
 
@@ -311,7 +314,7 @@ def hist_plot(lfws, cfp_fps, agedb_30s, losses, accuracies, names, fig=None, axe
         ymin, ymax = ax.get_ylim()
         mm = (ymax - ymin) * 0.05
         start = 1
-        for nn, loss in zip(names, losses):
+        for nn, loss in zip(loss_names, loss_lists):
             ax.plot([start, start], [ymin + mm, ymax - mm], color="k", linestyle="--")
             # ax.text(xx[ss[0]], np.mean(ax.get_ylim()), nn)
             ax.text(start + len(loss) * 0.2, ymin + mm * 4, nn, rotation=-90)
@@ -319,11 +322,16 @@ def hist_plot(lfws, cfp_fps, agedb_30s, losses, accuracies, names, fig=None, axe
 
     fig.tight_layout()
 
-def hist_plot_split(lfw_list, cfp_fp_list, agedb_30_list, loss_list, accuracy_list, splits, fig=None, axes=None):
-    split_func = lambda aa: [aa[vv[0]:vv[1]] if vv[1] != -1 else aa[vv[0]:] for vv in splits.values()]
-    lfws = split_func(lfw_list)
-    cfp_fps = split_func(cfp_fp_list)
-    agedb_30s = split_func(agedb_30_list)
-    losses = split_func(loss_list)
-    accuracies = split_func(accuracy_list)
-    hist_plot(lfws, cfp_fps, agedb_30s, losses, accuracies, list(splits.keys()), fig, axes)
+def hist_plot_split(history, splits, fig=None, axes=None):
+    split_func = lambda aa: [aa[vv[0]:vv[1]] if vv[1] != -1 else aa[vv[0]:] for vv in splits.values() if vv[0] < len(aa)]
+    if isinstance(history, str):
+        import json
+        with open(history, 'r') as ff:
+            hh = json.load(ff)
+    else:
+        hh = history.copy()
+    loss_lists = split_func(hh.pop("loss"))
+    accuracy_lists = split_func(hh.pop("accuracy"))
+    hh.pop("lr")
+    evals_dict = {kk: split_func(vv) for kk, vv in hh.items()}
+    hist_plot(loss_lists, accuracy_lists, evals_dict, list(splits.keys()), fig, axes)

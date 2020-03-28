@@ -51,7 +51,7 @@ class My_history(keras.callbacks.Callback):
 
 
 def scheduler(epoch, lr_base):
-    lr = lr_base if epoch < 10 else lr_base * np.exp(0.1 * (10 - epoch))
+    lr = lr_base if epoch < 10 else lr_base * np.exp(0.05 * (10 - epoch))
     print("\nLearning rate for epoch {} is {}".format(epoch + 1, lr))
     return lr
 
