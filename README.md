@@ -11,7 +11,7 @@
 # Catalog
   <!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
 
-  - [___Keras_insightface____](#kerasinsightface)
+  - [___Keras insightface___](#keras-insightface)
   - [Catalog](#catalog)
   - [Current accuracy](#current-accuracy)
   - [Usage](#usage)
@@ -20,7 +20,10 @@
   - [Training Record](#training-record)
   	- [Loss function test on Mobilenet](#loss-function-test-on-mobilenet)
   	- [Mobilefacenet](#mobilefacenet)
-  	- [ResNet101V2](#ResNet101V2)
+  	- [ResNet101V2](#resnet101v2)
+  - [Model conversion](#model-conversion)
+  	- [ONNX](#onnx)
+  	- [TFlite](#tflite)
   - [Related Projects](#related-projects)
 
   <!-- /TOC -->
@@ -31,7 +34,7 @@
   | -------------- | -------- | -------- | -------- |
   | ResNet50V2     | 0.995833 | 0.951143 | 0.959333 |
   | MobileNetV2    | 0.993000 | 0.930429 | 0.930000 |
-  | Mobilefacenet  | 0.993500 | 0.936000 | 0.941000 |
+  | Mobilefacenet  | 0.993500 | 0.936000 | 0.941833 |
 ***
 
 # Usage
