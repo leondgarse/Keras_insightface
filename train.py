@@ -82,6 +82,7 @@ class Train:
         model=None,
         compile=True,
         lr_base=0.001,
+        lr_decay=0.05,
         batch_size=128,
         random_status=3,
         custom_objects={},
@@ -122,7 +123,7 @@ class Train:
             evals.epoch_eval_callback(self.basic_model, ii, save_model=None, eval_freq=1, flip=True) for ii in eval_paths
         ]
         my_evals[-1].save_model = os.path.splitext(save_path)[0]
-        basic_callbacks = myCallbacks.basic_callbacks(checkpoint=save_path, lr=lr_base, evals=my_evals)
+        basic_callbacks = myCallbacks.basic_callbacks(checkpoint=save_path, lr=lr_base, lr_decay=lr_decay, evals=my_evals)
         self.my_evals = my_evals
         self.basic_callbacks = basic_callbacks
         self.my_hist = self.basic_callbacks[-2]
@@ -276,7 +277,7 @@ def peak_scatter(ax, array, peak_method, color="r"):
     for ii in array:
         pp = peak_method(ii)
         ax.scatter(pp + start, ii[pp], color=color, marker="v")
-        ax.text(pp + start, ii[pp], "{:.4f}".format(ii[pp]), va='bottom')
+        ax.text(pp + start, ii[pp], "{:.4f}".format(ii[pp]), va="bottom")
         start += len(ii)
 
 
@@ -286,12 +287,13 @@ def arrays_plot(ax, arrays, color=None, label=None):
         tt += ii
     xx = list(range(1, len(tt) + 1))
     ax.plot(xx, tt, label=label, color=color)
-    ax.set_xticks(xx[::len(xx) // 16 + 1])
+    ax.set_xticks(xx[:: len(xx) // 16 + 1])
 
 
 def hist_plot(loss_lists, accuracy_lists, evals_dict, loss_names, fig=None, axes=None):
     import matplotlib.pyplot as plt
     import numpy as np
+
     if fig == None:
         fig, axes = plt.subplots(1, 3, sharex=True, figsize=(15, 5))
 
@@ -322,11 +324,13 @@ def hist_plot(loss_lists, accuracy_lists, evals_dict, loss_names, fig=None, axes
 
     fig.tight_layout()
 
+
 def hist_plot_split(history, splits, fig=None, axes=None):
-    split_func = lambda aa: [aa[vv[0]:vv[1]] if vv[1] != -1 else aa[vv[0]:] for vv in splits.values() if vv[0] < len(aa)]
+    split_func = lambda aa: [aa[vv[0] : vv[1]] if vv[1] != -1 else aa[vv[0] :] for vv in splits.values() if vv[0] < len(aa)]
     if isinstance(history, str):
         import json
-        with open(history, 'r') as ff:
+
+        with open(history, "r") as ff:
             hh = json.load(ff)
     else:
         hh = history.copy()

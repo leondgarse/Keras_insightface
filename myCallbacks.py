@@ -50,19 +50,19 @@ class My_history(keras.callbacks.Callback):
             print("  %s = %s" % (kk, vv))
 
 
-def scheduler(epoch, lr_base):
-    lr = lr_base if epoch < 10 else lr_base * np.exp(0.1 * (10 - epoch))
+def scheduler(epoch, lr_base, decay=0.05):
+    lr = lr_base if epoch < 10 else lr_base * np.exp(decay * (10 - epoch))
     print("\nLearning rate for epoch {} is {}".format(epoch + 1, lr))
     return lr
 
 
-def basic_callbacks(checkpoint="keras_checkpoints.h5", lr=0.001, evals=[]):
+def basic_callbacks(checkpoint="keras_checkpoints.h5", lr=0.001, lr_decay=0.05, evals=[]):
     checkpoint_base = "./checkpoints"
     if not os.path.exists(checkpoint_base):
         os.mkdir(checkpoint_base)
     checkpoint = os.path.join(checkpoint_base, checkpoint)
     model_checkpoint = ModelCheckpoint(checkpoint, verbose=1)
-    ss = lambda epoch: scheduler(epoch, lr)
+    ss = lambda epoch: scheduler(epoch, lr, lr_decay)
     lr_scheduler = LearningRateScheduler(ss)
     my_history = My_history(os.path.splitext(checkpoint)[0] + "_hist.json", evals=evals)
     return [model_checkpoint, lr_scheduler, my_history, Gently_stop_callback()]
