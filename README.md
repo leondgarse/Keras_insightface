@@ -125,7 +125,7 @@
     - **optimizer** is the optimizer used in this plan, `None` indicates using the last one.
     - **epoch** indicates how many epochs will be trained.
     - **bottleneckOnly** True / False, `True` will set `basic_model.trainable = False`, train the bottleneck layer only.
-    - **centerloss** True / False, if set `True`, `loss` will be the `logits_loss` along with `center_loss`, it could also be an instance of `Center_loss`.
+    - **centerloss** True / False, if set `True`, `loss` will be the `logits_loss` add to `center_loss`, `loss` could also be an instance of `Center_loss`.
     - **type** `softmax` / `arcface` / `triplet`, but mostly this could be guessed from `loss`.
     ```py
     # Scheduler examples
@@ -165,6 +165,16 @@
     - This is a callback collecting training `loss` and `accuracy`, and evaluating `accuracy`.
     - On every epoch end, backup to the path `save_path` defined in `train.Train` with suffix `_hist.json`.
     - Reload when initializing, if the backup `<save_path>_hist.json` file exists.
+  - **Learning rate** uses `exponential decay`, `lr_base` and `lr_decay` in `train.Train` set it. Default is `lr_base=0.1, lr_decay=0.05`.
+    ```py
+    import myCallbacks
+    epochs = np.arange(100)
+    plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.1) for ii in epochs], label="lr 0.001, decay 0.1")
+    plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.05) for ii in epochs], label="lr 0.001, decay 0.05")
+    plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.02) for ii in epochs], label="lr 0.001, decay 0.02")
+    plt.legend()
+    ```
+    ![](learning_rate_decay.png)
 ***
 
 # Training Record
@@ -217,56 +227,19 @@
     | batch_all_triplet_loss  | 0.4749  |          | 0.984333 | 0.417722   | 0.902571 | 0.240187      | 0.837167 | 0.475637        | 4708s      | 159ms    |
 ## Mobilefacenet
   - Training script is the last exampled one.
-  ```py
-  '''
-  >>>> Softmax 15 epochs
-  Epoch 1/15 36392/36392 [==============================] - 12820s 352ms/step - loss: 5.0583 - accuracy: 0.2964
-  '''
-  lfw = [0.971500,0.980000,0.986000,0.988000,0.988333,0.989667,0.989000,0.989833,0.988833,0.988500,0.987667,0.988667,0.988833,0.988167,0.989000,]
-  cfp_fp = [0.865714,0.893000,0.898857,0.910000,0.908571,0.913857,0.912143,0.913000,0.913143,0.916143,0.920143,0.920857,0.924429,0.921571,0.927429,]
-  agedb_30 = [0.829167,0.877500,0.892667,0.903167,0.903500,0.915167,0.910000,0.917167,0.917833,0.919833,0.919833,0.929167,0.920333,0.933333,0.928000,]
-  loss = [5.0583, 1.6944, 1.2544, 1.0762, 0.9791, 0.9118, 0.8605, 0.8217, 0.7900, 0.7641, 0.7432, 0.6879, 0.6580, 0.6354, 0.6199,]
-  accuracy = [0.2964, 0.6755, 0.7532, 0.7862, 0.8047, 0.8174, 0.8273, 0.8348, 0.8410, 0.8460, 0.8501, 0.8611, 0.8671, 0.8714, 0.8746,]
+  - **Record**
+    | Loss               | Epochs | First epoch                                          |
+    | ------------------ | ------ | ---------------------------------------------------- |
+    | Softmax            | 15     | 12820s 352ms/step - loss: 5.0583 - accuracy: 0.2964  |
+    | Margin Softmax     | 10     | 12623s 347ms/step - loss: 0.7236 - accuracy: 0.8861  |
+    | Bottleneck Arcface | 4      | 4675s 128ms/step - loss: 22.1107 - accuracy: 0.8630  |
+    | Arcface 64         | 15     | 12638s 347ms/step - loss: 15.1014 - accuracy: 0.9529 |
 
-  '''
-  >>>> margin_softmax 10 epochs
-  Epoch 16/25 36392/36392 [==============================] - 12623s 347ms/step - loss: 0.7236 - accuracy: 0.8861
-  '''
-  lfw_2 = [0.989000,0.989500,0.989167,0.990333,0.989500,0.991000,0.989667,0.991000,0.991000,0.990333,]
-  cfp_fp_2 = [0.925857,0.919571,0.926286,0.929286,0.927000,0.926714,0.926857,0.927571,0.930000,0.926714,]
-  agedb_30_2 = [0.932000,0.931333,0.932333,0.933500,0.933333,0.934667,0.933667,0.936000,0.934333,0.934333,]
-  loss_2 = [0.7236,0.6785,0.6545,0.6401,0.6290,0.6199,0.6115,0.6046,0.6004,0.5952,]
-  accuracy_2 = [0.8861,0.8934,0.8973,0.8995,0.9015,0.9030,0.9043,0.9054,0.9063,0.9073,]
-
-  '''
-  >>>> bottleneck arcface 4 epochs
-  Epoch 1/4 36392/36392 [==============================] - 4675s 128ms/step - loss: 22.1107 - accuracy: 0.8630
-  '''
-  lfw_3 = [0.990333,0.990333,0.990333,0.990333,]
-  cfp_fp_3 = [0.926714,0.926714,0.926714,0.926714,]
-  agedb_30_3 = [0.934333,0.934333,0.934333,0.934333,]
-  loss_3 = [22.1107,18.1792,17.6717,17.4116]
-  accuracy_3 = [0.8630,0.9333,0.9389,0.9415]
-
-  '''
-  >>>> arcface 15 epochs
-  Epoch 26/40 36392/36392 [==============================] - 12638s 347ms/step - loss: 15.1014 - accuracy: 0.9529
-  '''
-  lfw_4 = [0.993167,0.993500,0.993333,0.992833,0.993000,0.992833,0.992667,]
-  cfp_fp_4 = [0.936000,0.933143,0.931286,0.930143,0.930571,0.929429,0.929000,]
-  agedb_30_4 = [0.941000,0.939833,0.940333,0.941667,0.941333,0.941833,0.941500,]
-  loss_4 = [15.1014,14.4578,14.2564,14.1583,14.0530,13.9718,13.9070]
-  accuracy_4 = [0.9529,0.9552,0.9559,0.9562,0.9568,0.9571,0.9575]
-
-  import train
-  loss_lists = [loss, loss_2, loss_3, loss_4]
-  accuracy_lists = [accuracy, accuracy_2, accuracy_3, accuracy_4]
-  evals_dict = {"lfw": [lfw, lfw_2, lfw_3, lfw_4], "cfp_fp": [cfp_fp, cfp_fp_2, cfp_fp_3, cfp_fp_4], "agedb_30": [agedb_30, agedb_30_2, agedb_30_3, agedb_30_4]}
-  loss_names = ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface"]
-  train.hist_plot(loss_lists, accuracy_lists, evals_dict, loss_names)
-  # train.hist_plot_split("./checkpoints/keras_mobilefacenet_256_II_hist.json", {"Softmax": [0, 15], "Margin Softmax": [15, 25], "Bottleneck Arcface": [25, 29], "Arcface": [29, -1]})
-  ```
-  ![](mobilefacenet_loss_acc.png)
+    ```py
+    import train
+    train.hist_plot_split_2("./checkpoints/keras_mobilefacenet_256_II_hist.json", [15, 10, 4, 15], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface 64"])
+    ```
+    ![](mobilefacenet_loss_acc.png)
 ## ResNet101V2
   - **Training script** is similar with `Mobilefacenet`, just replace `basic_model` with `ResNet101V2`, and set a new `save_path`
     ```py
@@ -274,19 +247,14 @@
     tt = train.Train(data_path, eval_paths, 'keras_resnet101_512.h5', basic_model=basic_model, batch_size=128)
     ```
   - **Record**
-    ```py
-    '''
-    >>>> Softmax 15 epochs
-    Epoch 1/15 45490/45490 [==============================] - 12824s 282ms/step - loss: 6.3005 - accuracy: 0.2196
-    '''
-    lfw = [0.97, 0.983, 0.981667, 0.986167, 0.986, 0.9845, 0.987667, 0.988667, 0.9865, 0.987833, 0.988833]
-    cfp_fp = [0.865571, 0.894714, 0.903571, 0.910714, 0.910286, 0.915714, 0.914428, 0.919285, 0.918428, 0.924571, 0.922714]
-    agedb_30 = [0.831833, 0.870167, 0.886333, 0.895833, 0.909, 0.912667, 0.9145, 0.911333, 0.921167, 0.9185, 0.924]
-    loss = [6.3005, 1.6274, 1.0608, 0.8506, 0.736063, 0.660961, 0.605392, 0.561005, 0.526049, 0.496918, 0.480309]
-    accuracy = [0.2196, 0.6881, 0.7901, 0.8293, 0.85114825, 0.865831, 0.876776, 0.885279, 0.891887, 0.897714, 0.901246]
+    | Loss           | epochs | First epoch                                         |
+    | -------------- | ------ | --------------------------------------------------- |
+    | Softamx        | 15     | 12824s 282ms/step - loss: 6.3005 - accuracy: 0.2196 |
+    | Margin Softmax | 10     | 12784s 281ms/step - loss: 0.5001 - accuracy: 0.9236 |
 
+    ```py
     import train
-    train.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", {"Softmax": [0, 15], "Margin Softmax": [15, 25], "Bottleneck Arcface": [25, 29], "Arcface": [29, -1]})
+    train.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", [15, 10, 4, 15], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface"])
     ```
     ![](resnet101v2_loss_acc.png)
 ***

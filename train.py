@@ -176,6 +176,20 @@ class Train:
         if len(self.model.outputs) != 1:
             self.model = keras.models.Model(inputs, self.model.outputs[-1])
 
+    def __init_metrics_callbacks__(self, type, center_loss=None, bottleneckOnly=False):
+        if center_loss:
+            self.callbacks = self.my_evals + [center_loss.save_centers_callback] + self.basic_callbacks
+            self.metrics = [center_loss.accuracy]
+        elif type == self.triplet:
+            self.callbacks = self.my_evals + self.basic_callbacks
+            self.metrics = None
+        else:
+            self.callbacks = self.my_evals + self.basic_callbacks
+            self.metrics = ["accuracy"]
+
+        if bottleneckOnly:
+            self.callbacks = self.callbacks[len(self.my_evals) :]  # Exclude evaluation callbacks
+            
     def __init_type_by_loss__(self, loss):
         print(">>>> Init type by loss function name...")
         if loss.__class__.__name__ == "function":
@@ -190,20 +204,6 @@ class Train:
             return self.triplet
         else:
             return self.softmax
-
-    def __init_metrics_callbacks__(self, type, center_loss=None, bottleneckOnly=False):
-        if center_loss:
-            self.callbacks = self.my_evals + [center_loss.save_centers_callback] + self.basic_callbacks
-            self.metrics = [center_loss.accuracy]
-        elif type == self.triplet:
-            self.callbacks = self.my_evals + self.basic_callbacks
-            self.metrics = None
-        else:
-            self.callbacks = self.my_evals + self.basic_callbacks
-            self.metrics = ["accuracy"]
-
-        if bottleneckOnly:
-            self.callbacks = self.callbacks[len(self.my_evals) :]  # Exclude evaluation callbacks
 
     def __basic_train__(self, loss, epochs, initial_epoch=0):
         self.model.compile(optimizer=self.optimizer, loss=loss, metrics=self.metrics)
@@ -319,14 +319,15 @@ def hist_plot(loss_lists, accuracy_lists, evals_dict, loss_names, fig=None, axes
         for nn, loss in zip(loss_names, loss_lists):
             ax.plot([start, start], [ymin + mm, ymax - mm], color="k", linestyle="--")
             # ax.text(xx[ss[0]], np.mean(ax.get_ylim()), nn)
-            ax.text(start + len(loss) * 0.2, ymin + mm * 4, nn, rotation=-90)
+            ax.text(start + len(loss) * 0.2, ymin + mm * 4, nn, rotation=-90, va="bottom")
             start += len(loss)
 
     fig.tight_layout()
 
 
-def hist_plot_split(history, splits, fig=None, axes=None):
-    split_func = lambda aa: [aa[vv[0] : vv[1]] if vv[1] != -1 else aa[vv[0] :] for vv in splits.values() if vv[0] < len(aa)]
+def hist_plot_split(history, epochs, names, fig=None, axes=None):
+    splits = [[int(sum(epochs[:id])), int(sum(epochs[:id])) + ii] for id, ii in enumerate(epochs)]
+    split_func = lambda aa: [aa[ii:jj] for ii, jj in splits if ii < len(aa)]
     if isinstance(history, str):
         import json
 
@@ -338,4 +339,4 @@ def hist_plot_split(history, splits, fig=None, axes=None):
     accuracy_lists = split_func(hh.pop("accuracy"))
     hh.pop("lr")
     evals_dict = {kk: split_func(vv) for kk, vv in hh.items()}
-    hist_plot(loss_lists, accuracy_lists, evals_dict, list(splits.keys()), fig, axes)
+    hist_plot(loss_lists, accuracy_lists, evals_dict, names, fig, axes)
