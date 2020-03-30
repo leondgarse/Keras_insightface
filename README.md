@@ -8,6 +8,19 @@
     In [1]: tf.__version__
     Out[1]: '2.1.0'
     ```
+  - **Default import**
+    ```py
+    import os
+    import sys
+    import pandas as pd
+    import numpy as np
+    import tensorflow as tf
+    from tensorflow import keras
+
+    gpus = tf.config.experimental.list_physical_devices("GPU")
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+    ```
 # Catalog
   <!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
 
@@ -34,7 +47,7 @@
   | -------------- | -------- | -------- | -------- |
   | ResNet50V2     | 0.995833 | 0.951143 | 0.959333 |
   | MobileNetV2    | 0.993000 | 0.930429 | 0.930000 |
-  | Mobilefacenet  | 0.993500 | 0.936000 | 0.941833 |
+  | Mobilefacenet  | 0.993500 | 0.936000 | 0.942500 |
 ***
 
 # Usage
@@ -175,6 +188,16 @@
     plt.legend()
     ```
     ![](learning_rate_decay.png)
+  - **Evaluation**
+    ```py
+    import evals
+    '/datasets/faces_emore/lfw.bin'
+    basic_model = keras.models.load_model('checkpoints/keras_mobilefacenet_256_basic_agedb_30_epoch_39_0.942500.h5', compile=False)
+    ee = evals.epoch_eval_callback(basic_model, '/datasets/faces_emore/lfw.bin')
+    ee.on_epoch_end(0)
+    # >>>> lfw evaluation max accuracy: 0.993167, thresh: 0.316535, previous max accuracy: 0.000000, PCA accuray = 0.993167 ± 0.003905
+    # >>>> Improved = 0.993167
+    ```
 ***
 
 # Training Record
@@ -237,9 +260,9 @@
 
     ```py
     import train
-    train.hist_plot_split_2("./checkpoints/keras_mobilefacenet_256_II_hist.json", [15, 10, 4, 15], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface 64"])
+    train.hist_plot_split("./checkpoints/keras_mobilefacenet_256_II_hist.json", [15, 10, 4, 15, 15], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64",  "Arcface scale=32"])
     ```
-    ![](mobilefacenet_loss_acc.png)
+    ![](checkpoints/keras_mobilefacenet_256_II_hist.svg)
 ## ResNet101V2
   - **Training script** is similar with `Mobilefacenet`, just replace `basic_model` with `ResNet101V2`, and set a new `save_path`
     ```py
@@ -254,9 +277,9 @@
 
     ```py
     import train
-    train.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", [15, 10, 4, 15], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface"])
+    train.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", [15, 10, 4, 15, 15], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64",  "Arcface scale=32"])
     ```
-    ![](resnet101v2_loss_acc.png)
+    ![](checkpoints/keras_resnet101_512_II_hist.svg)
 ***
 
 # Model conversion
