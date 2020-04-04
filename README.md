@@ -33,10 +33,12 @@
   - [Training Record](#training-record)
   	- [Loss function test on Mobilenet](#loss-function-test-on-mobilenet)
   	- [Mobilefacenet](#mobilefacenet)
+  	- [Loss function test on Mobilefacenet epoch 44](#loss-function-test-on-mobilefacenet-epoch-44)
   	- [ResNet101V2](#resnet101v2)
   - [Model conversion](#model-conversion)
   	- [ONNX](#onnx)
   	- [TFlite](#tflite)
+  	- [MXNet format](#mxnet-format)
   - [Related Projects](#related-projects)
 
   <!-- /TOC -->
@@ -47,7 +49,7 @@
   | -------------- | -------- | -------- | -------- |
   | ResNet50V2     | 0.995833 | 0.951143 | 0.959333 |
   | MobileNetV2    | 0.993000 | 0.930429 | 0.930000 |
-  | Mobilefacenet  | 0.993500 | 0.936000 | 0.942500 |
+  | Mobilefacenet  | 0.993667 | 0.936000 | 0.943667 |
 ***
 
 # Usage
@@ -120,9 +122,7 @@
       {"loss": keras.losses.categorical_crossentropy, "optimizer": "nadam", "epoch": 15},
       {"loss": losses.margin_softmax, "epoch": 10},
       {"loss": losses.ArcfaceLoss(), "bottleneckOnly": True, "epoch": 4},
-      {"loss": losses.ArcfaceLoss(), "epoch": 15},
-      {"loss": losses.ArcfaceLoss(scale=32.0), "epoch": 10},
-      {"loss": losses.ArcfaceLoss(scale=32.0), "optimizer": keras.optimizers.SGD(momentum=0.9), "epoch": 10},
+      {"loss": losses.ArcfaceLoss(), "epoch": 35},
       {"loss": losses.batch_hard_triplet_loss, "optimizer": "nadam", "epoch": 30},
     ]
     tt.train(sch, 0)
@@ -143,7 +143,7 @@
     ```py
     # Scheduler examples
     sch = [{"loss": keras.losses.categorical_crossentropy, "optimizer": "adam", "epoch": 1}]
-    sch = [{"loss": losses.Arcface(scale=32.0), "optimizer": keras.optimizers.SGD(0.001, momentum=0.9), "epoch": 1}]
+    sch = [{"loss": losses.ArcfaceLoss(scale=32.0), "optimizer": keras.optimizers.SGD(0.001, momentum=0.9), "epoch": 1}]
     sch = [{"loss": losses.ArcfaceLoss(), "optimizer": None, "bottleneckOnly": True, "epoch": 1}]
     sch = [{"loss": losses.arcface_loss, "optimizer": "adam", "centerloss": True, "epoch": 1}]
     sch = [{"loss": losses.ArcfaceLoss(), "bottleneckOnly": True, "centerloss": True, "epoch": 1}]
@@ -161,11 +161,9 @@
     tt = train.Train(data_path, eval_paths, 'keras_mobilefacenet_256_II.h5', basic_model=-2, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=160, random_status=3, custom_objects={'margin_softmax': losses.margin_softmax})
     sch = [
       # {"loss": keras.losses.categorical_crossentropy, "optimizer": "nadam", "epoch": 15},
-      {"loss": losses.margin_softmax, "epoch": 10},
+      {"loss": losses.margin_softmax, "epoch": 6},
       {"loss": losses.ArcfaceLoss(), "bottleneckOnly": True, "epoch": 4},
-      {"loss": losses.ArcfaceLoss(), "epoch": 15},
-      {"loss": losses.ArcfaceLoss(scale=32.0), "epoch": 15},
-      {"loss": losses.ArcfaceLoss(scale=32.0), "optimizer": keras.optimizers.SGD(momentum=0.9), "epoch": 10},
+      {"loss": losses.ArcfaceLoss(), "epoch": 35},
       {"loss": losses.batch_hard_triplet_loss, "optimizer": "nadam", "epoch": 30},
     ]
     tt.train(sch, 19) # 19 is the initial_epoch
@@ -256,13 +254,58 @@
     | Softmax            | 15     | 12820s 352ms/step - loss: 5.0583 - accuracy: 0.2964  |
     | Margin Softmax     | 10     | 12623s 347ms/step - loss: 0.7236 - accuracy: 0.8861  |
     | Bottleneck Arcface | 4      | 4675s 128ms/step - loss: 22.1107 - accuracy: 0.8630  |
-    | Arcface 64         | 15     | 12638s 347ms/step - loss: 15.1014 - accuracy: 0.9529 |
+    | Arcface 64         | 35     | 12638s 347ms/step - loss: 15.1014 - accuracy: 0.9529 |
 
     ```py
-    import train
-    fig, axes = train.hist_plot_split("./checkpoints/keras_mobilefacenet_256_hist.json", [15, 10, 4, 15], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
+    import plot
+    plot.hist_plot_split("./checkpoints/keras_mobilefacenet_256_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
     ```
-    ![](checkpoints/keras_mobilefacenet_256_II_hist.svg)
+    ![](checkpoints/keras_mobilefacenet_256_hist.svg)
+## Loss function test on Mobilefacenet epoch 44
+  - From `Epoch 44`, Arcface loss trained `15 epochs`, run a batch of `optimizer` + `loss` test
+    ```py
+    sch = [{"loss": losses.Arcface(scale=32.0), "epoch": 10}] # fix lr == 1e-5
+    sch = [{"loss": losses.Arcface(scale=32.0), "epoch": 10}] # lr decay, decay_rate = 0.1
+    sch = [{"loss": losses.ArcfaceLoss(), "epoch": 10}]
+    sch = [{"loss": losses.ArcfaceLoss(), "optimizer": keras.optimizers.SGD(0.001, momentum=0.9), "epoch": 10}]
+
+    tt.train(sch, 40) # sub bottleneck only epochs
+    ```
+    From `Epoch 54`, Pick the best one `Scale=64.0, lr decay, optimizer=nadam`, run optimizer `nadam` / `adam` testing
+    ```py
+    sch = [{"loss": losses.ArcfaceLoss(), "epoch": 10}]
+    sch = [{"loss": losses.ArcfaceLoss(), "optimizer": "adam", "epoch": 10}]
+    tt.train(sch, 50) # sub bottleneck only epochs
+    ```
+  - **Result**
+    ```py
+    import plot
+    fig, axes = None, None
+    fig, axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_II_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, fig=fig, axes=axes)
+    axes[0].lines[-2].set_label('S=32, lr=5e-5, nadam')
+    fig, axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_III_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, fig=fig, axes=axes)
+    axes[0].lines[-2].set_label('S=32, lr decay, nadam')
+    axes[0].legend()
+    axes[0].set_xticks(np.arange(41, 51))
+    fig.savefig('./checkpoints/keras_mobilefacenet_256_III_hist.svg')
+    ```
+    ![](checkpoints/keras_mobilefacenet_256_III_hist.svg)
+    ```py
+    import plot
+    fig, axes = None, None
+    fig, axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_IV_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, fig=fig, axes=axes)
+    axes[0].lines[-2].set_label('S=64, lr decay, SGD')
+    fig, axes, pre_1 = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VI_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, fig=fig, axes=axes)
+    axes[0].lines[-2].set_label('S=64, lr decay, nadam')
+    fig, axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VII_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=50, pre_item=pre_1, fig=fig, axes=axes)
+    axes[0].lines[-2].set_label('S=64, lr decay, nadam')
+    fig, axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VIII_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=50, pre_item=pre_1, fig=fig, axes=axes)
+    axes[0].lines[-2].set_label('S=64, lr decay, adam')
+    axes[0].legend()
+    axes[0].set_xticks(np.arange(41, 61, 2))
+    fig.savefig('./checkpoints/keras_mobilefacenet_256_VIII_hist.svg')
+    ```
+    ![](checkpoints/keras_mobilefacenet_256_VIII_hist.svg)
 ## ResNet101V2
   - **Training script** is similar with `Mobilefacenet`, just replace `basic_model` with `ResNet101V2`, and set a new `save_path`
     ```py
@@ -276,8 +319,8 @@
     | Margin Softmax | 10     | 12784s 281ms/step - loss: 0.5001 - accuracy: 0.9236 |
 
     ```py
-    import train
-    train.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", [15, 10, 4, 15, 15], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64",  "Arcface scale=32"])
+    import plot
+    plot.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
     ```
     ![](checkpoints/keras_resnet101_512_II_hist.svg)
 ***
@@ -298,6 +341,19 @@
     ```sh
     pip install -U tf2onnx
     python -m tf2onnx.convert --saved-model ./saved_model --output model.onnx
+    ```
+  - MXNet to onnx
+    ```py
+    #make sure to install onnx-1.2.1
+    #pip install onnx==1.2.1
+    import onnx
+    assert onnx.__version__=='1.2.1'
+    from mxnet.contrib import onnx as onnx_mxnet
+
+    prefix, epoch = "model", 0
+    sym_file = "%s-symbol.json" % prefix
+    params_file = "%s-%04d.params" % (prefix, epoch)
+    converted_model_path = onnx_mxnet.export_model(sym_file, params_file, [(1, 3, 112, 112)], np.float32, "mx_output.onnx")
     ```
 ## TFlite
   - Convert to TFlite
@@ -406,86 +462,3 @@
   - [TensorFlow Addons Layers: WeightNormalization](https://www.tensorflow.org/addons/tutorials/layers_weightnormalization)
   - [deepinsight/insightface](https://github.com/deepinsight/insightface)
 ***
-
-# Test functions
-```py
-import json
-dd = {
-  'S=32, lr=5e-5, nadam': 'keras_mobilefacenet_256_II_hist.json',
-  'S=32, lr decay, nadam': 'keras_mobilefacenet_256_III_hist.json',
-  # 'S=64, lr decay, SGD': 'keras_mobilefacenet_256_IV_hist.json',
-  # 'S=64, lr decay, nadam': 'keras_mobilefacenet_256_VI_hist.json',
-}
-
-tt = {}
-for kk, vv in dd.items():
-    with open(vv, 'r') as ff:
-        tt[kk] = json.load(ff)
-
-import seaborn as sns
-sns.set(style="darkgrid")
-fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-# fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-axes = axes.flatten()
-xx = np.arange(41, 51)
-
-# titles = tt[list(tt.keys())[0]].keys()
-titles = ["loss", "accuracy", "lr", "lfw", "cfp_fp", "agedb_30"]
-# titles = ["loss", "accuracy", "lr"]
-for ax, item in zip(axes, titles):
-    for label, items in tt.items():
-        ax.plot(xx, items[item], label=label)
-    # ax.legend()
-    ax.set_title(item)
-
-dd_2 = {
-  "S=64, lr decay, nadam": "keras_mobilefacenet_256_VII_hist.json",
-  "S=64, lr decay, adam": "keras_mobilefacenet_256_VIII_hist.json",
-}
-
-tt_2 = {}
-for kk, vv in dd_2.items():
-    with open(vv, 'r') as ff:
-        tt_2[kk] = json.load(ff)
-
-pre = tt["S=64, lr decay, nadam"]
-xx = np.arange(50, 61)
-for ax, item in zip(axes, titles):
-    for label, items in tt_2.items():
-        ax.plot(xx, pre[item][-1:] + items[item], label=label)
-    # ax.legend()
-axes[0].legend()
-fig.tight_layout()
-```
-```py
-import sys
-import os
-import argparse
-import onnx
-import mxnet as mx
-
-print('mxnet version:', mx.__version__)
-print('onnx version:', onnx.__version__)
-#make sure to install onnx-1.2.1
-#pip uninstall onnx
-#pip install onnx==1.2.1
-assert onnx.__version__=='1.2.1'
-import numpy as np
-from mxnet.contrib import onnx as onnx_mxnet
-
-parser = argparse.ArgumentParser(description='convert insightface models to onnx')
-# general
-parser.add_argument('--prefix', default='./r100-arcface/model', help='prefix to load model.')
-parser.add_argument('--epoch', default=0, type=int, help='epoch number to load model.')
-parser.add_argument('--input-shape', default='3,112,112', help='input shape.')
-parser.add_argument('--output-onnx', default='./r100.onnx', help='path to write onnx model.')
-args = parser.parse_args()
-input_shape = (1,) + tuple( [int(x) for x in args.input_shape.split(',')] )
-print('input-shape:', input_shape)
-
-sym_file = "%s-symbol.json"%args.prefix
-params_file = "%s-%04d.params"%(args.prefix, args.epoch)
-assert os.path.exists(sym_file)
-assert os.path.exists(params_file)
-converted_model_path = onnx_mxnet.export_model(sym_file, params_file, [input_shape], np.float32, args.output_onnx)
-```
