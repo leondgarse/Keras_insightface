@@ -62,7 +62,10 @@ def linear_GD_conv_block(inputs, kernel_size, strides):
 
 def mobile_facenet(emb_shape=128, dropout=1, name="mobile_facenet"):
     channel_axis = 1 if K.image_data_format() == "channels_first" else -1
-    X = Input(shape=(112, 112, 3))
+    if K.image_data_format() == "channels_first":
+        X = Input(shape=(3, 112, 112))
+    else:
+        X = Input(shape=(112, 112, 3))
     M = conv_block(X, 64, 3, 2, "same")  # Output Shape: (56, 56, 64)
     M = separable_conv_block(M, 64, 3, 1)  # (56, 56, 64)
     M = inverted_residual_block(M, 64, 3, t=2, strides=2, n=5)  # (28, 28, 64)

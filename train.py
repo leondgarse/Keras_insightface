@@ -2,8 +2,9 @@ import data
 import evals
 import losses
 import myCallbacks
-import tensorflow as tf
+# import tensorflow as tf
 from tensorflow import keras
+import tensorflow.keras.backend as K
 import os
 
 
@@ -53,14 +54,17 @@ class NormDense(keras.layers.Layer):
         super(NormDense, self).build(input_shape)
 
     def call(self, inputs, **kwargs):
-        norm_w = tf.nn.l2_normalize(self.w, axis=0)
-        inputs = tf.nn.l2_normalize(inputs, axis=1)
-        return tf.matmul(inputs, norm_w)
+        norm_w = K.l2_normalize(self.w, axis=0)
+        inputs = K.l2_normalize(inputs, axis=1)
+        return K.dot(inputs, norm_w)
+
+    # def compute_output_shape(self, input_shape):
+    #     shape = tf.TensorShape(input_shape).as_list()
+    #     shape[-1] = self.units
+    #     return tf.TensorShape(shape)
 
     def compute_output_shape(self, input_shape):
-        shape = tf.TensorShape(input_shape).as_list()
-        shape[-1] = self.units
-        return tf.TensorShape(shape)
+        return (input_shape[0], self.units)
 
     def get_config(self):
         config = super(NormDense, self).get_config()
@@ -273,8 +277,8 @@ class Train:
 
 
 # Hist plot functions
-def peak_scatter(ax, array, peak_method, color="r"):
-    start = 1
+def peak_scatter(ax, array, peak_method, color="r", init_epoch=0):
+    start = init_epoch + 1
     for ii in array:
         pp = peak_method(ii)
         ax.scatter(pp + start, ii[pp], color=color, marker="v")
@@ -282,53 +286,71 @@ def peak_scatter(ax, array, peak_method, color="r"):
         start += len(ii)
 
 
-def arrays_plot(ax, arrays, color=None, label=None):
+def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0):
     tt = []
     for ii in arrays:
         tt += ii
-    xx = list(range(1, len(tt) + 1))
+    if pre_value != 0:
+        tt = [pre_value] + tt
+        xx = list(range(init_epoch, init_epoch + len(tt)))
+    else:
+        xx = list(range(init_epoch + 1, init_epoch + len(tt) + 1))
     ax.plot(xx, tt, label=label, color=color)
-    ax.set_xticks(xx[:: len(xx) // 16 + 1])
+    ax.set_xticks(list(range(xx[-1]))[:: xx[-1] // 16 + 1])
 
 
-def hist_plot(loss_lists, accuracy_lists, evals_dict, loss_names, save=None, fig=None, axes=None):
+def hist_plot(loss_lists, accuracy_lists, evals_dict, loss_names, save=None, fig=None, axes=None, init_epoch=0, pre_item={}):
+    try:
+        import seaborn as sns
+    except:
+        pass
+
     import matplotlib.pyplot as plt
     import numpy as np
 
     if fig == None:
         fig, axes = plt.subplots(1, 3, sharex=True, figsize=(15, 5))
 
-    arrays_plot(axes[0], loss_lists)
-    peak_scatter(axes[0], loss_lists, np.argmin)
+    arrays_plot(axes[0], loss_lists, init_epoch=init_epoch, pre_value=pre_item.get("loss", 0))
+    peak_scatter(axes[0], loss_lists, np.argmin, init_epoch=init_epoch)
     axes[0].set_title("loss")
 
-    arrays_plot(axes[1], accuracy_lists)
-    peak_scatter(axes[1], accuracy_lists, np.argmax)
+    arrays_plot(axes[1], accuracy_lists, init_epoch=init_epoch, pre_value=pre_item.get("accuracy", 0))
+    peak_scatter(axes[1], accuracy_lists, np.argmax, init_epoch=init_epoch)
     axes[1].set_title("accuracy")
 
     # for ss, aa in zip(["lfw", "cfp_fp", "agedb_30"], [lfws, cfp_fps, agedb_30s]):
     for kk, vv in evals_dict.items():
-        arrays_plot(axes[2], vv, label=kk)
-        peak_scatter(axes[2], vv, np.argmax)
+        arrays_plot(axes[2], vv, label=kk, init_epoch=init_epoch, pre_value=pre_item.get(kk, 0))
+        peak_scatter(axes[2], vv, np.argmax, init_epoch=init_epoch)
     axes[2].set_title("eval accuracy")
     axes[2].legend(loc="lower right")
 
     for ax in axes:
         ymin, ymax = ax.get_ylim()
         mm = (ymax - ymin) * 0.05
-        start = 1
+        start = init_epoch + 1
         for nn, loss in zip(loss_names, loss_lists):
             ax.plot([start, start], [ymin + mm, ymax - mm], color="k", linestyle="--")
             # ax.text(xx[ss[0]], np.mean(ax.get_ylim()), nn)
-            ax.text(start + len(loss) * 0.2, ymin + mm * 4, nn, rotation=-90)
+            ax.text(start + len(loss) * 0.2, ymin + mm * 4, nn, va='bottom', rotation=-90)
             start += len(loss)
 
     fig.tight_layout()
     if save:
         fig.savefig(save)
 
+    last_item = {
+        "loss": loss_lists[-1][-1],
+        "accuracy": accuracy_lists[-1][-1],
+    }
+    last_item = {kk: vv[-1][-1] for kk, vv in evals_dict.items()}
+    last_item["loss"] = loss_lists[-1][-1]
+    last_item["accuracy"] = accuracy_lists[-1][-1]
+    return fig, axes, last_item
 
-def hist_plot_split(history, epochs, names, save=None, fig=None, axes=None):
+
+def hist_plot_split(history, epochs, names, save=None, fig=None, axes=None, init_epoch=0, pre_item={}):
     splits = [[int(sum(epochs[:id])), int(sum(epochs[:id])) + ii] for id, ii in enumerate(epochs)]
     split_func = lambda aa: [aa[ii:jj] for ii, jj in splits if ii < len(aa)]
     if isinstance(history, str):
@@ -344,4 +366,4 @@ def hist_plot_split(history, epochs, names, save=None, fig=None, axes=None):
     accuracy_lists = split_func(hh.pop("accuracy"))
     hh.pop("lr")
     evals_dict = {kk: split_func(vv) for kk, vv in hh.items()}
-    hist_plot(loss_lists, accuracy_lists, evals_dict, names, save, fig, axes)
+    return hist_plot(loss_lists, accuracy_lists, evals_dict, names, save, fig, axes, init_epoch, pre_item)

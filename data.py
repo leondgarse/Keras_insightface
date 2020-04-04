@@ -35,15 +35,15 @@ def process_path(file_path, classes=0, img_shape=(112, 112), random_status=2, on
     img = tf.image.decode_jpeg(img, channels=3)
     img = tf.image.convert_image_dtype(img, tf.float32)
     if random_status >= 1:
-        img = tf.image.random_brightness(img, 0.2)
+        img = tf.image.random_brightness(img, 0.1 * random_status)
         img = tf.image.random_flip_left_right(img)
     if random_status >= 2:
-        img = tf.image.random_contrast(img, 0.8, 1.2)
-        img = tf.image.random_saturation(img, 0.8, 1.2)
+        img = tf.image.random_contrast(img, 1 - 0.1 * random_status, 1 + 0.1 * random_status)
+        img = tf.image.random_saturation(img, 1 - 0.1 * random_status, 1 + 0.1 * random_status)
     if random_status >= 3:
         img = tf.image.random_crop(img, [100, 100, 3])
         img = tf.image.resize(img, img_shape)
-    img = (img - 0.5) * 2
+    img = img * 2 - 1
     return img, label
 
 

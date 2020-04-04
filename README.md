@@ -121,7 +121,7 @@
       {"loss": losses.margin_softmax, "epoch": 10},
       {"loss": losses.ArcfaceLoss(), "bottleneckOnly": True, "epoch": 4},
       {"loss": losses.ArcfaceLoss(), "epoch": 15},
-      {"loss": losses.ArcfaceLoss(scale=32.0), "epoch": 15},
+      {"loss": losses.ArcfaceLoss(scale=32.0), "epoch": 10},
       {"loss": losses.ArcfaceLoss(scale=32.0), "optimizer": keras.optimizers.SGD(momentum=0.9), "epoch": 10},
       {"loss": losses.batch_hard_triplet_loss, "optimizer": "nadam", "epoch": 30},
     ]
@@ -260,7 +260,7 @@
 
     ```py
     import train
-    train.hist_plot_split("./checkpoints/keras_mobilefacenet_256_II_hist.json", [15, 10, 4, 15, 15], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64",  "Arcface scale=32"])
+    fig, axes = train.hist_plot_split("./checkpoints/keras_mobilefacenet_256_hist.json", [15, 10, 4, 15], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
     ```
     ![](checkpoints/keras_mobilefacenet_256_II_hist.svg)
 ## ResNet101V2
@@ -347,6 +347,58 @@
     bb = mm(imm).numpy()
     assert np.allclose(aa, bb, rtol=1e-3)
     ```
+## MXNet format
+  - Here uses `keras-mxnet` to perform conversion from `Keras h5` to `MXNet param + json` format.
+    ```sh
+    $ pip install keras-mxnet
+    $ KERAS_BACKEND='mxnet' ipython
+    ```
+  - **Issue**
+    ```py
+    ''' Q: TypeError: tuple indices must be integers or slices, not list
+    /opt/anaconda3/lib/python3.7/site-packages/keras/layers/normalization.py in build(self, input_shape)
+         98
+         99     def build(self, input_shape):
+    --> 100         dim = input_shape[self.axis]
+        101         print(input_shape, self.axis, dim)
+        102         if dim is None
+    '''
+    ''' A: Modify normalization.py
+    $ vi /opt/anaconda3/lib/python3.7/site-packages/keras/layers/normalization.py + 97
+        else:
+    -       self.axis = axis
+    +       self.axis = axis if isinstance(axis, int) else axis[-1]
+
+    def build(self, input_shape):
+    '''
+    ```
+  - **Convert**
+    ```py
+    import numpy as np
+    import keras
+    from keras import backend as K
+    K.common.set_image_data_format('channels_first')
+    from keras.initializers import glorot_normal, glorot_uniform
+    from keras.utils import CustomObjectScope
+    with CustomObjectScope({'GlorotNormal': glorot_normal(), "GlorotUniform": glorot_uniform()}):
+        mm = keras.models.load_model('./checkpoints/keras_mobilefacenet_256_basic_agedb_30_epoch_39_0.942500.h5', compile=False)
+
+    mm.compile(optimizer='adam', loss=keras.losses.categorical_crossentropy)
+    mm.predict(np.zeros((1, 112, 112, 3)))
+    keras.models.save_mxnet_model(model=mm, prefix='mm')
+    ```
+  - **Test**
+    ```py
+    import numpy as np
+    import mxnet as mx
+
+    sym, arg_params, aux_params = mx.model.load_checkpoint(prefix='mm', epoch=0)
+    mod = mx.mod.Module(symbol=sym, data_names=['/input_11'], context=mx.cpu(), label_names=None)
+    mod.bind(for_training=False, data_shapes=[('/input_11', (1, 112, 112, 3))], label_shapes=mod._label_shapes)
+    mod.set_params(arg_params, aux_params, allow_missing=True)
+    data_iter = mx.io.NDArrayIter(np.zeros((1, 112, 112, 3)), None, 1)
+    mod.predict(data_iter)
+    ```
 ***
 
 # Related Projects
@@ -354,3 +406,86 @@
   - [TensorFlow Addons Layers: WeightNormalization](https://www.tensorflow.org/addons/tutorials/layers_weightnormalization)
   - [deepinsight/insightface](https://github.com/deepinsight/insightface)
 ***
+
+# Test functions
+```py
+import json
+dd = {
+  'S=32, lr=5e-5, nadam': 'keras_mobilefacenet_256_II_hist.json',
+  'S=32, lr decay, nadam': 'keras_mobilefacenet_256_III_hist.json',
+  # 'S=64, lr decay, SGD': 'keras_mobilefacenet_256_IV_hist.json',
+  # 'S=64, lr decay, nadam': 'keras_mobilefacenet_256_VI_hist.json',
+}
+
+tt = {}
+for kk, vv in dd.items():
+    with open(vv, 'r') as ff:
+        tt[kk] = json.load(ff)
+
+import seaborn as sns
+sns.set(style="darkgrid")
+fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+# fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+axes = axes.flatten()
+xx = np.arange(41, 51)
+
+# titles = tt[list(tt.keys())[0]].keys()
+titles = ["loss", "accuracy", "lr", "lfw", "cfp_fp", "agedb_30"]
+# titles = ["loss", "accuracy", "lr"]
+for ax, item in zip(axes, titles):
+    for label, items in tt.items():
+        ax.plot(xx, items[item], label=label)
+    # ax.legend()
+    ax.set_title(item)
+
+dd_2 = {
+  "S=64, lr decay, nadam": "keras_mobilefacenet_256_VII_hist.json",
+  "S=64, lr decay, adam": "keras_mobilefacenet_256_VIII_hist.json",
+}
+
+tt_2 = {}
+for kk, vv in dd_2.items():
+    with open(vv, 'r') as ff:
+        tt_2[kk] = json.load(ff)
+
+pre = tt["S=64, lr decay, nadam"]
+xx = np.arange(50, 61)
+for ax, item in zip(axes, titles):
+    for label, items in tt_2.items():
+        ax.plot(xx, pre[item][-1:] + items[item], label=label)
+    # ax.legend()
+axes[0].legend()
+fig.tight_layout()
+```
+```py
+import sys
+import os
+import argparse
+import onnx
+import mxnet as mx
+
+print('mxnet version:', mx.__version__)
+print('onnx version:', onnx.__version__)
+#make sure to install onnx-1.2.1
+#pip uninstall onnx
+#pip install onnx==1.2.1
+assert onnx.__version__=='1.2.1'
+import numpy as np
+from mxnet.contrib import onnx as onnx_mxnet
+
+parser = argparse.ArgumentParser(description='convert insightface models to onnx')
+# general
+parser.add_argument('--prefix', default='./r100-arcface/model', help='prefix to load model.')
+parser.add_argument('--epoch', default=0, type=int, help='epoch number to load model.')
+parser.add_argument('--input-shape', default='3,112,112', help='input shape.')
+parser.add_argument('--output-onnx', default='./r100.onnx', help='path to write onnx model.')
+args = parser.parse_args()
+input_shape = (1,) + tuple( [int(x) for x in args.input_shape.split(',')] )
+print('input-shape:', input_shape)
+
+sym_file = "%s-symbol.json"%args.prefix
+params_file = "%s-%04d.params"%(args.prefix, args.epoch)
+assert os.path.exists(sym_file)
+assert os.path.exists(params_file)
+converted_model_path = onnx_mxnet.export_model(sym_file, params_file, [input_shape], np.float32, args.output_onnx)
+```
