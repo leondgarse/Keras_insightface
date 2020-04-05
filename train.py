@@ -102,16 +102,18 @@ class Train:
                     "margin_softmax": losses.margin_softmax,
                     "arcface_loss": losses.arcface_loss,
                     "Center_loss": losses.Center_loss,
-                    "batch_hard_triplet_loss": losses.batch_hard_triplet_loss,
-                    "batch_all_triplet_loss": losses.batch_all_triplet_loss,
                 })
                 self.model = keras.models.load_model(model, compile=compile, custom_objects=custom_objects)
                 self.basic_model = keras.models.Model(self.model.inputs[0], self.model.layers[basic_model].output)
                 self.model.summary()
         elif isinstance(basic_model, str):
             if basic_model.endswith(".h5") and os.path.exists(basic_model):
+                custom_objects.update({
+                    "batch_hard_triplet_loss": losses.batch_hard_triplet_loss,
+                    "batch_all_triplet_loss": losses.batch_all_triplet_loss,
+                })
                 print(">>>> Load basic_model from h5 file: %s..." % basic_model)
-                self.basic_model = keras.models.load_model(basic_model, compile=compile)
+                self.basic_model = keras.models.load_model(basic_model, compile=compile, custom_objects=custom_objects)
         elif isinstance(basic_model, keras.models.Model):
             self.basic_model = basic_model
 

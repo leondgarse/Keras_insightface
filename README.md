@@ -462,3 +462,7 @@
   - [TensorFlow Addons Layers: WeightNormalization](https://www.tensorflow.org/addons/tutorials/layers_weightnormalization)
   - [deepinsight/insightface](https://github.com/deepinsight/insightface)
 ***
+```py
+scratch BN, Epoch 61
+24744/36392 [===================>..........] - ETA: 1:07:37 - loss: 15.7690 - accuracy: 0.9526
+```
