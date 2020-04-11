@@ -57,12 +57,11 @@
   - **Training Data** in this project is `MS1M-ArcFace` downloaded from [Insightface Dataset Zoo](https://github.com/deepinsight/insightface/wiki/Dataset-Zoo)
   - **Evaluating data** is `LFW` `CFP-FP` `AgeDB-30` bin files included in `MS1M-ArcFace` dataset
   - Any other data is also available just in the right format
-  - **[prepare_data.py](prepare_data.py)** script, Extract data from mxnet record format to `folders`. This may take hours.
+  - **[prepare_data.py](prepare_data.py)** script, Extract data from mxnet record format to `folders`.
     ```sh
     # Convert `/datasets/faces_emore` to `/datasets/faces_emore_112x112_folders`
     CUDA_VISIBLE_DEVICES='-1' ./prepare_data.py -D /datasets/faces_emore
-
-    # Convert training dataset, and convert evaluating bin files
+    # Convert evaluating bin files
     CUDA_VISIBLE_DEVICES='-1' ./prepare_data.py -D /datasets/faces_emore -T lfw.bin cfp_fp.bin agedb_30.bin
     ```
     Executing again will skip `dataset` conversion.
@@ -280,30 +279,28 @@
   - **Result**
     ```py
     import plot
-    fig, axes = None, None
-    fig, axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_II_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, fig=fig, axes=axes)
+    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_II_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, axes=None)
     axes[0].lines[-2].set_label('S=32, lr=5e-5, nadam')
-    fig, axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_III_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, fig=fig, axes=axes)
+    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_III_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, axes=axes)
     axes[0].lines[-2].set_label('S=32, lr decay, nadam')
     axes[0].legend()
     axes[0].set_xticks(np.arange(41, 51))
-    fig.savefig('./checkpoints/keras_mobilefacenet_256_III_hist.svg')
+    axes[0].figure.savefig('./checkpoints/keras_mobilefacenet_256_III_hist.svg')
     ```
     ![](checkpoints/keras_mobilefacenet_256_III_hist.svg)
     ```py
     import plot
-    fig, axes = None, None
-    fig, axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_IV_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, fig=fig, axes=axes)
+    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_IV_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, axes=None)
     axes[0].lines[-2].set_label('S=64, lr decay, SGD')
-    fig, axes, pre_1 = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VI_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, fig=fig, axes=axes)
+    axes, pre_1 = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VI_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, axes=axes)
     axes[0].lines[-2].set_label('S=64, lr decay, nadam')
-    fig, axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VII_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=50, pre_item=pre_1, fig=fig, axes=axes)
+    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VII_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=50, pre_item=pre_1, axes=axes)
     axes[0].lines[-2].set_label('S=64, lr decay, nadam')
-    fig, axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VIII_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=50, pre_item=pre_1, fig=fig, axes=axes)
+    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VIII_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=50, pre_item=pre_1, axes=axes)
     axes[0].lines[-2].set_label('S=64, lr decay, adam')
     axes[0].legend()
     axes[0].set_xticks(np.arange(41, 61, 2))
-    fig.savefig('./checkpoints/keras_mobilefacenet_256_VIII_hist.svg')
+    axes[0].figure.savefig('./checkpoints/keras_mobilefacenet_256_VIII_hist.svg')
     ```
     ![](checkpoints/keras_mobilefacenet_256_VIII_hist.svg)
 ## ResNet101V2
@@ -323,6 +320,38 @@
     plot.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
     ```
     ![](checkpoints/keras_resnet101_512_II_hist.svg)
+    ```py
+    import plot
+    axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", [15, 10, 4, 35], ["", "", "", ""], save=None, axes=None)
+    axes[0].lines[-3].set_label('Batch_size = 128')
+    axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"], save=None, axes=axes)
+    axes[0].lines[-3].set_label('Batch_size = 1024')
+    axes[0].legend(loc='upper right')
+    axes[0].plot((2, 15), (0.3807, 0.3807), 'k:')
+    axes[1].plot((2, 15), (0.9206, 0.9206), 'k:')
+    ```
+    ```py
+    import plot
+    axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", [15, 10, 4, 35], ["", "", "", ""], save=None, axes=None)
+    axes[0].lines[-2].set_label('Batch_size = 768')
+    axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"], save=None, axes=axes)
+    axes[0].lines[-5].set_label('Batch_size = 160')
+    axes[0].legend(loc='upper right')
+    axes[0].plot((2, 25), (0.5952, 0.5952), 'k:')
+    axes[1].plot((2, 25), (0.9073, 0.9073), 'k:')
+    ```
+    ```py
+    customs = ["agedb_30"]
+    axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_hist.json", [15, 10, 4, 35], ["", "", "", ""], customs=customs, save=None, axes=None)
+    axes[0].lines[-3].set_label('Resnet101, BS = 1024')
+    axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", [15, 10, 4, 35], ["", "", "", ""], customs=customs, save=None, axes=axes)
+    axes[0].lines[-3].set_label('Resnet101, BS = 128')
+    axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", [15, 10, 4, 35], ["", "", "", ""], customs=customs, save=None, axes=axes)
+    axes[0].lines[-2].set_label('Mobilefacenet, BS = 768')
+    axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist.json", [15, 10], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"], customs=customs, save=None, axes=axes)
+    axes[0].lines[-3].set_label('Mobilefacenet, BS = 160')
+    axes[0].legend(loc='upper right')
+    ```
 ***
 
 # Model conversion
@@ -335,7 +364,7 @@
     # Convert to saved model first
     import glob2
     mm = tf.keras.models.load_model(glob2.glob('./keras_mobilefacenet_256_basic_*.h5')[0], compile=False)
-    keras.experimental.export_saved_model(mm, './saved_model')
+    tf.keras.experimental.export_saved_model(mm, './saved_model')
     ```
     `tf2onnx` convert `saved model` to `tflite`, also `tf1.15.0`
     ```sh
@@ -432,14 +461,15 @@
     ```py
     import numpy as np
     import keras
-    from keras import backend as K
-    K.common.set_image_data_format('channels_first')
+    # from keras import backend as K
+    # K.common.set_image_data_format('channels_first')
     from keras.initializers import glorot_normal, glorot_uniform
     from keras.utils import CustomObjectScope
     with CustomObjectScope({'GlorotNormal': glorot_normal(), "GlorotUniform": glorot_uniform()}):
         mm = keras.models.load_model('./checkpoints/keras_mobilefacenet_256_basic_agedb_30_epoch_39_0.942500.h5', compile=False)
 
-    mm.compile(optimizer='adam', loss=keras.losses.categorical_crossentropy)
+    # mm.compile(optimizer='adam', loss=keras.losses.categorical_crossentropy)
+    mm.compiled = True
     mm.predict(np.zeros((1, 112, 112, 3)))
     keras.models.save_mxnet_model(model=mm, prefix='mm')
     ```
@@ -462,7 +492,3 @@
   - [TensorFlow Addons Layers: WeightNormalization](https://www.tensorflow.org/addons/tutorials/layers_weightnormalization)
   - [deepinsight/insightface](https://github.com/deepinsight/insightface)
 ***
-```py
-scratch BN, Epoch 61
-24744/36392 [===================>..........] - ETA: 1:07:37 - loss: 15.7690 - accuracy: 0.9526
-```

@@ -30,9 +30,11 @@ def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0):
     ax.set_xticks(list(range(xx[-1]))[:: xx[-1] // 16 + 1])
 
 
-def hist_plot(loss_lists, accuracy_lists, customs_dict, loss_names, save="", fig=None, axes=None, init_epoch=0, pre_item={}):
-    if fig == None:
+def hist_plot(loss_lists, accuracy_lists, customs_dict, loss_names, save="", axes=None, init_epoch=0, pre_item={}):
+    if axes is None:
         fig, axes = plt.subplots(1, 3, sharex=True, figsize=(15, 5))
+    else:
+        fig = axes[0].figure
 
     arrays_plot(axes[0], loss_lists, init_epoch=init_epoch, pre_value=pre_item.get("loss", 0))
     peak_scatter(axes[0], loss_lists, np.argmin, init_epoch=init_epoch)
@@ -46,7 +48,7 @@ def hist_plot(loss_lists, accuracy_lists, customs_dict, loss_names, save="", fig
     for kk, vv in customs_dict.items():
         arrays_plot(axes[2], vv, label=kk, init_epoch=init_epoch, pre_value=pre_item.get(kk, 0))
         peak_scatter(axes[2], vv, np.argmax, init_epoch=init_epoch)
-    axes[2].set_title("customer objects")
+    axes[2].set_title(", ".join(customs_dict))
     axes[2].legend(loc="lower right")
 
     for ax in axes:
@@ -70,10 +72,10 @@ def hist_plot(loss_lists, accuracy_lists, customs_dict, loss_names, save="", fig
     last_item = {kk: vv[-1][-1] for kk, vv in customs_dict.items()}
     last_item["loss"] = loss_lists[-1][-1]
     last_item["accuracy"] = accuracy_lists[-1][-1]
-    return fig, axes, last_item
+    return axes, last_item
 
 
-def hist_plot_split(history, epochs, names, customs=[], save="", fig=None, axes=None, init_epoch=0, pre_item={}):
+def hist_plot_split(history, epochs, names, customs=[], save="", axes=None, init_epoch=0, pre_item={}):
     splits = [[int(sum(epochs[:id])), int(sum(epochs[:id])) + ii] for id, ii in enumerate(epochs)]
     split_func = lambda aa: [aa[ii:jj] for ii, jj in splits if ii < len(aa)]
     if isinstance(history, str):
@@ -92,4 +94,4 @@ def hist_plot_split(history, epochs, names, customs=[], save="", fig=None, axes=
     else:
         hh.pop("lr")
         customs_dict = {kk: split_func(vv) for kk, vv in hh.items()}
-    return hist_plot(loss_lists, accuracy_lists, customs_dict, names, save, fig, axes, init_epoch, pre_item)
+    return hist_plot(loss_lists, accuracy_lists, customs_dict, names, save, axes, init_epoch, pre_item)

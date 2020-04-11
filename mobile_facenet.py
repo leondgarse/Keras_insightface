@@ -60,7 +60,7 @@ def linear_GD_conv_block(inputs, kernel_size, strides):
     return Z
 
 
-def mobile_facenet(emb_shape=128, dropout=1, name="mobile_facenet"):
+def mobile_facenet(emb_shape=128, dropout=1, name="mobile_facenet", weight_file=None):
     channel_axis = 1 if K.image_data_format() == "channels_first" else -1
     if K.image_data_format() == "channels_first":
         X = Input(shape=(3, 112, 112))
@@ -85,4 +85,6 @@ def mobile_facenet(emb_shape=128, dropout=1, name="mobile_facenet"):
     M = BatchNormalization(axis=channel_axis, name="embedding")(M)
 
     model = Model(inputs=X, outputs=M, name=name)
+    if weight_file:
+        model.load_weights(weight_file)
     return model
