@@ -30,6 +30,7 @@
   - [Usage](#usage)
   	- [Beforehand Data Prepare](#beforehand-data-prepare)
   	- [Training scripts](#training-scripts)
+  	- [Multi GPU train](#multi-gpu-train)
   - [Training Record](#training-record)
   	- [Loss function test on Mobilenet](#loss-function-test-on-mobilenet)
   	- [Mobilefacenet](#mobilefacenet)
@@ -39,6 +40,7 @@
   	- [ONNX](#onnx)
   	- [TFlite](#tflite)
   	- [MXNet format](#mxnet-format)
+  	- [Pytorch and Caffe2](#pytorch-and-caffe2)
   - [Related Projects](#related-projects)
 
   <!-- /TOC -->
@@ -194,7 +196,7 @@
     ```py
     import evals
     basic_model = keras.models.load_model('checkpoints/keras_mobilefacenet_256_basic_agedb_30_epoch_39_0.942500.h5', compile=False)
-    ee = evals.epoch_eval_callback(basic_model, '/datasets/faces_emore/lfw.bin')
+    ee = evals.eval_callback(basic_model, '/datasets/faces_emore/lfw.bin')
     ee.on_epoch_end(0)
     # >>>> lfw evaluation max accuracy: 0.993167, thresh: 0.316535, previous max accuracy: 0.000000, PCA accuray = 0.993167 ± 0.003905
     # >>>> Improved = 0.993167
