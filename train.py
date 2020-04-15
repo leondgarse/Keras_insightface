@@ -2,11 +2,19 @@ import data
 import evals
 import losses
 import myCallbacks
-# import tensorflow as tf
+import tensorflow as tf
 from tensorflow import keras
 import tensorflow.keras.backend as K
 import os
 
+import multiprocessing as mp
+mp.set_start_method('forkserver')
+
+gpus = tf.config.experimental.list_physical_devices("GPU")
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
+# strategy = tf.distribute.MirroredStrategy()
+# strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
 
 def buildin_models(name, dropout=1, emb_shape=512, **kwargs):
     """ Basic model """
@@ -20,6 +28,8 @@ def buildin_models(name, dropout=1, emb_shape=512, **kwargs):
         xx = keras.applications.ResNet101V2(input_shape=(112, 112, 3), include_top=False, weights="imagenet", **kwargs)
     elif name == "NASNetMobile":
         xx = keras.applications.NASNetMobile(input_shape=(112, 112, 3), include_top=False, weights=None, **kwargs)
+    elif name == "MobileFaceNet":
+        xx = mobile_facenet(emb_shape=emb_shape, dropout=dropout)
     else:
         return None
     # xx = keras.models.load_model('checkpoints/mobilnet_v1_basic_922667.h5', compile=False)
@@ -80,8 +90,8 @@ class Train:
     def __init__(
         self,
         data_path,
-        eval_paths,
         save_path,
+        eval_paths=[],
         basic_model=-2,
         model=None,
         compile=True,
@@ -89,6 +99,7 @@ class Train:
         lr_base=0.001,
         lr_decay=0.05,
         lr_min=5e-5,
+        eval_freq=1,
         random_status=3,
         custom_objects={},
     ):
@@ -106,6 +117,9 @@ class Train:
                 self.model = keras.models.load_model(model, compile=compile, custom_objects=custom_objects)
                 self.basic_model = keras.models.Model(self.model.inputs[0], self.model.layers[basic_model].output)
                 self.model.summary()
+        elif isinstance(model, keras.models.Model):
+            self.model = model
+            self.basic_model = keras.models.Model(self.model.inputs[0], self.model.layers[basic_model].output)
         elif isinstance(basic_model, str):
             if basic_model.endswith(".h5") and os.path.exists(basic_model):
                 custom_objects.update({
@@ -120,24 +134,28 @@ class Train:
         if self.basic_model == None:
             print(
                 "Initialize model by:\n"
-                "| basicmodel                               | model          |\n"
-                "| ---------------------------------------- | -------------- |\n"
-                "| model structure                          | None           |\n"
-                "| basic model .h5 file                     | None           |\n"
-                "| model layer index for basic model output | model .h5 file |\n"
+                "| basicmodel                               | model           |\n"
+                "| ---------------------------------------- | --------------- |\n"
+                "| model structure                          | None            |\n"
+                "| basic model .h5 file                     | None            |\n"
+                "| model layer index for basic model output | model .h5 file  |\n"
+                "| model layer index for basic model output | model structure |\n"
             )
             return
 
         self.softmax, self.arcface, self.triplet = "softmax", "arcface", "triplet"
-        self.data_path, self.batch_size, self.random_status = data_path, batch_size, random_status
+
+        self.batch_size = batch_size
+        self.data_path, self.random_status = data_path, random_status
         self.train_ds, self.steps_per_epoch, self.classes = None, 0, 0
         self.is_triplet_dataset = False
         self.default_optimizer = "adam"
         self.metrics = ["accuracy"]
         my_evals = [
-            evals.epoch_eval_callback(self.basic_model, ii, save_model=None, eval_freq=1, flip=True) for ii in eval_paths
+            evals.eval_callback(self.basic_model, ii, batch_size=batch_size, eval_freq=eval_freq) for ii in eval_paths
         ]
-        my_evals[-1].save_model = os.path.splitext(save_path)[0]
+        if len(my_evals) != 0:
+            my_evals[-1].save_model = os.path.splitext(save_path)[0]
         basic_callbacks = myCallbacks.basic_callbacks(checkpoint=save_path, evals=my_evals, lr=lr_base, lr_decay=lr_decay, lr_min=lr_min)
         self.my_evals = my_evals
         self.basic_callbacks = basic_callbacks
@@ -154,7 +172,7 @@ class Train:
         else:
             if self.train_ds == None or self.is_triplet_dataset == True:
                 print(">>>> Init softmax dataset...")
-                self.train_ds, self.steps_per_epoch, self.classes = data.prepare_for_training(
+                self.train_ds, self.steps_per_epoch, self.classes = data.prepare_dataset(
                     self.data_path, batch_size=self.batch_size, random_status=self.random_status
                 )
                 self.is_triplet_dataset = False

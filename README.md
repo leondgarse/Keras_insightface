@@ -45,11 +45,14 @@
 ***
 
 # Current accuracy
+  - `Mobilefacenet` and `ResNet101V2` are still in progress.
+
   | Model backbone | lfw      | cfp_fp   | agedb_30 |
   | -------------- | -------- | -------- | -------- |
   | ResNet50V2     | 0.995833 | 0.951143 | 0.959333 |
   | MobileNetV2    | 0.993000 | 0.930429 | 0.930000 |
-  | Mobilefacenet  | 0.993667 | 0.936000 | 0.943667 |
+  | Mobilefacenet  | 0.994167 | 0.944143 | 0.942500 |
+  | ResNet101V2    | 0.996500 | 0.963000 | 0.958833 |
 ***
 
 # Usage
@@ -99,9 +102,10 @@
     - [data.py](data.py) loads image data as `tf.dataset` for training. `Triplet` dataset is different from others.
     - [evals.py](evals.py) contains evaluating callback using `bin` files.
     - [losses.py](losses.py) contains `softmax` / `arcface` / `centerloss` / `triplet` loss functions.
-    - [myCallbacks.py](myCallbacks.py) contains my other callbacks, like saving model / learning rate adjusting.
-    - [mobile_facenet.py](mobile_facenet.py) / [mobilenetv3.py](mobilenetv3.py) basic model implementation. Other models like `ResNet50V2` is loaded from `keras.applications`.
-    - [train.py](train.py) contains a `Train` class. It uses a `scheduler` to connect different `loss` / `optimizer` / `epochs`.
+    - [mobile_facenet.py](mobile_facenet.py) / [mobilenetv3.py](mobilenetv3.py) basic model implementation. Other backbones like `ResNet101V2` is loaded from `keras.applications` in `train.buildin_models`.
+    - [myCallbacks.py](myCallbacks.py) contains my other callbacks, like saving model / learning rate adjusting / save history.
+    - [plot.py](plot.py) contains a history plot function.
+    - [train.py](train.py) contains a `Train` class. It uses a `scheduler` to connect different `loss` / `optimizer` / `epochs`. The basic function is simple `load data --> model --> compile --> fit`.
   - **Model** contains two part
     - **Basic model** is layers from `input` to `embedding`.
     - **Model** is `Basic model` + `bottleneck` layer, like `softmax` / `arcface` layer. For triplet training, `Model` == `Basic model`.
@@ -116,7 +120,7 @@
     basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="mobile_facenet_256")
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, eval_paths, 'keras_mobilefacenet_256.h5', basic_model=basic_model, model=None, compile=False, lr_base=0.001, batch_size=160, random_status=3)
+    tt = train.Train(data_path, eval_paths, save_path='keras_mobile_facenet_emore.h5', basic_model=basic_model, model=None, lr_base=0.001, batch_size=768, random_status=3)
     sch = [
       {"loss": keras.losses.categorical_crossentropy, "optimizer": "nadam", "epoch": 15},
       {"loss": losses.margin_softmax, "epoch": 10},
@@ -127,11 +131,12 @@
     tt.train(sch, 0)
     ```
   - **train.Train** `basic_model` and `model` parameters. Combine these two parameters to initializing model from different sources. Sometimes may need `custom_objects` to load model.
-    | basic_model                              | model          | Use for                                    |
-    | ---------------------------------------- | -------------- | ------------------------------------------ |
-    | model structure                          | None           | Scratch train                              |
-    | model layer index for basic model output | model .h5 file | Continue training from last saved model    |
-    | basic model .h5 file                     | None           | Continue training from a saved basic model |
+    | basic_model                              | model           | Use for                                    |
+    | ---------------------------------------- | --------------- | ------------------------------------------ |
+    | model structure                          | None            | Scratch train                              |
+    | model layer index for basic model output | model .h5 file  | Continue training from last saved model    |
+    | basic model .h5 file                     | None            | Continue training from a saved basic model |
+    | model layer index for basic model output | model structure | Continue training from a modified model    |
   - **Scheduler** is a list of dicts, each contains a training plan
     - **loss** indicates the loss function.
     - **optimizer** is the optimizer used in this plan, `None` indicates using the last one.
@@ -157,7 +162,7 @@
     import train
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, eval_paths, 'keras_mobilefacenet_256_II.h5', basic_model=-2, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=160, random_status=3, custom_objects={'margin_softmax': losses.margin_softmax})
+    tt = train.Train(data_path, eval_paths, 'keras_mobilefacenet_256_II.h5', basic_model=-2, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=768, random_status=3, custom_objects={'margin_softmax': losses.margin_softmax})
     sch = [
       # {"loss": keras.losses.categorical_crossentropy, "optimizer": "nadam", "epoch": 15},
       {"loss": losses.margin_softmax, "epoch": 6},
@@ -168,11 +173,11 @@
     tt.train(sch, 19) # 19 is the initial_epoch
     ```
   - **Saving strategy**
-    - **Model** will save on every epoch end to local path `./checkpoints`, name is specified from `train.Train`.
+    - **Model** will save the latest one on every epoch end to local path `./checkpoints`, name is specified by `train.Train` `save_path`.
     - **basic_model** will be saved monitoring on the last `eval_paths` evaluating `bin` item, and save the best only.
   - **Gently stop** is a callback to stop training gently. Input an `n` and `<Enter>` anytime during training, will set training stop on that epoch ends.
   - **My history**
-    - This is a callback collecting training `loss` and `accuracy`, and evaluating `accuracy`.
+    - This is a callback collecting training `loss`, `accuracy` and `evaluating accuracy`.
     - On every epoch end, backup to the path `save_path` defined in `train.Train` with suffix `_hist.json`.
     - Reload when initializing, if the backup `<save_path>_hist.json` file exists.
   - **Learning rate** uses `exponential decay`, `lr_base` and `lr_decay` in `train.Train` set it. Default is `lr_base=0.1, lr_decay=0.05`.
@@ -188,18 +193,32 @@
   - **Evaluation**
     ```py
     import evals
-    '/datasets/faces_emore/lfw.bin'
     basic_model = keras.models.load_model('checkpoints/keras_mobilefacenet_256_basic_agedb_30_epoch_39_0.942500.h5', compile=False)
     ee = evals.epoch_eval_callback(basic_model, '/datasets/faces_emore/lfw.bin')
     ee.on_epoch_end(0)
     # >>>> lfw evaluation max accuracy: 0.993167, thresh: 0.316535, previous max accuracy: 0.000000, PCA accuray = 0.993167 ± 0.003905
     # >>>> Improved = 0.993167
     ```
+    Default evaluating strategy is `on_epoch_end`, this could also be changed to `on_batch_end`, by setting a `eval_freq` greater than `1` in `train.Train`.
+    ```py
+    # Change evaluating strategy to `on_batch_end` for every `1000` batch.
+    tt = train.Train(data_path, eval_paths, save_path='keras_mobilefacenet_256.h5', basic_model=basic_model, eval_freq=1000)
+    ```
+## Multi GPU train
+  - Just add an overall `tf.distribute.MirroredStrategy().scope()` `with` block.
+  ```py
+  with tf.distribute.MirroredStrategy().scope():
+      basic_model = ...
+      tt = train.Train(...)
+      sch = [...]
+      tt.train(sch, 0)
+  ```
 ***
 
 # Training Record
 ## Loss function test on Mobilenet
-  - **Initialize training from scratch**
+  - This tests loss functions on `Mobilenet` for their efficiency, but only one epoch training may not be very valuable.
+  - **Initialize training from scratch for 6 epochs**
     ```py
     from tensorflow import keras
     import losses
@@ -211,7 +230,7 @@
     sch = [{"loss": losses.ArcfaceLoss(), "optimizer": None, "epoch": 6}]
     tt.train(sch, 0)
     ```
-  - **Train next epoch using different loss functions**
+  - **Train next epoch 7 using different loss functions**
     ```py
     ''' Load saved basic model '''
     import losses
@@ -247,25 +266,35 @@
     | batch_all_triplet_loss  | 0.4749  |          | 0.984333 | 0.417722   | 0.902571 | 0.240187      | 0.837167 | 0.475637        | 4708s      | 159ms    |
 ## Mobilefacenet
   - Training script is the last exampled one.
-  - **Record**
-    | Loss               | Epochs | First epoch                                          |
-    | ------------------ | ------ | ---------------------------------------------------- |
-    | Softmax            | 15     | 12820s 352ms/step - loss: 5.0583 - accuracy: 0.2964  |
-    | Margin Softmax     | 10     | 12623s 347ms/step - loss: 0.7236 - accuracy: 0.8861  |
-    | Bottleneck Arcface | 4      | 4675s 128ms/step - loss: 22.1107 - accuracy: 0.8630  |
-    | Arcface 64         | 35     | 12638s 347ms/step - loss: 15.1014 - accuracy: 0.9529 |
+  - **Record** Two models are trained, with `batch_size=160` and `batch_size=768` respectively.
+    | Loss               | Epochs | First epoch                                         |
+    | ------------------ | ------ | --------------------------------------------------- |
+    | Softmax            | 15     | 12744s 2s/step - loss: 4.8241 - accuracy: 0.3282    |
+    | Margin Softmax     | 10     | 13041s 2s/step - loss: 0.4096 - accuracy: 0.9323    |
+    | Bottleneck Arcface | 4      | 4292s 566ms/step - loss: 21.6166 - accuracy: 0.8569 |
+    | Arcface 64         | 35     | 12793s 2s/step - loss: 15.4268 - accuracy: 0.9441   |
 
     ```py
     import plot
-    plot.hist_plot_split("./checkpoints/keras_mobilefacenet_256_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
+    # plot.hist_plot_split("./checkpoints/keras_mobile_facenet_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
+    customs = ["agedb_30", "cfp_fp"]
+    axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", [15, 10, 4, 35], ["", "", "", ""], customs=customs, save=None, axes=None)
+    axes[0].lines[0].set_label('Batch_size = 768')
+    pre_lines = len(axes[0].lines)
+    axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist_all.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"], customs=customs, save=None, axes=axes)
+    axes[0].lines[pre_lines].set_label('Batch_size = 160')
+    axes[0].legend(loc='upper right')
+    axes[0].figure.savefig('./checkpoints/keras_mobilefacenet_256_hist.svg')
     ```
     ![](checkpoints/keras_mobilefacenet_256_hist.svg)
 ## Loss function test on Mobilefacenet epoch 44
-  - From `Epoch 44`, Arcface loss trained `15 epochs`, run a batch of `optimizer` + `loss` test
+  - For `Epoch 44`, trained steps are `15 epochs softmax + 10 epochs margin softmax + 4 epochs arcface bottleneck only + 15 epochs arcface`
+  - Run a batch of `optimizer` + `loss` test. Each test run is `10 epochs`.
     ```py
+    # This `train.Train` is the `batch_size = 160` one.
+    sch = [{"loss": losses.ArcfaceLoss(), "epoch": 10}]  # Same as previous epochs
     sch = [{"loss": losses.Arcface(scale=32.0), "epoch": 10}] # fix lr == 1e-5
     sch = [{"loss": losses.Arcface(scale=32.0), "epoch": 10}] # lr decay, decay_rate = 0.1
-    sch = [{"loss": losses.ArcfaceLoss(), "epoch": 10}]
     sch = [{"loss": losses.ArcfaceLoss(), "optimizer": keras.optimizers.SGD(0.001, momentum=0.9), "epoch": 10}]
 
     tt.train(sch, 40) # sub bottleneck only epochs
@@ -307,51 +336,54 @@
   - **Training script** is similar with `Mobilefacenet`, just replace `basic_model` with `ResNet101V2`, and set a new `save_path`
     ```py
     basic_model = train.buildin_models("ResNet101V2", dropout=0.4, emb_shape=512)
-    tt = train.Train(data_path, eval_paths, 'keras_resnet101_512.h5', basic_model=basic_model, batch_size=128)
+    tt = train.Train(data_path, eval_paths, 'keras_resnet101_512.h5', basic_model=basic_model, batch_size=1024)
     ```
-  - **Record**
-    | Loss           | epochs | First epoch                                         |
-    | -------------- | ------ | --------------------------------------------------- |
-    | Softamx        | 15     | 12824s 282ms/step - loss: 6.3005 - accuracy: 0.2196 |
-    | Margin Softmax | 10     | 12784s 281ms/step - loss: 0.5001 - accuracy: 0.9236 |
+  - **Record** Two models are trained, with `batch_size=128` and `batch_size=1024` respectively.
+    | Loss               | epochs | First epoch                                         |
+    | ------------------ | ------ | --------------------------------------------------- |
+    | Softamx            | 15     | 11538s 2s/step - loss: 3.3550 - accuracy: 0.5024    |
+    | Margin Softmax     | 10     | 11744s 2s/step - loss: 0.1193 - accuracy: 0.9778    |
+    | Bottleneck Arcface | 4      | 4627s 814ms/step - loss: 18.5677 - accuracy: 0.9113 |
+    | Arcface 64         | 35     | 11507s 2s/step - loss: 11.7330 - accuracy: 0.9774   |
 
     ```py
     import plot
-    plot.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
+    # plot.hist_plot_split("./checkpoints/keras_resnet101_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
+    customs = ["agedb_30", "cfp_fp"]
+    axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", [15, 10, 4, 35], ["", "", "", ""], customs=customs, save=None, axes=None)
+    axes[0].lines[0].set_label('Batch_size = 128')
+    pre_lines = len(axes[0].lines)
+    axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"], customs=customs, save=None, axes=axes)
+    axes[0].lines[pre_lines].set_label('Batch_size = 1024')
+    axes[0].legend(loc='upper right')
+    axes[0].figure.savefig('./checkpoints/keras_resnet101_512_hist.svg')
     ```
-    ![](checkpoints/keras_resnet101_512_II_hist.svg)
+    ![](checkpoints/keras_resnet101_512_hist.svg)
+  - **Comparing softmax training for `MobileFaceNet` and `ResNet101`**
     ```py
     import plot
-    axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", [15, 10, 4, 35], ["", "", "", ""], save=None, axes=None)
-    axes[0].lines[-3].set_label('Batch_size = 128')
-    axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"], save=None, axes=axes)
-    axes[0].lines[-3].set_label('Batch_size = 1024')
+    customs = ["agedb_30"]
+    epochs = [15, 10]
+    axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=None)
+    axes[0].lines[0].set_label('Resnet101, BS = 1024')
+    pre_lines = len(axes[0].lines)
+    axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=axes)
+    axes[0].lines[pre_lines].set_label('Resnet101, BS = 128')
+    pre_lines = len(axes[0].lines)
+    axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=axes)
+    axes[0].lines[pre_lines].set_label('Mobilefacenet, BS = 768')
+    pre_lines = len(axes[0].lines)
+    axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist_all.json", epochs, ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"], customs=customs, save=None, axes=axes)
+    axes[0].lines[pre_lines].set_label('Mobilefacenet, BS = 160')
     axes[0].legend(loc='upper right')
+
     axes[0].plot((2, 15), (0.3807, 0.3807), 'k:')
     axes[1].plot((2, 15), (0.9206, 0.9206), 'k:')
+    axes[0].plot((2, 15), (0.6199, 0.6199), 'k:')
+    axes[1].plot((2, 15), (0.8746, 0.8746), 'k:')
+    axes[0].figure.savefig('./checkpoints/softmax_compare.svg')
     ```
-    ```py
-    import plot
-    axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", [15, 10, 4, 35], ["", "", "", ""], save=None, axes=None)
-    axes[0].lines[-2].set_label('Batch_size = 768')
-    axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"], save=None, axes=axes)
-    axes[0].lines[-5].set_label('Batch_size = 160')
-    axes[0].legend(loc='upper right')
-    axes[0].plot((2, 25), (0.5952, 0.5952), 'k:')
-    axes[1].plot((2, 25), (0.9073, 0.9073), 'k:')
-    ```
-    ```py
-    customs = ["agedb_30"]
-    axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_hist.json", [15, 10, 4, 35], ["", "", "", ""], customs=customs, save=None, axes=None)
-    axes[0].lines[-3].set_label('Resnet101, BS = 1024')
-    axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", [15, 10, 4, 35], ["", "", "", ""], customs=customs, save=None, axes=axes)
-    axes[0].lines[-3].set_label('Resnet101, BS = 128')
-    axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", [15, 10, 4, 35], ["", "", "", ""], customs=customs, save=None, axes=axes)
-    axes[0].lines[-2].set_label('Mobilefacenet, BS = 768')
-    axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist.json", [15, 10], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"], customs=customs, save=None, axes=axes)
-    axes[0].lines[-3].set_label('Mobilefacenet, BS = 160')
-    axes[0].legend(loc='upper right')
-    ```
+    ![](checkpoints/softmax_compare.svg)
 ***
 
 # Model conversion
@@ -424,13 +456,23 @@
         return tf.expand_dims(img, 0)
 
     imm = tf_imread('/datasets/faces_emore_112x112_folders/0/1.jpg')
+    # imm = tf_imread('./temp_test/faces_emore_test/0/1.jpg')
     interpreter.set_tensor(input_index, imm)
     interpreter.invoke()
     aa = interpreter.get_tensor(output_index)[0]
 
+    def foo(imm):
+        interpreter.set_tensor(input_index, imm)
+        interpreter.invoke()
+        return interpreter.get_tensor(output_index)[0]
+    %timeit -n 100 foo(imm)
+    # 36.7 ms ± 471 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
+
     mm = tf.keras.models.load_model(glob2.glob('./keras_mobilefacenet_256_basic_*.h5')[0], compile=False)
     bb = mm(imm).numpy()
     assert np.allclose(aa, bb, rtol=1e-3)
+    %timeit mm(imm).numpy()
+    # 71.6 ms ± 213 µs per loop (mean ± std. dev. of 7 runs, 10 loops each)
     ```
 ## MXNet format
   - Here uses `keras-mxnet` to perform conversion from `Keras h5` to `MXNet param + json` format.
@@ -438,7 +480,7 @@
     $ pip install keras-mxnet
     $ KERAS_BACKEND='mxnet' ipython
     ```
-  - **Issue**
+  - **[Issue](https://github.com/awslabs/keras-apache-mxnet/pull/258)**
     ```py
     ''' Q: TypeError: tuple indices must be integers or slices, not list
     /opt/anaconda3/lib/python3.7/site-packages/keras/layers/normalization.py in build(self, input_shape)
@@ -466,12 +508,13 @@
     from keras.initializers import glorot_normal, glorot_uniform
     from keras.utils import CustomObjectScope
     with CustomObjectScope({'GlorotNormal': glorot_normal(), "GlorotUniform": glorot_uniform()}):
-        mm = keras.models.load_model('./checkpoints/keras_mobilefacenet_256_basic_agedb_30_epoch_39_0.942500.h5', compile=False)
+        mm = keras.models.load_model('./checkpoints/keras_mobilefacenet_256_basic_agedb_30_epoch_39_0.942500.h5', compile=True)
 
-    # mm.compile(optimizer='adam', loss=keras.losses.categorical_crossentropy)
-    mm.compiled = True
-    mm.predict(np.zeros((1, 112, 112, 3)))
-    keras.models.save_mxnet_model(model=mm, prefix='mm')
+    bb = keras.models.Model(mm.inputs[0], mm.layers[-2].output) # Have to exclude the last `batch_norm` layer.
+    bb.compile(optimizer='adam', loss=keras.losses.categorical_crossentropy)
+    # mm.compiled = True
+    bb.predict(np.zeros((1, 112, 112, 3)))
+    keras.models.save_mxnet_model(model=bb, prefix='mm')
     ```
   - **Test**
     ```py
@@ -484,6 +527,55 @@
     mod.set_params(arg_params, aux_params, allow_missing=True)
     data_iter = mx.io.NDArrayIter(np.zeros((1, 112, 112, 3)), None, 1)
     mod.predict(data_iter)
+    ```
+## Pytorch and Caffe2
+  - **Caffe2 inference ONNX**
+    ```py
+    import caffe2.python.onnx.backend as onnx_caffe2_backend
+    import onnx
+    model = onnx.load("model.onnx")
+    prepared_backend = onnx_caffe2_backend.prepare(model)
+    x = torch.randn(batch_size, 1, 224, 224, requires_grad=True)
+    W = {model.graph.input[0].name: x.data.numpy()}
+    c2_out = prepared_backend.run(W)[0]
+
+    %timeit prepared_backend.run(W)[0]
+    # 26.4 ms ± 219 µs per loop (mean ± std. dev. of 7 runs, 10 loops each)
+
+    import torch
+    torch.save(model, 'tt')
+    ```
+  - **Save caffe2 format**
+    ```py
+    init_net, predict_net = onnx_caffe2_backend.Caffe2Backend.onnx_graph_to_caffe2_net(model)
+
+    with open("onnx-init.pb", "wb") as f:
+        f.write(init_net.SerializeToString())
+    with open("onnx-predict.pb", "wb") as f:
+        f.write(predict_net.SerializeToString())
+
+    with open("onnx-init.pbtxt", "w") as f:
+        f.write(str(init_net))
+    with open("onnx-predict.pbtxt", "w") as f:
+        f.write(str(predict_net))
+    ```
+  - **Caffe2 mobile format**
+    ```py
+    # extract the workspace and the model proto from the internal representation
+    c2_workspace = prepared_backend.workspace
+    c2_model = prepared_backend.predict_net
+
+    # Now import the caffe2 mobile exporter
+    from caffe2.python.predictor import mobile_exporter
+
+    # call the Export to get the predict_net, init_net. These nets are needed for running things on mobile
+    init_net, predict_net = mobile_exporter.Export(c2_workspace, c2_model, c2_model.external_input)
+
+    # Let's also save the init_net and predict_net to a file that we will later use for running them on mobile
+    with open('init_net.pb', "wb") as fopen:
+        fopen.write(init_net.SerializeToString())
+    with open('predict_net.pb', "wb") as fopen:
+        fopen.write(predict_net.SerializeToString())
     ```
 ***
 

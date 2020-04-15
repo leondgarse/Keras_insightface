@@ -14,10 +14,9 @@ from scipy import interpolate
 import sklearn
 from sklearn.decomposition import PCA
 
-
-class epoch_eval_callback(tf.keras.callbacks.Callback):
-    def __init__(self, basic_model, test_bin_file, batch_size=128, save_model=None, eval_freq=1, flip=False, PCA_acc=True):
-        super(epoch_eval_callback, self).__init__()
+class eval_callback(tf.keras.callbacks.Callback):
+    def __init__(self, basic_model, test_bin_file, batch_size=128, save_model=None, eval_freq=1, flip=True, PCA_acc=True):
+        super(eval_callback, self).__init__()
         bins, issame_list = np.load(test_bin_file, encoding="bytes", allow_pickle=True)
         ds = tf.data.Dataset.from_tensor_slices(bins)
         _imread = lambda xx: tf.image.convert_image_dtype(tf.image.decode_jpeg(xx), dtype=tf.float32)
@@ -29,11 +28,23 @@ class epoch_eval_callback(tf.keras.callbacks.Callback):
         self.basic_model = basic_model
         self.max_accuracy, self.cur_acc = 0.0, 0.0
         self.save_model, self.eval_freq, self.flip, self.PCA_acc = save_model, eval_freq, flip, PCA_acc
+        if eval_freq > 1:
+            # If eval_freq > 1, do evaluation on batch.
+            self.on_batch_end = lambda batch=0, logs=None: self.__eval_func__(batch, logs)
+        else:
+            self.on_epoch_end = lambda epoch=0, logs=None: self.__eval_func__(epoch, logs)
 
     # def on_batch_end(self, batch=0, logs=None):
-    def on_epoch_end(self, epoch=0, logs=None):
-        if epoch % self.eval_freq != 0:
+    # def on_epoch_end(self, epoch=0, logs=None):
+    def __eval_func__(self, cur_step=0, logs=None):
+        # print("self.model.params:", self.model.params if self.model else "None")
+        if cur_step % self.eval_freq != 0:
             return
+        if self.eval_freq > 1:
+            cur_epoch = self.model.history.epoch[-1] if self.model is not None and len(self.model.history.epoch) != 0 else 0
+            cur_step = "%d_batch_%d" %(cur_epoch, cur_step)
+        else:
+            cur_step = str(cur_step)
         dists = []
         embs = []
         tf.print("")
@@ -79,7 +90,7 @@ class epoch_eval_callback(tf.keras.callbacks.Callback):
                 save_path_base = os.path.join("./checkpoints", save_name_base)
                 for ii in glob2.glob(save_path_base + "*.h5"):
                     os.remove(ii)
-                save_path = save_path_base + "%d_%f.h5" % (epoch, self.max_accuracy)
+                save_path = save_path_base + "%s_%f.h5" % (cur_step, self.max_accuracy)
                 tf.print("Saving model to: %s" % (save_path))
                 self.basic_model.save(save_path)
 
