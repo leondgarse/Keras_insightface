@@ -114,7 +114,8 @@ class Train:
                     "arcface_loss": losses.arcface_loss,
                     "Center_loss": losses.Center_loss,
                 })
-                self.model = keras.models.load_model(model, compile=compile, custom_objects=custom_objects)
+                with keras.utils.custom_object_scope(custom_objects):
+                    self.model = keras.models.load_model(model, compile=compile, custom_objects=custom_objects)
                 self.basic_model = keras.models.Model(self.model.inputs[0], self.model.layers[basic_model].output)
                 self.model.summary()
         elif isinstance(model, keras.models.Model):
@@ -127,7 +128,8 @@ class Train:
                     "batch_all_triplet_loss": losses.batch_all_triplet_loss,
                 })
                 print(">>>> Load basic_model from h5 file: %s..." % basic_model)
-                self.basic_model = keras.models.load_model(basic_model, compile=compile, custom_objects=custom_objects)
+                with keras.utils.custom_object_scope(custom_objects):
+                    self.basic_model = keras.models.load_model(basic_model, compile=compile, custom_objects=custom_objects)
         elif isinstance(basic_model, keras.models.Model):
             self.basic_model = basic_model
 
@@ -146,6 +148,10 @@ class Train:
         self.softmax, self.arcface, self.triplet = "softmax", "arcface", "triplet"
 
         self.batch_size = batch_size
+        if tf.distribute.has_strategy():
+            strategy = tf.distribute.get_strategy()
+            self.batch_size = batch_size * strategy.num_replicas_in_sync
+            print(">>>> num_replicas_in_sync: %d, batch_size: %d" % (strategy.num_replicas_in_sync, self.batch_size))
         self.data_path, self.random_status = data_path, random_status
         self.train_ds, self.steps_per_epoch, self.classes = None, 0, 0
         self.is_triplet_dataset = False

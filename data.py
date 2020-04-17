@@ -57,17 +57,16 @@ def prepare_dataset(data_path, image_names_reg=None, image_classes_rule=None, ba
     print(len(image_names), len(image_classes), classes)
 
     ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes))
-    # batch_size = batch_size * len(tf.config.experimental.get_visible_devices("GPU"))
     AUTOTUNE = tf.data.experimental.AUTOTUNE
     if shuffle_buffer_size == None:
         shuffle_buffer_size = batch_size * 100
 
     ds = ds.shuffle(buffer_size=shuffle_buffer_size)
-    ds = ds.map(lambda xx, yy: process_path(xx, yy, classes, random_status=random_status), num_parallel_calls=AUTOTUNE)
     if cache:
         ds = ds.cache(cache) if isinstance(cache, str) else ds.cache()
     if is_train:
         ds = ds.repeat()
+    ds = ds.map(lambda xx, yy: process_path(xx, yy, classes, random_status=random_status), num_parallel_calls=AUTOTUNE)
     ds = ds.batch(batch_size)
     ds = ds.prefetch(buffer_size=AUTOTUNE)
     steps_per_epoch = np.ceil(len(image_names) / batch_size)

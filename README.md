@@ -54,7 +54,7 @@
   | ResNet50V2     | 0.995833 | 0.951143 | 0.959333 |
   | MobileNetV2    | 0.993000 | 0.930429 | 0.930000 |
   | Mobilefacenet  | 0.994167 | 0.944143 | 0.942500 |
-  | ResNet101V2    | 0.996500 | 0.963000 | 0.958833 |
+  | ResNet101V2    | 0.996500 | 0.963429 | 0.959000 |
 ***
 
 # Usage
@@ -122,7 +122,7 @@
     basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="mobile_facenet_256")
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, eval_paths, save_path='keras_mobile_facenet_emore.h5', basic_model=basic_model, model=None, lr_base=0.001, batch_size=768, random_status=3)
+    tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, batch_size=768, random_status=3)
     sch = [
       {"loss": keras.losses.categorical_crossentropy, "optimizer": "nadam", "epoch": 15},
       {"loss": losses.margin_softmax, "epoch": 10},
@@ -131,6 +131,27 @@
       {"loss": losses.batch_hard_triplet_loss, "optimizer": "nadam", "epoch": 30},
     ]
     tt.train(sch, 0)
+    ```
+    `train.Train` is mostly functioned as a scheduler, the basic strategy is simple
+    ```py
+    from tensorflow import keras
+    import losses, data, evals, myCallbacks, mobile_facenet
+    # Dataset
+    data_path = '/datasets/faces_emore_112x112_folders'
+    train_ds, steps_per_epoch, classes = data.prepare_dataset(data_path, batch_size=512, random_status=3)
+    # Model
+    basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="mobile_facenet_256")
+    model_output = keras.layers.Dense(classes, activation="softmax")(basic_model.outputs[0])
+    model = keras.models.Model(basic_model.inputs[0], model_output)
+    # Evals and basic callbacks
+    eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
+    my_evals = [evals.eval_callback(basic_model, ii, batch_size=512, eval_freq=1) for ii in eval_paths]
+    my_evals[-1].save_model = 'keras_mobilefacenet'
+    basic_callbacks = myCallbacks.basic_callbacks(checkpoint='keras_mobilefacenet.h5', evals=my_evals, lr=0.001)
+    callbacks = my_evals + basic_callbacks
+    # Compile and fit
+    model.compile(optimizer='nadam', loss=losses.arcface_loss, metrics=["accuracy"])
+    model.fit(train_ds, epochs=15, steps_per_epoch=steps_per_epoch, callbacks=callbacks, verbose=1)
     ```
   - **train.Train** `basic_model` and `model` parameters. Combine these two parameters to initializing model from different sources. Sometimes may need `custom_objects` to load model.
     | basic_model                              | model           | Use for                                    |
@@ -164,7 +185,7 @@
     import train
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, eval_paths, 'keras_mobilefacenet_256_II.h5', basic_model=-2, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=768, random_status=3, custom_objects={'margin_softmax': losses.margin_softmax})
+    tt = train.Train(data_path, 'keras_mobilefacenet_256_II.h5', eval_paths, basic_model=-2, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=768, random_status=3, custom_objects={'margin_softmax': losses.margin_softmax})
     sch = [
       # {"loss": keras.losses.categorical_crossentropy, "optimizer": "nadam", "epoch": 15},
       {"loss": losses.margin_softmax, "epoch": 6},
@@ -201,20 +222,29 @@
     # >>>> lfw evaluation max accuracy: 0.993167, thresh: 0.316535, previous max accuracy: 0.000000, PCA accuray = 0.993167 ± 0.003905
     # >>>> Improved = 0.993167
     ```
-    Default evaluating strategy is `on_epoch_end`, this could also be changed to `on_batch_end`, by setting a `eval_freq` greater than `1` in `train.Train`.
+    Default evaluating strategy is `on_epoch_end`. Setting a `eval_freq` greater than `1` in `train.Train` will also **add** an `on_batch_end` evaluation.
     ```py
-    # Change evaluating strategy to `on_batch_end` for every `1000` batch.
-    tt = train.Train(data_path, eval_paths, save_path='keras_mobilefacenet_256.h5', basic_model=basic_model, eval_freq=1000)
+    # Change evaluating strategy to `on_epoch_end`, as long as `on_batch_end` for every `1000` batch.
+    tt = train.Train(data_path, 'keras_mobilefacenet_256.h5', eval_paths, basic_model=basic_model, eval_freq=1000)
     ```
 ## Multi GPU train
-  - Just add an overall `tf.distribute.MirroredStrategy().scope()` `with` block.
-  ```py
-  with tf.distribute.MirroredStrategy().scope():
-      basic_model = ...
-      tt = train.Train(...)
-      sch = [...]
-      tt.train(sch, 0)
-  ```
+  - For multi GPU train, should better use `tf-nightly`
+    ```sh
+    conda create -n tf-nightly
+    conda activate tf-nightly
+    pip install tf-nightly glob2 pandas tqdm scikit-image scikit-learn
+    ```
+  - Add an overall `tf.distribute.MirroredStrategy().scope()` `with` block. This is just working in my case... The `batch_size` will be multiplied by `GPU numbers`.
+    ```py
+    tf.__version__
+    # 2.2.0-dev20200324
+
+    with tf.distribute.MirroredStrategy().scope():
+        basic_model = ...
+        tt = train.Train(..., batch_size=1024, ...) # With 2 GPUs, `batch_size` will be 2048
+        sch = [...]
+        tt.train(sch, 0)
+    ```
 ***
 
 # Training Record
@@ -269,7 +299,7 @@
 ## Mobilefacenet
   - Training script is the last exampled one.
   - **Record** Two models are trained, with `batch_size=160` and `batch_size=768` respectively.
-    | Loss               | Epochs | First epoch                                         |
+    | Loss               | Epochs | First epoch (batch_size=768)                        |
     | ------------------ | ------ | --------------------------------------------------- |
     | Softmax            | 15     | 12744s 2s/step - loss: 4.8241 - accuracy: 0.3282    |
     | Margin Softmax     | 10     | 13041s 2s/step - loss: 0.4096 - accuracy: 0.9323    |
@@ -341,12 +371,12 @@
     tt = train.Train(data_path, eval_paths, 'keras_resnet101_512.h5', basic_model=basic_model, batch_size=1024)
     ```
   - **Record** Two models are trained, with `batch_size=128` and `batch_size=1024` respectively.
-    | Loss               | epochs | First epoch                                         |
-    | ------------------ | ------ | --------------------------------------------------- |
-    | Softamx            | 15     | 11538s 2s/step - loss: 3.3550 - accuracy: 0.5024    |
-    | Margin Softmax     | 10     | 11744s 2s/step - loss: 0.1193 - accuracy: 0.9778    |
-    | Bottleneck Arcface | 4      | 4627s 814ms/step - loss: 18.5677 - accuracy: 0.9113 |
-    | Arcface 64         | 35     | 11507s 2s/step - loss: 11.7330 - accuracy: 0.9774   |
+    | Loss               | epochs | First epoch (batch_size=1024)                       | First epoch (2 GPUs, batch_size=2048)           |
+    | ------------------ | ------ | --------------------------------------------------- | ----------------------------------------------- |
+    | Softamx            | 15     | 11538s 2s/step - loss: 3.3550 - accuracy: 0.5024    |                                                 |
+    | Margin Softmax     | 10     | 11744s 2s/step - loss: 0.1193 - accuracy: 0.9778    |                                                 |
+    | Bottleneck Arcface | 4      | 4627s 814ms/step - loss: 18.5677 - accuracy: 0.9113 |                                                 |
+    | Arcface 64         | 35     | 11507s 2s/step - loss: 11.7330 - accuracy: 0.9774   | 6229s 2s/step - loss: 4.9359 - accuracy: 0.9896 |
 
     ```py
     import plot

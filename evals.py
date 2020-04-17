@@ -22,6 +22,8 @@ class eval_callback(tf.keras.callbacks.Callback):
         _imread = lambda xx: tf.image.convert_image_dtype(tf.image.decode_jpeg(xx), dtype=tf.float32)
         ds = ds.map(_imread)
         self.ds = ds.batch(batch_size)
+        if flip:
+            self.ds_flip = self.ds.map(lambda xx: tf.image.flip_left_right(xx))
         self.test_issame = np.array(issame_list)
         self.test_names = os.path.splitext(os.path.basename(test_bin_file))[0]
         self.steps = int(np.ceil(len(bins) / batch_size))
@@ -29,32 +31,61 @@ class eval_callback(tf.keras.callbacks.Callback):
         self.max_accuracy, self.cur_acc = 0.0, 0.0
         self.save_model, self.eval_freq, self.flip, self.PCA_acc = save_model, eval_freq, flip, PCA_acc
         if eval_freq > 1:
-            # If eval_freq > 1, do evaluation on batch.
-            self.on_batch_end = lambda batch=0, logs=None: self.__eval_func__(batch, logs)
-        else:
-            self.on_epoch_end = lambda epoch=0, logs=None: self.__eval_func__(epoch, logs)
+            # If eval_freq > 1, do evaluation on batch, and also on epoch.
+            self.on_batch_end = lambda batch=0, logs=None: self.__eval_func__(batch, logs, eval_freq=eval_freq)
+        self.on_epoch_end = lambda epoch=0, logs=None: self.__eval_func__(epoch, logs, eval_freq=1)
 
-    # def on_batch_end(self, batch=0, logs=None):
-    # def on_epoch_end(self, epoch=0, logs=None):
-    def __eval_func__(self, cur_step=0, logs=None):
-        # print("self.model.params:", self.model.params if self.model else "None")
-        if cur_step % self.eval_freq != 0:
-            return
-        if self.eval_freq > 1:
-            cur_epoch = self.model.history.epoch[-1] if self.model is not None and len(self.model.history.epoch) != 0 else 0
-            cur_step = "%d_batch_%d" %(cur_epoch, cur_step)
-        else:
-            cur_step = str(cur_step)
-        dists = []
+        self.is_distribute = False
+        if tf.distribute.has_strategy():
+            self.is_distribute = True
+            strategy = tf.distribute.get_strategy()
+            self.num_replicas = strategy.num_replicas_in_sync
+
+    def __do_predict__(self):
         embs = []
-        tf.print("")
         for img_batch in tqdm(self.ds, "Evaluating " + self.test_names, total=self.steps):
             emb = self.basic_model.predict(img_batch)
             if self.flip:
                 emb_f = self.basic_model.predict(tf.image.flip_left_right(img_batch))
                 emb = (emb + emb_f) / 2
             embs.extend(emb)
-        embs = np.array(embs)
+        return np.array(embs)
+
+    def __do_predict_distribute__(self):
+        embs = []
+        pp = self.basic_model.make_predict_function()
+        aa = iter(self.ds)
+        if self.flip:
+            bb = iter(self.ds_flip)
+        for _ in tqdm(range(self.steps), "Evaluating " + self.test_names, total=self.steps):
+            emb = pp(aa)
+            if self.flip:
+                emb_f = pp(bb)
+                emb = (emb + emb_f) / 2
+            # Dont know how to handle this, for multi GPU, emb is calculated multi times...
+            embs.extend(emb[:emb.shape[0] // self.num_replicas].numpy())
+        return np.array(embs)
+
+    def __eval_func__(self, cur_step=0, logs=None, eval_freq=1):
+        # print("self.model.params:", self.model.params if self.model else "None")
+        if cur_step % eval_freq != 0:
+            return
+        if eval_freq > 1:
+            # Evaluting on_batch_end
+            if cur_step == 0:
+                return
+            cur_epoch = self.model.history.epoch[-1] if self.model is not None and len(self.model.history.epoch) != 0 else 0
+            cur_step = "%d_batch_%d" %(cur_epoch, cur_step)
+        else:
+            cur_step = str(cur_step)
+        dists = []
+        tf.print("")
+        if self.is_distribute:
+            embs = self.__do_predict_distribute__()
+        else:
+            embs = self.__do_predict__()
+
+        # tf.print("embs.shape: ", embs.shape)
         if np.isnan(embs).sum() != 0:
             tf.print("NAN in embs, not a good one")
             return
