@@ -14,6 +14,7 @@ from scipy import interpolate
 import sklearn
 from sklearn.decomposition import PCA
 
+
 class eval_callback(tf.keras.callbacks.Callback):
     def __init__(self, basic_model, test_bin_file, batch_size=128, save_model=None, eval_freq=1, flip=True, PCA_acc=True):
         super(eval_callback, self).__init__()
@@ -63,7 +64,7 @@ class eval_callback(tf.keras.callbacks.Callback):
                 emb_f = pp(bb)
                 emb = (emb + emb_f) / 2
             # Dont know how to handle this, for multi GPU, emb is calculated multi times...
-            embs.extend(emb[:emb.shape[0] // self.num_replicas].numpy())
+            embs.extend(emb[: emb.shape[0] // self.num_replicas].numpy())
         return np.array(embs)
 
     def __eval_func__(self, cur_step=0, logs=None, eval_freq=1):
@@ -75,7 +76,7 @@ class eval_callback(tf.keras.callbacks.Callback):
             if cur_step == 0:
                 return
             cur_epoch = self.model.history.epoch[-1] if self.model is not None and len(self.model.history.epoch) != 0 else 0
-            cur_step = "%d_batch_%d" %(cur_epoch, cur_step)
+            cur_step = "%d_batch_%d" % (cur_epoch, cur_step)
         else:
             cur_step = str(cur_step)
         dists = []
@@ -123,7 +124,7 @@ class eval_callback(tf.keras.callbacks.Callback):
                     os.remove(ii)
                 save_path = save_path_base + "%s_%f.h5" % (cur_step, self.max_accuracy)
                 tf.print("Saving model to: %s" % (save_path))
-                self.basic_model.save(save_path)
+                self.basic_model.save(save_path, include_optimizer=False)
 
 
 def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, nrof_folds=10, pca=0):

@@ -54,7 +54,7 @@
   | ResNet50V2     | 0.995833 | 0.951143 | 0.959333 |
   | MobileNetV2    | 0.993000 | 0.930429 | 0.930000 |
   | Mobilefacenet  | 0.994167 | 0.944143 | 0.942500 |
-  | ResNet101V2    | 0.996500 | 0.963429 | 0.959000 |
+  | ResNet101V2    | 0.997000 | 0.971571 | 0.963833 |
 ***
 
 # Usage
@@ -119,6 +119,7 @@
     import train
     # basic_model = train.buildin_models("MobileNet", dropout=0.4, emb_shape=256)
     # basic_model = train.buildin_models("ResNet101V2", dropout=0.4, emb_shape=512)
+    # basic_model = train.buildin_models('EfficientNetB0', dropout=0.4, emb_shape=256)
     basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="mobile_facenet_256")
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
@@ -165,7 +166,7 @@
     - **optimizer** is the optimizer used in this plan, `None` indicates using the last one.
     - **epoch** indicates how many epochs will be trained.
     - **bottleneckOnly** True / False, `True` will set `basic_model.trainable = False`, train the bottleneck layer only.
-    - **centerloss** True / False, if set `True`, `loss` will be the `logits_loss` add to `center_loss`, `loss` could also be an instance of `Center_loss`.
+    - **centerloss** True / False, if set `True`, `loss` will be the `logits_loss` add to `center_loss`, `loss` could also be an instance of `CenterLoss`.
     - **type** `softmax` / `arcface` / `triplet`, but mostly this could be guessed from `loss`.
     ```py
     # Scheduler examples
@@ -174,8 +175,9 @@
     sch = [{"loss": losses.ArcfaceLoss(), "optimizer": None, "bottleneckOnly": True, "epoch": 1}]
     sch = [{"loss": losses.arcface_loss, "optimizer": "adam", "centerloss": True, "epoch": 1}]
     sch = [{"loss": losses.ArcfaceLoss(), "bottleneckOnly": True, "centerloss": True, "epoch": 1}]
-    sch = [{"loss": losses.Centerloss(num_classes=85742), "centerloss": True, "epoch": 1}]
+    sch = [{"loss": losses.CenterLoss(num_classes=85742), "centerloss": True, "epoch": 1}]
     sch = [{"loss": losses.batch_hard_triplet_loss, "optimizer": "adam", "epoch": 1}]
+    sch = [{"loss": losses.BatchHardTripletLoss(0.3), "epoch": 1}]
     ```
     Some combinations are errors, like `centerloss` + `triplet`, and training `bottleneckOnly` + `triplet` will change nothing.
     ```py
@@ -227,6 +229,10 @@
     # Change evaluating strategy to `on_epoch_end`, as long as `on_batch_end` for every `1000` batch.
     tt = train.Train(data_path, 'keras_mobilefacenet_256.h5', eval_paths, basic_model=basic_model, eval_freq=1000)
     ```
+  - [EfficientNet](https://github.com/qubvel/efficientnet)
+    ```sh
+    pip install -U git+https://github.com/qubvel/efficientnet
+    ```
 ## Multi GPU train
   - For multi GPU train, should better use `tf-nightly`
     ```sh
@@ -269,7 +275,7 @@
     import train
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, eval_paths, 'keras_mobilenet_256_V.h5', basic_model="./checkpoints/keras_mobilenet_256_basic_agedb_30_epoch_6_0.900333.h5", model=None, compile=False, lr_base=0.001, batch_size=128, random_status=3)
+    tt = train.Train(data_path, 'keras_mobilenet_256_V.h5', eval_paths, basic_model="./checkpoints/keras_mobilenet_256_basic_agedb_30_epoch_6_0.900333.h5", model=None, compile=False, lr_base=0.001, batch_size=128, random_status=3)
 
     ''' Choose one loss function each time --> train one epoch --> reload'''
     sch = [{"loss": keras.losses.categorical_crossentropy, "optimizer": "adam", "epoch": 1}]
@@ -279,6 +285,10 @@
     sch = [{"loss": losses.arcface_loss, "optimizer": "adam", "centerloss": True, "epoch": 1}]
     sch = [{"loss": losses.batch_hard_triplet_loss, "optimizer": "adam", "epoch": 1}]
     sch = [{"loss": losses.batch_all_triplet_loss, "optimizer": "adam", "epoch": 1}]
+
+    !pip install -q --no-deps tensorflow-addons
+    import tensorflow_addons as tfa
+    sch = [{"loss": tfa.losses.TripletSemiHardLoss(), "optimizer": "adam", "epoch": 1, "type": tt.triplet}]
 
     ''' Train '''
     tt.train(sch, 6)
@@ -296,6 +306,7 @@
     | center arcface_loss     | 22.5102 | 0.7924   | 0.987833 | 0.321488   | 0.884000 | 0.200262      | 0.894833 | 0.263254        | 5861s      | 129ms    |
     | batch_hard_triplet_loss | 0.2276  |          | 0.986333 | 0.386425   | 0.910571 | 0.245836      | 0.891333 | 0.354833        | 4622s      | 156ms    |
     | batch_all_triplet_loss  | 0.4749  |          | 0.984333 | 0.417722   | 0.902571 | 0.240187      | 0.837167 | 0.475637        | 4708s      | 159ms    |
+    | TripletSemiHardLoss     | 0.0047  |          | 0.957500 | 0.520159   | 0.837857 | 0.441421      | 0.778833 | 0.626684        | 4400s      | 148ms    |
 ## Mobilefacenet
   - Training script is the last exampled one.
   - **Record** Two models are trained, with `batch_size=160` and `batch_size=768` respectively.
@@ -376,21 +387,35 @@
     | Softamx            | 15     | 11538s 2s/step - loss: 3.3550 - accuracy: 0.5024    |                                                 |
     | Margin Softmax     | 10     | 11744s 2s/step - loss: 0.1193 - accuracy: 0.9778    |                                                 |
     | Bottleneck Arcface | 4      | 4627s 814ms/step - loss: 18.5677 - accuracy: 0.9113 |                                                 |
-    | Arcface 64         | 35     | 11507s 2s/step - loss: 11.7330 - accuracy: 0.9774   | 6229s 2s/step - loss: 4.9359 - accuracy: 0.9896 |
+    | Arcface 64         | 65     | 11507s 2s/step - loss: 11.7330 - accuracy: 0.9774   | 6229s 2s/step - loss: 4.9359 - accuracy: 0.9896 |
+    | Triplet            | 30     |                                                     | 5943s 3s/step - loss: 0.1149                    |
 
     ```py
     import plot
     # plot.hist_plot_split("./checkpoints/keras_resnet101_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
-    customs = ["agedb_30", "cfp_fp"]
-    axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", [15, 10, 4, 35], ["", "", "", ""], customs=customs, save=None, axes=None)
-    axes[0].lines[0].set_label('Batch_size = 128')
-    pre_lines = len(axes[0].lines)
-    axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"], customs=customs, save=None, axes=axes)
-    axes[0].lines[pre_lines].set_label('Batch_size = 1024')
-    axes[0].legend(loc='upper right')
-    axes[0].figure.savefig('./checkpoints/keras_resnet101_512_hist.svg')
+    customs = ["lfw", "agedb_30", "cfp_fp"]
+    history = ['./checkpoints/keras_resnet101_emore_hist.json', './checkpoints/keras_resnet101_emore_basic_hist.json']
+    axes, _ = plot.hist_plot_split(history, [15, 10, 4, 65, 15, 10], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64", "Triplet alpha=0.35", "Triplet alpha=0.3"], customs=customs, save=None)
+
+    for line in [axes[0].lines[0], axes[1].lines[0], *(axes[2].lines[:3])]:
+        idd = 64
+        ax = line.axes
+        vvs = line.get_ydata()
+        vv = vvs[idd]
+        scale_min, scale_max = ax.get_ylim()
+        scale = (scale_max - scale_min) / 20
+        vvmin = max(vvs.min(), vv - scale)
+        vvmax = min(vvs.max(), vv + scale)
+        ax.plot([idd, idd], [vvmin, vvmax], 'k:')
+        ax.text(idd, vv, '({}, {:.4f})'.format(idd, vv), va="bottom", ha="left", fontsize=8)
+    axes[0].figure.savefig('./checkpoints/keras_resnet101_emore_hist.svg')
     ```
-    ![](checkpoints/keras_resnet101_512_hist.svg)
+    ![](checkpoints/keras_resnet101_emore_hist.svg)
+    ```py
+    import plot
+    customs = ["lfw", "agedb_30", "cfp_fp"]
+    axes, _ = plot.hist_plot_split('./checkpoints/keras_resnet101_emore_basic_hist.json', [15, 5, 5, 5], ["Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, save=None, init_epoch=94)
+    ```
   - **Comparing softmax training for `MobileFaceNet` and `ResNet101`**
     ```py
     import plot
@@ -506,6 +531,53 @@
     %timeit mm(imm).numpy()
     # 71.6 ms ± 213 µs per loop (mean ± std. dev. of 7 runs, 10 loops each)
     ```
+  - **On ARM64 board**
+    ```sh
+    lscpu
+    # Architecture:        aarch64
+
+    python --version
+    # Python 3.6.9
+
+    sudo apt install python3-pip ipython cython3
+    pip install ipython
+
+    git clone https://github.com/noahzhy/tf-aarch64.git
+    cd tf-aarch64/
+    pip install tensorflow-1.9.0rc0-cp36-cp36m-linux_aarch64.whl
+    pip install https://dl.google.com/coral/python/tflite_runtime-2.1.0.post1-cp36-cp36m-linux_aarch64.whl
+    ```
+    ```py
+    import tensorflow as tf
+    tf.enable_eager_execution()
+    tf.__version__
+    # 1.9.0-rc0
+
+    import tflite_runtime
+    tflite_runtime.__version__
+    # 2.1.0.post1
+
+    import tflite_runtime.interpreter as tflite
+    interpreter = tflite.Interpreter('./mobilefacenet_tf2.tflite')
+    interpreter.allocate_tensors()
+    input_index = interpreter.get_input_details()[0]["index"]
+    output_index = interpreter.get_output_details()[0]["index"]
+
+    imm = tf.convert_to_tensor(np.ones([1, 112, 112, 3]), dtype=tf.float32)
+    interpreter.set_tensor(input_index, imm)
+    interpreter.invoke()
+    out = interpreter.get_tensor(output_index)[0]
+
+    def foo(imm):
+        interpreter.set_tensor(input_index, imm)
+        interpreter.invoke()
+        return interpreter.get_tensor(output_index)[0]
+    %timeit -n 100 foo(imm)
+    # 42.4 ms ± 43.1 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
+
+    %timeit -n 100 foo(imm) # EfficientNetB0
+    # 71.2 ms ± 52.5 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
+    ```
 ## MXNet format
   - Here uses `keras-mxnet` to perform conversion from `Keras h5` to `MXNet param + json` format.
     ```sh
@@ -616,3 +688,54 @@
   - [TensorFlow Addons Layers: WeightNormalization](https://www.tensorflow.org/addons/tutorials/layers_weightnormalization)
   - [deepinsight/insightface](https://github.com/deepinsight/insightface)
 ***
+```sh
+# Mobilefacenet 160
+"loss": [5.0583, 1.6944, 1.2544, 1.0762]
+"accuracy": [0.2964, 0.6755, 0.7532, 0.7862]
+"lfw": [0.9715, 0.98, 0.986, 0.988]
+"cfp_fp": [0.865714, 0.893, 0.898857, 0.91]
+"agedb_30": [0.829167, 0.8775, 0.892667, 0.903167]
+```
+```sh
+# Mobilefacenet 768
+"loss": [4.82409207357388, 1.462764699449328, 1.011261948830721, 0.8042656191418587]
+"accuracy": [0.3281610608100891, 0.7102007865905762, 0.7921959757804871, 0.8312187790870667]
+"lfw": [0.9733333333333334, 0.9781666666666666, 0.9833333333333333, 0.983]
+"cfp_fp": [0.8654285714285714, 0.8935714285714286, 0.9002857142857142, 0.9004285714285715]
+"agedb_30": [0.8253333333333334, 0.8801666666666667, 0.8983333333333333, 0.8911666666666667]
+```
+```sh
+# Renet100 128
+"loss": [6.3005, 1.6274, 1.0608]
+"accuracy": [0.2196, 0.6881, 0.7901, 0.8293]
+"lfw": [0.97, 0.983, 0.981667, 0.986167]
+"cfp_fp": [0.865571, 0.894714, 0.903571, 0.910714]
+"agedb_30": [0.831833, 0.870167, 0.886333, 0.895833]
+```
+```sh
+# Renet100 1024
+"loss": [3.3549567371716877, 0.793737195027363, 0.518424223161905, 0.3872658337998814]
+"accuracy": [0.5023580193519592, 0.8334693908691406, 0.8864460587501526, 0.9125881195068359]
+"lfw": [0.9826666666666667, 0.9861666666666666, 0.9858333333333333, 0.99]
+"cfp_fp": [0.8998571428571429, 0.914, 0.9247142857142857, 0.9264285714285714]
+"agedb_30": [0.8651666666666666, 0.8876666666666667, 0.9013333333333333, 0.899]
+```
+```sh
+# EB0 160, Orign Conv + flatten + Dense
+"loss": [4.234781265258789, 1.6501317024230957],
+"accuracy": [0.35960495471954346, 0.6766131520271301],
+"lfw": [0.9816666666666667, 0.987, 0.9826666666666667],
+"cfp_fp": [0.9005714285714286, 0.9105714285714286],
+"agedb_30": [0.848, 0.8835]
+```
+```sh
+# EB0 160, GlobalAveragePooling
+"loss": [3.5231969356536865, 1.188686490058899, 0.8824349641799927, 0.7483137249946594],
+"accuracy": [0.45284023880958557, 0.7619950771331787, 0.8200176358222961, 0.8461616039276123],
+"lfw": 0.9826666666666667, 0.9855, 0.9886666666666667, 0.9856666666666667],
+"cfp_fp": [0.9022857142857142, 0.9201428571428572, 0.9212857142857143, 0.922],
+"agedb_30": [0.8531666666666666, 0.8805, 0.8891666666666667, 0.8966666666666666]
+```
+
+- [Group Convolution分组卷积，以及Depthwise Convolution和Global Depthwise Convolution](https://cloud.tencent.com/developer/article/1394912)
+- [深度学习中的卷积方式](https://zhuanlan.zhihu.com/p/75972500)

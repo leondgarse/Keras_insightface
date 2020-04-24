@@ -8,13 +8,15 @@ import tensorflow.keras.backend as K
 import os
 
 import multiprocessing as mp
-mp.set_start_method('forkserver')
+
+mp.set_start_method("forkserver")
 
 gpus = tf.config.experimental.list_physical_devices("GPU")
 for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
 # strategy = tf.distribute.MirroredStrategy()
 # strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
+
 
 def buildin_models(name, dropout=1, emb_shape=512, **kwargs):
     """ Basic model """
@@ -28,8 +30,16 @@ def buildin_models(name, dropout=1, emb_shape=512, **kwargs):
         xx = keras.applications.ResNet101V2(input_shape=(112, 112, 3), include_top=False, weights="imagenet", **kwargs)
     elif name == "NASNetMobile":
         xx = keras.applications.NASNetMobile(input_shape=(112, 112, 3), include_top=False, weights=None, **kwargs)
-    elif name == "MobileFaceNet":
-        xx = mobile_facenet(emb_shape=emb_shape, dropout=dropout)
+    elif name.startswith("EfficientNet"):
+        import efficientnet.tfkeras as efntf
+
+        if name[-2] == "B":
+            compound_scale = int(name[-1])
+            models = [efntf.EfficientNetB0, efntf.EfficientNetB1, efntf.EfficientNetB2, efntf.EfficientNetB3, efntf.EfficientNetB4, efntf.EfficientNetB5, efntf.EfficientNetB6, efntf.EfficientNetB7]
+            model = models[compound_scale]
+        else:
+            model = efntf.EfficientNetL2
+        xx = model(weights='imagenet', include_top=False, input_shape=(112, 112, 3))  # or weights='noisy-student'
     else:
         return None
     # xx = keras.models.load_model('checkpoints/mobilnet_v1_basic_922667.h5', compile=False)
@@ -37,10 +47,14 @@ def buildin_models(name, dropout=1, emb_shape=512, **kwargs):
 
     inputs = xx.inputs[0]
     nn = xx.outputs[0]
-    nn = keras.layers.Conv2D(emb_shape, xx.output_shape[1], use_bias=False)(nn)
-    # BatchNormalization(momentum=0.99, epsilon=0.001)
+    # nn = keras.layers.Conv2D(emb_shape, xx.output_shape[1], use_bias=False)(nn)
+
+    """ GDC """
+    nn = keras.layers.Conv2D(512, 1, use_bias=False)(nn)
     nn = keras.layers.BatchNormalization()(nn)
-    nn = keras.layers.PReLU(shared_axes=[1, 2])(nn)
+    # nn = keras.layers.PReLU(shared_axes=[1, 2])(nn)
+    nn = keras.layers.DepthwiseConv2D(nn.shape[1], depth_multiplier=1, use_bias=False)(nn)
+    nn = keras.layers.BatchNormalization()(nn)
     if dropout > 0 and dropout < 1:
         nn = keras.layers.Dropout(dropout)(nn)
     nn = keras.layers.Flatten()(nn)
@@ -98,7 +112,7 @@ class Train:
         batch_size=128,
         lr_base=0.001,
         lr_decay=0.05,
-        lr_min=5e-5,
+        lr_min=0,
         eval_freq=1,
         random_status=3,
         custom_objects={},
@@ -107,13 +121,15 @@ class Train:
         if isinstance(model, str):
             if model.endswith(".h5") and os.path.exists(model) and isinstance(basic_model, int):
                 print(">>>> Load model from h5 file: %s..." % model)
-                custom_objects.update({
-                    "NormDense": NormDense,
-                    "ArcfaceLoss": losses.ArcfaceLoss,
-                    "margin_softmax": losses.margin_softmax,
-                    "arcface_loss": losses.arcface_loss,
-                    "Center_loss": losses.Center_loss,
-                })
+                custom_objects.update(
+                    {
+                        "NormDense": NormDense,
+                        "margin_softmax": losses.margin_softmax,
+                        "arcface_loss": losses.arcface_loss,
+                        "ArcfaceLoss": losses.ArcfaceLoss,
+                        "CenterLoss": losses.CenterLoss,
+                    }
+                )
                 with keras.utils.custom_object_scope(custom_objects):
                     self.model = keras.models.load_model(model, compile=compile, custom_objects=custom_objects)
                 self.basic_model = keras.models.Model(self.model.inputs[0], self.model.layers[basic_model].output)
@@ -123,10 +139,14 @@ class Train:
             self.basic_model = keras.models.Model(self.model.inputs[0], self.model.layers[basic_model].output)
         elif isinstance(basic_model, str):
             if basic_model.endswith(".h5") and os.path.exists(basic_model):
-                custom_objects.update({
-                    "batch_hard_triplet_loss": losses.batch_hard_triplet_loss,
-                    "batch_all_triplet_loss": losses.batch_all_triplet_loss,
-                })
+                custom_objects.update(
+                    {
+                        "batch_hard_triplet_loss": losses.batch_hard_triplet_loss,
+                        "batch_all_triplet_loss": losses.batch_all_triplet_loss,
+                        "BatchHardTripletLoss": losses.BatchHardTripletLoss,
+                        "BatchAllTripletLoss": losses.BatchAllTripletLoss,
+                    }
+                )
                 print(">>>> Load basic_model from h5 file: %s..." % basic_model)
                 with keras.utils.custom_object_scope(custom_objects):
                     self.basic_model = keras.models.load_model(basic_model, compile=compile, custom_objects=custom_objects)
@@ -157,12 +177,12 @@ class Train:
         self.is_triplet_dataset = False
         self.default_optimizer = "adam"
         self.metrics = ["accuracy"]
-        my_evals = [
-            evals.eval_callback(self.basic_model, ii, batch_size=batch_size, eval_freq=eval_freq) for ii in eval_paths
-        ]
+        my_evals = [evals.eval_callback(self.basic_model, ii, batch_size=batch_size, eval_freq=eval_freq) for ii in eval_paths]
         if len(my_evals) != 0:
             my_evals[-1].save_model = os.path.splitext(save_path)[0]
-        basic_callbacks = myCallbacks.basic_callbacks(checkpoint=save_path, evals=my_evals, lr=lr_base, lr_decay=lr_decay, lr_min=lr_min)
+        basic_callbacks = myCallbacks.basic_callbacks(
+            checkpoint=save_path, evals=my_evals, lr=lr_base, lr_decay=lr_decay, lr_min=lr_min
+        )
         self.my_evals = my_evals
         self.basic_callbacks = basic_callbacks
         self.my_hist = self.basic_callbacks[-2]
@@ -171,7 +191,8 @@ class Train:
         if type == self.triplet:
             if self.train_ds == None or self.is_triplet_dataset == False:
                 print(">>>> Init triplet dataset...")
-                batch_size = int(self.batch_size / 4 * 1.5)
+                # batch_size = int(self.batch_size / 4 * 1.5)
+                batch_size = self.batch_size // 4
                 tt = data.Triplet_dataset(self.data_path, batch_size=batch_size, random_status=self.random_status)
                 self.train_ds, self.steps_per_epoch = tt.train_dataset, tt.steps_per_epoch
                 self.is_triplet_dataset = True
@@ -272,11 +293,11 @@ class Train:
                     print(">>>> Center loss combined with triplet, skip")
                     continue
                 center_loss = sch["loss"]
-                if center_loss.__class__.__name__ != losses.Center_loss.__name__:
+                if center_loss.__class__.__name__ != losses.CenterLoss.__name__:
                     feature_dim = self.basic_model.output_shape[-1]
                     initial_file = self.basic_model.name + "_centers.npy"
                     logits_loss = sch["loss"]
-                    center_loss = losses.Center_loss(
+                    center_loss = losses.CenterLoss(
                         self.classes, feature_dim=feature_dim, factor=1.0, initial_file=initial_file, logits_loss=logits_loss
                     )
                     sch["loss"] = center_loss

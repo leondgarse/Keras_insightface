@@ -9,6 +9,7 @@ import tensorflow as tf
 default_image_names_reg = "*/*.jpg"
 default_image_classes_rule = lambda path: int(os.path.basename(os.path.dirname(path)))
 
+
 def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None):
     if not os.path.exists(data_path):
         return np.array([]), np.array([]), 0
@@ -49,8 +50,59 @@ def process_path(file_path, label, classes=0, img_shape=(112, 112), random_statu
     img = (img - 0.5) * 2
     return img, label
 
+# Not using
+class ImageAugment():
+    def __init__(self, random_status=3, img_shape=(112, 112)):
+        self.random_status = random_status
+        self.img_shape = img_shape
+        self.cropped = (int(img_shape[0] * 0.9), int(img_shape[1] * 0.9), 3)
+        if random_status == -1:
+            from autoaugment import ImageNetPolicy
+            self.policy = ImageNetPolicy()
+        self.policy_dict = {
+            0: self.random_0,
+            1: self.random_1,
+            2: self.random_2,
+            3: self.random_3,
+            -1: self.random_auto,
+        }
 
-def prepare_dataset(data_path, image_names_reg=None, image_classes_rule=None, batch_size=128, random_status=2, cache=True, shuffle_buffer_size=None, is_train=True):
+    def __call__(self, img):
+        return self.policy_dict.get(self.random_status, 0)(img)
+
+    def random_0(self, img):
+        return img
+    def random_1(self, img):
+        img = tf.image.random_brightness(img, 0.1 * self.random_status)
+        img = tf.image.random_flip_left_right(img)
+        return img
+    def random_2(self, img):
+        img = self.random_1(img)
+        img = tf.image.random_contrast(img, 1 - 0.1 * self.random_status, 1 + 0.1 * self.random_status)
+        img = tf.image.random_saturation(img, 1 - 0.1 * self.random_status, 1 + 0.1 * self.random_status)
+        return img
+    def random_3(self, img):
+        img = self.random_2(img)
+        img = tf.image.random_crop(img, self.cropped)
+        img = tf.image.resize(img, self.img_shape)
+        return img
+    def random_auto(self, img):
+        pp = tf.keras.preprocessing.image.array_to_img(img)
+        transformed = self.policy(pp)
+        # img = tf.keras.preprocessing.image.img_to_array(transformed)
+        img = tf.image.convert_image_dtype(np.array(transformed), tf.float32)
+        return img
+
+def prepare_dataset(
+    data_path,
+    image_names_reg=None,
+    image_classes_rule=None,
+    batch_size=128,
+    random_status=2,
+    cache=True,
+    shuffle_buffer_size=None,
+    is_train=True,
+):
     image_names, image_classes, classes = pre_process_folder(data_path, image_names_reg, image_classes_rule)
     if len(image_names) == 0:
         return None, 0
@@ -74,7 +126,16 @@ def prepare_dataset(data_path, image_names_reg=None, image_classes_rule=None, ba
 
 
 class Triplet_dataset:
-    def __init__(self, data_path, image_names_reg=None, image_classes_rule=None, batch_size=48, image_per_class=4, img_shape=(112, 112, 3), random_status=3):
+    def __init__(
+        self,
+        data_path,
+        image_names_reg=None,
+        image_classes_rule=None,
+        batch_size=48,
+        image_per_class=4,
+        img_shape=(112, 112, 3),
+        random_status=3,
+    ):
         self.AUTOTUNE = tf.data.experimental.AUTOTUNE
         image_names, image_classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)
         image_dataframe = pd.DataFrame({"image_names": image_names, "image_classes": image_classes})
@@ -91,8 +152,9 @@ class Triplet_dataset:
         print("The final train_dataset batch will be %s" % ([batch_size * image_per_class, *self.img_shape, self.channels]))
 
         self.process_path = lambda img_name: process_path(
-            img_name, img_shape=self.img_shape, random_status=random_status, one_hot_label=False
+            img_name, label=0, img_shape=self.img_shape, random_status=random_status, one_hot_label=False
         )
+        self.get_label = lambda xx: tf.cast(tf.strings.to_number(tf.strings.split(xx, os.path.sep)[-2]), tf.int32)
         image_data = self.image_data_shuffle()
         self.steps_per_epoch = np.ceil(image_data.shape[0] / self.batch_size)
 
@@ -118,5 +180,6 @@ class Triplet_dataset:
 
     def process_batch_path(self, image_name_batch):
         image_names = tf.reshape(image_name_batch, [-1])
-        images, labels = tf.map_fn(self.process_path, image_names, dtype=(tf.float32, tf.int32))
+        images, _ = tf.map_fn(self.process_path, image_names, fn_output_signature=(tf.float32, tf.int32))
+        labels = tf.map_fn(self.get_label, image_names, fn_output_signature=tf.int32)
         return images, labels

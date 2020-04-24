@@ -11,6 +11,29 @@ def margin_softmax(y_true, y_pred, power=2, scale=0.4, from_logits=False):
     margin_soft = tf.where(tf.cast(y_true, dtype=tf.bool), (y_pred ** power + y_pred * scale) / 2, y_pred)
     return tf.keras.losses.categorical_crossentropy(y_true, margin_soft, from_logits=from_logits)
 
+# Single function one
+def arcface_loss(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True):
+    # norm_logits = y_pred[:, 512:]
+    threshold = np.cos((np.pi - margin2) / margin1)
+    theta_min = (-1 - margin3) * 2
+    norm_logits = y_pred
+    y_pred_vals = norm_logits[tf.cast(y_true, dtype=tf.bool)]
+    # y_pred_vals = tf.clip_by_value(y_pred_vals, clip_value_min=-1.0, clip_value_max=1.0)
+    if margin1 == 1.0 and margin3 == 0.0:
+        theta = tf.cos(tf.acos(y_pred_vals) + margin2)
+    else:
+        theta = tf.cos(tf.acos(y_pred_vals) * margin1 + margin2) - margin3
+        # Grad(theta) == 0
+        #   ==> np.sin(np.math.acos(xx) * margin1 + margin2) == 0
+        #   ==> np.math.acos(xx) * margin1 + margin2 == np.pi
+        #   ==> xx == np.cos((np.pi - margin2) / margin1)
+        #   ==> theta_min == -1 - margin3
+    # theta_valid = tf.where(theta < y_pred_vals, theta, y_pred_vals)
+    theta_valid = tf.where(y_pred_vals > threshold, theta, theta_min - theta)
+    theta_one_hot = tf.expand_dims(theta_valid - y_pred_vals, 1) * tf.cast(y_true, dtype=tf.float32)
+    arcface_logits = (theta_one_hot + norm_logits) * scale
+    # tf.assert_equal(tf.math.is_nan(tf.reduce_mean(arcface_logits)), False)
+    return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=from_logits)
 
 # ArcfaceLoss class
 class ArcfaceLoss(tf.keras.losses.Loss):
@@ -22,24 +45,15 @@ class ArcfaceLoss(tf.keras.losses.Loss):
         self.theta_min = (-1 - margin3) * 2
 
     def call(self, y_true, y_pred):
-        # norm_logits = y_pred[:, 512:]
         norm_logits = y_pred
         y_pred_vals = norm_logits[tf.cast(y_true, dtype=tf.bool)]
-        # y_pred_vals = tf.clip_by_value(y_pred_vals, clip_value_min=-1.0, clip_value_max=1.0)
         if self.margin1 == 1.0 and self.margin3 == 0.0:
             theta = tf.cos(tf.acos(y_pred_vals) + self.margin2)
         else:
             theta = tf.cos(tf.acos(y_pred_vals) * self.margin1 + self.margin2) - self.margin3
-            # Grad(theta) == 0
-            #   ==> np.sin(np.math.acos(xx) * margin1 + margin2) == 0
-            #   ==> np.math.acos(xx) * margin1 + margin2 == np.pi
-            #   ==> xx == np.cos((np.pi - margin2) / margin1)
-            #   ==> theta_min == -1 - margin3
-        # theta_valid = tf.where(theta < y_pred_vals, theta, y_pred_vals)
         theta_valid = tf.where(y_pred_vals > self.threshold, theta, self.theta_min - theta)
         theta_one_hot = tf.expand_dims(theta_valid - y_pred_vals, 1) * tf.cast(y_true, dtype=tf.float32)
         arcface_logits = (theta_one_hot + norm_logits) * self.scale
-        # tf.assert_equal(tf.math.is_nan(tf.reduce_mean(arcface_logits)), False)
         return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits)
 
     def get_config(self):
@@ -58,23 +72,6 @@ class ArcfaceLoss(tf.keras.losses.Loss):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
-
-
-# Single function one
-def arcface_loss(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True):
-    threshold = np.cos((np.pi - margin2) / margin1)
-    theta_min = (-1 - margin3) * 2
-    norm_logits = y_pred
-    y_pred_vals = norm_logits[tf.cast(y_true, dtype=tf.bool)]
-    if margin1 == 1.0 and margin3 == 0.0:
-        theta = tf.cos(tf.acos(y_pred_vals) + margin2)
-    else:
-        theta = tf.cos(tf.acos(y_pred_vals) * margin1 + margin2) - margin3
-    theta_valid = tf.where(y_pred_vals > threshold, theta, theta_min - theta)
-    theta_one_hot = tf.expand_dims(theta_valid - y_pred_vals, 1) * tf.cast(y_true, dtype=tf.float32)
-    arcface_logits = (theta_one_hot + norm_logits) * scale
-    return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=from_logits)
-
 
 # Simplified one
 def arcface_loss_2(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True):
@@ -95,7 +92,7 @@ class Save_Numpy_Callback(tf.keras.callbacks.Callback):
         np.save(self.save_file, self.save_tensor.numpy())
 
 
-class Center_loss(tf.keras.losses.Loss):
+class CenterLoss(tf.keras.losses.Loss):
     def __init__(self, num_classes, feature_dim=512, alpha=0.5, factor=1.0, initial_file=None, logits_loss=None, **kwargs):
         super(Center_loss, self).__init__(**kwargs)
         self.num_classes, self.feature_dim, self.alpha, self.factor = num_classes, feature_dim, alpha, factor
@@ -188,3 +185,38 @@ def batch_all_triplet_loss(labels, embeddings, alpha=0.35):
     neg_dists_valid = tf.where(neg_valid_mask, dists, tf.zeros_like(dists))
     neg_dists_loss = tf.reduce_sum(neg_dists_valid, -1) / (tf.reduce_sum(tf.cast(neg_valid_mask, dtype=tf.float32), -1) + 1)
     return pos_dists_loss + neg_dists_loss
+
+# Two helper class definitions
+class BatchHardTripletLoss(tf.keras.losses.Loss):
+    def __init__(self, alpha, **kwargs):
+        super(BatchHardTripletLoss, self).__init__(**kwargs)
+        self.alpha = alpha
+
+    def call(self, y_true, y_pred):
+        return batch_hard_triplet_loss(y_true, y_pred, self.alpha)
+
+    def get_config(self):
+        config = super(BatchHardTripletLoss, self).get_config()
+        config.update({"alpha": self.alpha})
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+class BatchAllTripletLoss(tf.keras.losses.Loss):
+    def __init__(self, alpha, **kwargs):
+        super(BatchAllTripletLoss, self).__init__(**kwargs)
+        self.alpha = alpha
+
+    def call(self, y_true, y_pred):
+        return batch_all_triplet_loss(y_true, y_pred, self.alpha)
+
+    def get_config(self):
+        config = super(BatchHardTripletLoss, self).get_config()
+        config.update({"alpha": self.alpha})
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)

@@ -1,5 +1,6 @@
 try:
     import seaborn as sns
+
     sns.set(style="darkgrid")
 except:
     pass
@@ -8,12 +9,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
+
 def peak_scatter(ax, array, peak_method, color="r", init_epoch=0):
     start = init_epoch + 1
     for ii in array:
-        pp = peak_method(ii)
+        pp = len(ii) - peak_method(ii[::-1]) - 1
         ax.scatter(pp + start, ii[pp], color=color, marker="v")
-        ax.text(pp + start, ii[pp], "{:.4f}".format(ii[pp]), va="bottom")
+        ax.text(pp + start, ii[pp], "{:.4f}".format(ii[pp]), va="bottom", ha="right", fontsize=8, rotation=-30)
         start += len(ii)
 
 
@@ -40,8 +42,9 @@ def hist_plot(loss_lists, accuracy_lists, customs_dict, loss_names, save="", axe
     peak_scatter(axes[0], loss_lists, np.argmin, init_epoch=init_epoch)
     axes[0].set_title("loss")
 
-    arrays_plot(axes[1], accuracy_lists, init_epoch=init_epoch, pre_value=pre_item.get("accuracy", 0))
-    peak_scatter(axes[1], accuracy_lists, np.argmax, init_epoch=init_epoch)
+    if len(accuracy_lists) != 0:
+        arrays_plot(axes[1], accuracy_lists, init_epoch=init_epoch, pre_value=pre_item.get("accuracy", 0))
+        peak_scatter(axes[1], accuracy_lists, np.argmax, init_epoch=init_epoch)
     axes[1].set_title("accuracy")
 
     # for ss, aa in zip(["lfw", "cfp_fp", "agedb_30"], [lfws, cfp_fps, agedb_30s]):
@@ -58,20 +61,17 @@ def hist_plot(loss_lists, accuracy_lists, customs_dict, loss_names, save="", axe
         for nn, loss in zip(loss_names, loss_lists):
             ax.plot([start, start], [ymin + mm, ymax - mm], color="k", linestyle="--")
             # ax.text(xx[ss[0]], np.mean(ax.get_ylim()), nn)
-            ax.text(start + len(loss) * 0.2, ymin + mm * 4, nn, va='bottom', rotation=-90)
+            ax.text(start + len(loss) * 0.05, ymin + mm * 4, nn, va="bottom", rotation=-90)
             start += len(loss)
 
     fig.tight_layout()
     if save != None and len(save) != 0:
         fig.savefig(save)
 
-    last_item = {
-        "loss": loss_lists[-1][-1],
-        "accuracy": accuracy_lists[-1][-1],
-    }
     last_item = {kk: vv[-1][-1] for kk, vv in customs_dict.items()}
     last_item["loss"] = loss_lists[-1][-1]
-    last_item["accuracy"] = accuracy_lists[-1][-1]
+    if len(accuracy_lists) != 0:
+        last_item["accuracy"] = accuracy_lists[-1][-1]
     return axes, last_item
 
 
@@ -79,16 +79,25 @@ def hist_plot_split(history, epochs, names, customs=[], save="", axes=None, init
     splits = [[int(sum(epochs[:id])), int(sum(epochs[:id])) + ii] for id, ii in enumerate(epochs)]
     split_func = lambda aa: [aa[ii:jj] for ii, jj in splits if ii < len(aa)]
     if isinstance(history, str):
+        history = [history]
+    if isinstance(history, list):
         import json
 
-        with open(history, "r") as ff:
-            hh = json.load(ff)
+        hh = {}
+        for pp in history:
+            with open(pp, "r") as ff:
+                aa = json.load(ff)
+            for kk, vv in aa.items():
+                hh.setdefault(kk, []).extend(vv)
         if save != None and len(save) == 0:
-            save = os.path.splitext(history)[0] + ".svg"
+            save = os.path.splitext(pp)[0] + ".svg"
     else:
         hh = history.copy()
     loss_lists = split_func(hh.pop("loss"))
-    accuracy_lists = split_func(hh.pop("accuracy"))
+    if "accuracy" in hh:
+        accuracy_lists = split_func(hh.pop("accuracy"))
+    else:
+        accuracy_lists = []
     if len(customs) != 0:
         customs_dict = {kk: split_func(hh[kk]) for kk in customs if kk in hh}
     else:
