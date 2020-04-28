@@ -61,5 +61,4 @@ if __name__ == "__main__":
     if args.test_bins != None and len(args.test_bins) != 0:
         args.test_bins = [os.path.join(args.dataset_dir, ii) for ii in args.test_bins]
         MXnet_bin_files_to_tf(args.test_bins)
-    else:
-        MXnet_record_to_folder(args.dataset_dir)
+    MXnet_record_to_folder(args.dataset_dir)

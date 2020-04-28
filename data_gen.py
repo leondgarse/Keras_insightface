@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 # /datasets/faces_emore_112x112_folders/*/*.jpg'
 default_image_names_reg = "*/*.jpg"
@@ -32,24 +33,22 @@ def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None)
     return image_names, image_classes, classes
 
 
-def process_path(file_path, label, classes=0, img_shape=(112, 112), random_status=2, one_hot_label=True):
+def process_path(file_path, label, classes=0, aug_policy=None, one_hot_label=True):
     if one_hot_label:
         label = tf.one_hot(label, depth=classes, dtype=tf.int32)
     img = tf.io.read_file(file_path)
     img = tf.image.decode_jpeg(img, channels=3)
     img = tf.image.convert_image_dtype(img, tf.float32)
-    img = tf.image.random_flip_left_right(img)
-    if random_status >= 1:
-        img = tf.image.random_brightness(img, 0.1 * random_status)
-    if random_status >= 2:
-        img = tf.image.random_contrast(img, 1 - 0.1 * random_status, 1 + 0.1 * random_status)
-        img = tf.image.random_saturation(img, 1 - 0.1 * random_status, 1 + 0.1 * random_status)
-    if random_status >= 3:
-        img = tf.image.random_crop(img, [100, 100, 3])
-        img = tf.image.resize(img, img_shape)
+    if aug_policy != None:
+        img = aug_policy(img)
     img = (img - 0.5) * 2
     return img, label
 
+def image_aug_random(img, random_status=3):
+    img = tf.image.random_contrast(img, 1 - 0.1 * random_status, 1 + 0.1 * random_status)
+    img = tf.image.random_saturation(img, 1 - 0.1 * random_status, 1 + 0.1 * random_status)
+    img = tf.image.random_hue(img, 0.05 * random_status)
+    return img
 
 def prepare_dataset(
     data_path,
@@ -66,21 +65,48 @@ def prepare_dataset(
         return None, 0
     print(len(image_names), len(image_classes), classes)
 
-    ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes))
-    AUTOTUNE = tf.data.experimental.AUTOTUNE
-    if shuffle_buffer_size == None:
-        shuffle_buffer_size = batch_size * 100
+    data_df = pd.DataFrame({"image_names": image_names, "image_classes": image_classes})
+    data_df.image_classes = data_df.image_classes.map(str)
 
-    ds = ds.shuffle(buffer_size=shuffle_buffer_size)
-    if cache:
-        ds = ds.cache(cache) if isinstance(cache, str) else ds.cache()
     if is_train:
-        ds = ds.repeat()
-    ds = ds.map(lambda xx, yy: process_path(xx, yy, classes, random_status=random_status), num_parallel_calls=AUTOTUNE)
-    ds = ds.batch(batch_size)
-    ds = ds.prefetch(buffer_size=AUTOTUNE)
-    steps_per_epoch = np.ceil(len(image_names) / batch_size)
-    return ds, steps_per_epoch, classes
+        if random_status != -1:
+            image_gen = ImageDataGenerator(rescale=1./255, horizontal_flip=True,
+                            rotation_range=random_status * 5,
+                            # width_shift_range=random_status * 0.05,
+                            # height_shift_range=random_status * 0.05,
+                            brightness_range=(1.0 - random_status * 0.1, 1.0 + random_status * 0.1),
+                            shear_range=random_status * 5,
+                            zoom_range=random_status * 0.15,
+                            # preprocessing_function=lambda img: image_aug_random(img, random_status)
+            )
+        else:
+            from autoaugment import ImageNetPolicy
+            policy = ImageNetPolicy()
+            policy_func = lambda img: np.array(policy(tf.keras.preprocessing.image.array_to_img(img)), dtype=np.float32)
+            image_gen = ImageDataGenerator(rescale=1./255, horizontal_flip=True, preprocessing_function=policy_func)
+    else:
+        image_gen = ImageDataGenerator(rescale=1./255)
+
+    train_data_gen = image_gen.flow_from_dataframe(data_df, directory=None, x_col='image_names', y_col="image_classes", class_mode='categorical', target_size=(112, 112), batch_size=batch_size, validate_filenames=False)
+    classes = data_df.image_classes.unique().shape[0]
+    steps_per_epoch = np.ceil(data_df.shape[0] / batch_size)
+
+    ''' Convert to tf.data.Dataset '''
+    AUTOTUNE = tf.data.experimental.AUTOTUNE
+    train_ds = tf.data.Dataset.from_generator(lambda: train_data_gen, output_types=(tf.float32, tf.int32), output_shapes=([None, 112, 112, 3], [None, classes]))
+    train_ds = train_ds.map(lambda xx, yy: ((xx - 0.5) * 2, yy), num_parallel_calls=AUTOTUNE)
+    # train_ds = train_ds.cache()
+    # if shuffle_buffer_size == None:
+    #     shuffle_buffer_size = batch_size * 100
+    #
+    # train_ds = train_ds.shuffle(buffer_size=shuffle_buffer_size)
+    if cache:
+        train_ds = train_ds.cache(cache) if isinstance(cache, str) else train_ds.cache()
+    # if is_train:
+    #     train_ds = train_ds.repeat()
+    train_ds = train_ds.prefetch(buffer_size=AUTOTUNE)
+
+    return train_ds, steps_per_epoch, classes
 
 
 class Triplet_dataset:

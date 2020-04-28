@@ -114,7 +114,7 @@ class Train:
         lr_decay=0.05,
         lr_min=0,
         eval_freq=1,
-        random_status=3,
+        random_status=0,
         custom_objects={},
     ):
         self.model, self.basic_model = None, None

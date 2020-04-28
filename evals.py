@@ -75,7 +75,7 @@ class eval_callback(tf.keras.callbacks.Callback):
             # Evaluting on_batch_end
             if cur_step == 0:
                 return
-            cur_epoch = self.model.history.epoch[-1] if self.model is not None and len(self.model.history.epoch) != 0 else 0
+            cur_epoch = self.model.history.epoch[-1] if self.model is not None and len(self.model.history.__dict__.get("epoch", [])) != 0 else 0
             cur_step = "%d_batch_%d" % (cur_epoch, cur_step)
         else:
             cur_step = str(cur_step)

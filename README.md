@@ -54,7 +54,7 @@
   | ResNet50V2     | 0.995833 | 0.951143 | 0.959333 |
   | MobileNetV2    | 0.993000 | 0.930429 | 0.930000 |
   | Mobilefacenet  | 0.994167 | 0.944143 | 0.942500 |
-  | ResNet101V2    | 0.997000 | 0.971571 | 0.963833 |
+  | ResNet101V2    | 0.997000 | 0.973286 | 0.965667 |
 ***
 
 # Usage
@@ -264,7 +264,7 @@
     basic_model = train.buildin_models("MobileNet", dropout=0.4, emb_shape=256)
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, eval_paths, 'keras_mobilenet_256.h5', basic_model=basic_model, model=None, compile=False, lr_base=0.001, batch_size=128, random_status=3)
+    tt = train.Train(data_path, 'keras_mobilenet_256.h5', eval_paths, basic_model=basic_model, model=None, compile=False, lr_base=0.001, batch_size=128, random_status=3)
     sch = [{"loss": losses.ArcfaceLoss(), "optimizer": None, "epoch": 6}]
     tt.train(sch, 0)
     ```
@@ -379,7 +379,7 @@
   - **Training script** is similar with `Mobilefacenet`, just replace `basic_model` with `ResNet101V2`, and set a new `save_path`
     ```py
     basic_model = train.buildin_models("ResNet101V2", dropout=0.4, emb_shape=512)
-    tt = train.Train(data_path, eval_paths, 'keras_resnet101_512.h5', basic_model=basic_model, batch_size=1024)
+    tt = train.Train(data_path, 'keras_resnet101_512.h5', eval_paths, basic_model=basic_model, batch_size=1024)
     ```
   - **Record** Two models are trained, with `batch_size=128` and `batch_size=1024` respectively.
     | Loss               | epochs | First epoch (batch_size=1024)                       | First epoch (2 GPUs, batch_size=2048)           |
@@ -414,8 +414,9 @@
     ```py
     import plot
     customs = ["lfw", "agedb_30", "cfp_fp"]
-    axes, _ = plot.hist_plot_split('./checkpoints/keras_resnet101_emore_basic_hist.json', [15, 5, 5, 5], ["Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, save=None, init_epoch=94)
+    axes, _ = plot.hist_plot_split('./checkpoints/keras_resnet101_emore_basic_hist.json', [15, 5, 5, 15], ["Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, save=None, init_epoch=94)
     ```
+    ![](checkpoints/keras_resnet101_emore_basic_hist.svg)
   - **Comparing softmax training for `MobileFaceNet` and `ResNet101`**
     ```py
     import plot
@@ -736,6 +737,13 @@
 "cfp_fp": [0.9022857142857142, 0.9201428571428572, 0.9212857142857143, 0.922],
 "agedb_30": [0.8531666666666666, 0.8805, 0.8891666666666667, 0.8966666666666666]
 ```
-
+```sh
+# EB0 160, GDC
+"loss": [3.9325125217437744, 1.5069712400436401, 1.1851387023925781]
+"accuracy": [0.40046197175979614, 0.7043213248252869, 0.7628725171089172]
+"lfw": [0.9823333333333333, 0.9851666666666666, 0.99]
+"cfp_fp": [0.8962857142857142, 0.9145714285714286, 0.9158571428571428]
+"agedb_30": [0.8548333333333333, 0.8815, 0.8921666666666667]
+```
 - [Group Convolution分组卷积，以及Depthwise Convolution和Global Depthwise Convolution](https://cloud.tencent.com/developer/article/1394912)
 - [深度学习中的卷积方式](https://zhuanlan.zhihu.com/p/75972500)
