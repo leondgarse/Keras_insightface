@@ -94,7 +94,7 @@ class Save_Numpy_Callback(tf.keras.callbacks.Callback):
 
 class CenterLoss(tf.keras.losses.Loss):
     def __init__(self, num_classes, feature_dim=512, alpha=0.5, factor=1.0, initial_file=None, logits_loss=None, **kwargs):
-        super(Center_loss, self).__init__(**kwargs)
+        super(CenterLoss, self).__init__(**kwargs)
         self.num_classes, self.feature_dim, self.alpha, self.factor = num_classes, feature_dim, alpha, factor
         self.initial_file = initial_file
         centers = tf.Variable(tf.zeros([num_classes, feature_dim]), trainable=False)
@@ -136,7 +136,7 @@ class CenterLoss(tf.keras.losses.Loss):
         return tf.keras.metrics.categorical_accuracy(y_true, logits)
 
     def get_config(self):
-        config = super(Center_loss, self).get_config()
+        config = super(CenterLoss, self).get_config()
         config.update(
             {
                 "num_classes": self.num_classes,

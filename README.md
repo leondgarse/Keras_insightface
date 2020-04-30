@@ -391,11 +391,12 @@
     | Triplet            | 30     |                                                     | 5943s 3s/step - loss: 0.1149                    |
 
     ```py
+    """ Evaluating accuracy is not improving from my end point """
     import plot
     # plot.hist_plot_split("./checkpoints/keras_resnet101_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
     customs = ["lfw", "agedb_30", "cfp_fp"]
     history = ['./checkpoints/keras_resnet101_emore_hist.json', './checkpoints/keras_resnet101_emore_basic_hist.json']
-    axes, _ = plot.hist_plot_split(history, [15, 10, 4, 65, 15, 10], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64", "Triplet alpha=0.35", "Triplet alpha=0.3"], customs=customs, save=None)
+    axes, _ = plot.hist_plot_split(history, [15, 10, 4, 65, 15, 5, 5, 15], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64", "Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, save=None)
 
     for line in [axes[0].lines[0], axes[1].lines[0], *(axes[2].lines[:3])]:
         idd = 64
@@ -412,12 +413,27 @@
     ```
     ![](checkpoints/keras_resnet101_emore_hist.svg)
     ```py
+    """ Plot triplet loss only """
     import plot
     customs = ["lfw", "agedb_30", "cfp_fp"]
-    axes, _ = plot.hist_plot_split('./checkpoints/keras_resnet101_emore_basic_hist.json', [15, 5, 5, 15], ["Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, save=None, init_epoch=94)
+    axes, _ = plot.hist_plot_split('./checkpoints/keras_resnet101_emore_basic_hist.json', [15, 5, 5, 15], ["Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, init_epoch=94)
     ```
     ![](checkpoints/keras_resnet101_emore_basic_hist.svg)
-  - **Comparing softmax training for `MobileFaceNet` and `ResNet101`**
+## EfficientNetB4
+  ```py
+  with tf.distribute.MirroredStrategy().scope():
+      basic_model = train.buildin_models('EfficientNetB4', 0.4, 512)
+      tt = train.Train(data_path, 'keras_EB4_emore.h5', eval_paths, basic_model=basic_model, batch_size=420, random_status=0)
+  ```
+  | Loss               | epochs | First epoch (batch_size=1024)                    | First epoch (2 GPUs, batch_size=2048) |
+  | ------------------ | ------ | ------------------------------------------------ | ------------------------------------- |
+  | Softamx            | 15     | 10881s 2s/step - loss: 2.7277 - accuracy: 0.5822 |                                       |
+  | Margin Softmax     | 10     |                                                  |                                       |
+  | Bottleneck Arcface | 4      |                                                  |                                       |
+  | Arcface 64         | 35     |                                                  |                                       |
+  | Triplet            | 30     |                                                  |                                       |
+
+  - **Comparing softmax training for `MobileFaceNet` / `ResNet101` / `EfficientNetB4`**
     ```py
     import plot
     customs = ["agedb_30"]
@@ -430,6 +446,9 @@
     pre_lines = len(axes[0].lines)
     axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=axes)
     axes[0].lines[pre_lines].set_label('Mobilefacenet, BS = 768')
+    pre_lines = len(axes[0].lines)
+    axes, _ = plot.hist_plot_split("checkpoints/keras_EB4_emore_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=axes)
+    axes[0].lines[pre_lines].set_label('EB4, BS = 840')
     pre_lines = len(axes[0].lines)
     axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist_all.json", epochs, ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"], customs=customs, save=None, axes=axes)
     axes[0].lines[pre_lines].set_label('Mobilefacenet, BS = 160')
@@ -689,61 +708,3 @@
   - [TensorFlow Addons Layers: WeightNormalization](https://www.tensorflow.org/addons/tutorials/layers_weightnormalization)
   - [deepinsight/insightface](https://github.com/deepinsight/insightface)
 ***
-```sh
-# Mobilefacenet 160
-"loss": [5.0583, 1.6944, 1.2544, 1.0762]
-"accuracy": [0.2964, 0.6755, 0.7532, 0.7862]
-"lfw": [0.9715, 0.98, 0.986, 0.988]
-"cfp_fp": [0.865714, 0.893, 0.898857, 0.91]
-"agedb_30": [0.829167, 0.8775, 0.892667, 0.903167]
-```
-```sh
-# Mobilefacenet 768
-"loss": [4.82409207357388, 1.462764699449328, 1.011261948830721, 0.8042656191418587]
-"accuracy": [0.3281610608100891, 0.7102007865905762, 0.7921959757804871, 0.8312187790870667]
-"lfw": [0.9733333333333334, 0.9781666666666666, 0.9833333333333333, 0.983]
-"cfp_fp": [0.8654285714285714, 0.8935714285714286, 0.9002857142857142, 0.9004285714285715]
-"agedb_30": [0.8253333333333334, 0.8801666666666667, 0.8983333333333333, 0.8911666666666667]
-```
-```sh
-# Renet100 128
-"loss": [6.3005, 1.6274, 1.0608]
-"accuracy": [0.2196, 0.6881, 0.7901, 0.8293]
-"lfw": [0.97, 0.983, 0.981667, 0.986167]
-"cfp_fp": [0.865571, 0.894714, 0.903571, 0.910714]
-"agedb_30": [0.831833, 0.870167, 0.886333, 0.895833]
-```
-```sh
-# Renet100 1024
-"loss": [3.3549567371716877, 0.793737195027363, 0.518424223161905, 0.3872658337998814]
-"accuracy": [0.5023580193519592, 0.8334693908691406, 0.8864460587501526, 0.9125881195068359]
-"lfw": [0.9826666666666667, 0.9861666666666666, 0.9858333333333333, 0.99]
-"cfp_fp": [0.8998571428571429, 0.914, 0.9247142857142857, 0.9264285714285714]
-"agedb_30": [0.8651666666666666, 0.8876666666666667, 0.9013333333333333, 0.899]
-```
-```sh
-# EB0 160, Orign Conv + flatten + Dense
-"loss": [4.234781265258789, 1.6501317024230957],
-"accuracy": [0.35960495471954346, 0.6766131520271301],
-"lfw": [0.9816666666666667, 0.987, 0.9826666666666667],
-"cfp_fp": [0.9005714285714286, 0.9105714285714286],
-"agedb_30": [0.848, 0.8835]
-```
-```sh
-# EB0 160, GlobalAveragePooling
-"loss": [3.5231969356536865, 1.188686490058899, 0.8824349641799927, 0.7483137249946594],
-"accuracy": [0.45284023880958557, 0.7619950771331787, 0.8200176358222961, 0.8461616039276123],
-"lfw": 0.9826666666666667, 0.9855, 0.9886666666666667, 0.9856666666666667],
-"cfp_fp": [0.9022857142857142, 0.9201428571428572, 0.9212857142857143, 0.922],
-"agedb_30": [0.8531666666666666, 0.8805, 0.8891666666666667, 0.8966666666666666]
-```
-```sh
-# EB0 160, GDC
-"loss": [3.9325125217437744, 1.5069712400436401, 1.1851387023925781]
-"accuracy": [0.40046197175979614, 0.7043213248252869, 0.7628725171089172]
-"lfw": [0.9823333333333333, 0.9851666666666666, 0.99]
-"cfp_fp": [0.8962857142857142, 0.9145714285714286, 0.9158571428571428]
-"agedb_30": [0.8548333333333333, 0.8815, 0.8921666666666667]
-```
-- [Group Convolution分组卷积，以及Depthwise Convolution和Global Depthwise Convolution](https://cloud.tencent.com/developer/article/1394912)
-- [深度学习中的卷积方式](https://zhuanlan.zhihu.com/p/75972500)
