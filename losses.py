@@ -3,16 +3,21 @@ import numpy as np
 import os
 
 
-def scale_softmax(y_true, y_pred, scale=64.0, from_logits=True):
-    return tf.keras.losses.categorical_crossentropy(y_true, y_pred * scale, from_logits=from_logits)
+def scale_softmax(y_true, y_pred, scale=64.0, from_logits=True, label_smoothing=0):
+    return tf.keras.losses.categorical_crossentropy(
+        y_true, y_pred * scale, from_logits=from_logits, label_smoothing=label_smoothing
+    )
 
 
-def margin_softmax(y_true, y_pred, power=2, scale=0.4, from_logits=False):
+def margin_softmax(y_true, y_pred, power=2, scale=0.4, from_logits=False, label_smoothing=0):
     margin_soft = tf.where(tf.cast(y_true, dtype=tf.bool), (y_pred ** power + y_pred * scale) / 2, y_pred)
-    return tf.keras.losses.categorical_crossentropy(y_true, margin_soft, from_logits=from_logits)
+    return tf.keras.losses.categorical_crossentropy(
+        y_true, margin_soft, from_logits=from_logits, label_smoothing=label_smoothing
+    )
+
 
 # Single function one
-def arcface_loss(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True):
+def arcface_loss(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True, label_smoothing=0):
     # norm_logits = y_pred[:, 512:]
     threshold = np.cos((np.pi - margin2) / margin1)
     theta_min = (-1 - margin3) * 2
@@ -33,14 +38,17 @@ def arcface_loss(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=64
     theta_one_hot = tf.expand_dims(theta_valid - y_pred_vals, 1) * tf.cast(y_true, dtype=tf.float32)
     arcface_logits = (theta_one_hot + norm_logits) * scale
     # tf.assert_equal(tf.math.is_nan(tf.reduce_mean(arcface_logits)), False)
-    return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=from_logits)
+    return tf.keras.losses.categorical_crossentropy(
+        y_true, arcface_logits, from_logits=from_logits, label_smoothing=label_smoothing
+    )
+
 
 # ArcfaceLoss class
 class ArcfaceLoss(tf.keras.losses.Loss):
-    def __init__(self, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True, **kwargs):
+    def __init__(self, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
         super(ArcfaceLoss, self).__init__(**kwargs)
         self.margin1, self.margin2, self.margin3, self.scale = margin1, margin2, margin3, scale
-        self.from_logits = from_logits
+        self.from_logits, self.label_smoothing = from_logits, label_smoothing
         self.threshold = np.cos((np.pi - margin2) / margin1)  # grad(theta) == 0
         self.theta_min = (-1 - margin3) * 2
 
@@ -54,7 +62,9 @@ class ArcfaceLoss(tf.keras.losses.Loss):
         theta_valid = tf.where(y_pred_vals > self.threshold, theta, self.theta_min - theta)
         theta_one_hot = tf.expand_dims(theta_valid - y_pred_vals, 1) * tf.cast(y_true, dtype=tf.float32)
         arcface_logits = (theta_one_hot + norm_logits) * self.scale
-        return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits)
+        return tf.keras.losses.categorical_crossentropy(
+            y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
+        )
 
     def get_config(self):
         config = super(ArcfaceLoss, self).get_config()
@@ -65,6 +75,7 @@ class ArcfaceLoss(tf.keras.losses.Loss):
                 "margin3": self.margin3,
                 "scale": self.scale,
                 "from_logits": self.from_logits,
+                "label_smoothing": self.label_smoothing,
             }
         )
         return config
@@ -72,6 +83,7 @@ class ArcfaceLoss(tf.keras.losses.Loss):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
 
 # Simplified one
 def arcface_loss_2(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True):
@@ -186,6 +198,7 @@ def batch_all_triplet_loss(labels, embeddings, alpha=0.35):
     neg_dists_loss = tf.reduce_sum(neg_dists_valid, -1) / (tf.reduce_sum(tf.cast(neg_valid_mask, dtype=tf.float32), -1) + 1)
     return pos_dists_loss + neg_dists_loss
 
+
 # Two helper class definitions
 class BatchHardTripletLoss(tf.keras.losses.Loss):
     def __init__(self, alpha, **kwargs):
@@ -203,6 +216,7 @@ class BatchHardTripletLoss(tf.keras.losses.Loss):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
 
 class BatchAllTripletLoss(tf.keras.losses.Loss):
     def __init__(self, alpha, **kwargs):

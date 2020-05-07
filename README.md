@@ -55,6 +55,7 @@
   | MobileNetV2    | 0.993000 | 0.930429 | 0.930000 |
   | Mobilefacenet  | 0.994167 | 0.944143 | 0.942500 |
   | ResNet101V2    | 0.997000 | 0.973286 | 0.965667 |
+  | EfficientNetB4 | 0.997000 | 0.965714 | 0.959833 |
 ***
 
 # Usage
@@ -123,7 +124,7 @@
     basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="mobile_facenet_256")
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, batch_size=768, random_status=3)
+    tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, batch_size=768, random_status=0)
     sch = [
       {"loss": keras.losses.categorical_crossentropy, "optimizer": "nadam", "epoch": 15},
       {"loss": losses.margin_softmax, "epoch": 10},
@@ -139,7 +140,7 @@
     import losses, data, evals, myCallbacks, mobile_facenet
     # Dataset
     data_path = '/datasets/faces_emore_112x112_folders'
-    train_ds, steps_per_epoch, classes = data.prepare_dataset(data_path, batch_size=512, random_status=3)
+    train_ds, steps_per_epoch, classes = data.prepare_dataset(data_path, batch_size=512, random_status=0)
     # Model
     basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="mobile_facenet_256")
     model_output = keras.layers.Dense(classes, activation="softmax")(basic_model.outputs[0])
@@ -187,7 +188,7 @@
     import train
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, 'keras_mobilefacenet_256_II.h5', eval_paths, basic_model=-2, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=768, random_status=3, custom_objects={'margin_softmax': losses.margin_softmax})
+    tt = train.Train(data_path, 'keras_mobilefacenet_256_II.h5', eval_paths, basic_model=-2, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=768, random_status=0, custom_objects={'margin_softmax': losses.margin_softmax})
     sch = [
       # {"loss": keras.losses.categorical_crossentropy, "optimizer": "nadam", "epoch": 15},
       {"loss": losses.margin_softmax, "epoch": 6},
@@ -230,8 +231,18 @@
     tt = train.Train(data_path, 'keras_mobilefacenet_256.h5', eval_paths, basic_model=basic_model, eval_freq=1000)
     ```
   - [EfficientNet](https://github.com/qubvel/efficientnet)
-    ```sh
-    pip install -U git+https://github.com/qubvel/efficientnet
+    ```py
+    !pip install -U git+https://github.com/qubvel/efficientnet
+
+    import efficientnet.tfkeras as efntf
+    mm = efntf.EfficientNetB0(weights='imagenet', include_top=False, input_shape=(112, 112, 3))
+    ```
+  - [SE nets](https://github.com/titu1994/keras-squeeze-excite-network)
+    ```py
+    !pip install -U git+https://github.com/titu1994/keras-squeeze-excite-network
+
+    from keras_squeeze_excite_network import se_resnext
+    mm = se_resnext.SEResNextImageNet(weights='imagenet', input_shape=(112, 112, 3), include_top=False)
     ```
 ## Multi GPU train
   - For multi GPU train, should better use `tf-nightly`
@@ -264,7 +275,7 @@
     basic_model = train.buildin_models("MobileNet", dropout=0.4, emb_shape=256)
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, 'keras_mobilenet_256.h5', eval_paths, basic_model=basic_model, model=None, compile=False, lr_base=0.001, batch_size=128, random_status=3)
+    tt = train.Train(data_path, 'keras_mobilenet_256.h5', eval_paths, basic_model=basic_model, model=None, compile=False, lr_base=0.001, batch_size=128, random_status=0)
     sch = [{"loss": losses.ArcfaceLoss(), "optimizer": None, "epoch": 6}]
     tt.train(sch, 0)
     ```
@@ -275,7 +286,7 @@
     import train
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, 'keras_mobilenet_256_V.h5', eval_paths, basic_model="./checkpoints/keras_mobilenet_256_basic_agedb_30_epoch_6_0.900333.h5", model=None, compile=False, lr_base=0.001, batch_size=128, random_status=3)
+    tt = train.Train(data_path, 'keras_mobilenet_256_V.h5', eval_paths, basic_model="./checkpoints/keras_mobilenet_256_basic_agedb_30_epoch_6_0.900333.h5", model=None, compile=False, lr_base=0.001, batch_size=128, random_status=0)
 
     ''' Choose one loss function each time --> train one epoch --> reload'''
     sch = [{"loss": keras.losses.categorical_crossentropy, "optimizer": "adam", "epoch": 1}]
@@ -420,19 +431,35 @@
     ```
     ![](checkpoints/keras_resnet101_emore_basic_hist.svg)
 ## EfficientNetB4
-  ```py
-  with tf.distribute.MirroredStrategy().scope():
-      basic_model = train.buildin_models('EfficientNetB4', 0.4, 512)
-      tt = train.Train(data_path, 'keras_EB4_emore.h5', eval_paths, basic_model=basic_model, batch_size=420, random_status=0)
-  ```
-  | Loss               | epochs | First epoch (batch_size=1024)                    | First epoch (2 GPUs, batch_size=2048) |
-  | ------------------ | ------ | ------------------------------------------------ | ------------------------------------- |
-  | Softamx            | 15     | 10881s 2s/step - loss: 2.7277 - accuracy: 0.5822 |                                       |
-  | Margin Softmax     | 10     |                                                  |                                       |
-  | Bottleneck Arcface | 4      |                                                  |                                       |
-  | Arcface 64         | 35     |                                                  |                                       |
-  | Triplet            | 30     |                                                  |                                       |
+  - **Record**
+    ```py
+    with tf.distribute.MirroredStrategy().scope():
+        basic_model = train.buildin_models('EfficientNetB4', 0.4, 512)
+        tt = train.Train(data_path, 'keras_EB4_emore.h5', eval_paths, basic_model=basic_model, batch_size=420, random_status=0)
+    ```
+    | Loss               | epochs | First epoch (2 GPUs, batch_size=840)                |
+    | ------------------ | ------ | --------------------------------------------------- |
+    | Softamx            | 15     | 10881s 2s/step - loss: 2.7277 - accuracy: 0.5822    |
+    | Margin Softmax     | 10     | 11068s 2s/step - loss: 0.1054 - accuracy: 0.9805    |
+    | Bottleneck Arcface | 4      | 4364s 629ms/step - loss: 18.1350 - accuracy: 0.9166 |
+    | Arcface 64         | 35     | 11047s 2s/step - loss: 11.3806 - accuracy: 0.9781   |
+    | Triplet            | 30     |                                                     |
 
+    ```py
+    """ Comparing EfficientNetB4 and ResNet101 """
+    import plot
+    # plot.hist_plot_split("./checkpoints/keras_resnet101_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
+    customs = ["lfw", "agedb_30", "cfp_fp"]
+    epochs = [15, 10, 4, 15]
+    axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=None)
+    axes[0].lines[0].set_label('Resnet101, BS = 1024')
+    pre_lines = len(axes[0].lines)
+    axes, _ = plot.hist_plot_split("checkpoints/keras_EB4_emore_hist.json", epochs, ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64", "Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, save=None, axes=axes)
+    axes[0].lines[pre_lines].set_label('EB4, BS = 840')
+    axes[0].legend(loc='upper right')
+    axes[0].figure.savefig('./checkpoints/keras_EB4_emore_hist.svg')
+    ```
+    ![](checkpoints/keras_EB4_emore_hist.svg)
   - **Comparing softmax training for `MobileFaceNet` / `ResNet101` / `EfficientNetB4`**
     ```py
     import plot
@@ -461,6 +488,42 @@
     axes[0].figure.savefig('./checkpoints/softmax_compare.svg')
     ```
     ![](checkpoints/softmax_compare.svg)
+## Label smoothing
+  - **Train schedulers**
+    ```py
+    basic_model = train.buildin_models("MobileNet", dropout=0.4, emb_shape=256)
+    tt = train.Train(..., random_status=0)
+    sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0), "optimizer": "nadam", "epoch": 3}]
+    sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "optimizer": "nadam", "epoch": 3}]
+    tt.train(sch, 0)
+
+    sch = [{"loss": losses.ArcfaceLoss(label_smoothing=0), "epoch": 5}]
+    tt.train(sch, 3)
+
+    sch = [{"loss": losses.ArcfaceLoss(label_smoothing=0), "epoch": 3}]
+    sch = [{"loss": losses.ArcfaceLoss(label_smoothing=0.1), "epoch": 3}]
+    tt.train(sch, 8)
+
+    tt = train.Train(..., random_status=3)
+    sch = [{"loss": losses.ArcfaceLoss(label_smoothing=0), "epoch": 3}]
+    tt.train(sch, 8)
+    ```
+  - **Result**
+    ```py
+    import plot
+    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_256_hist.json', [3], [""], save=None, init_epoch=0, axes=None)
+    axes[0].lines[-2].set_label('label_smoothing=0, Softmax')
+    axes, pre_1 = plot.hist_plot_split('checkpoints/keras_mobilenet_ls_0.1_256_hist.json', [3, 5], ["Softmax", "Arcface"], save=None, init_epoch=0, axes=axes)
+    axes[0].lines[-3].set_label('label_smoothing=0.1, Softmax')
+    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_ls_0_256_hist.json', [3], [""], save=None, init_epoch=8, pre_item=pre_1, axes=axes)
+    axes[0].lines[-2].set_label('label_smoothing=0, Arcface')
+    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_ls_0.1_256_hist.json', [3], ["Arcface"], save=None, init_epoch=8, pre_item=pre_1, axes=axes)
+    axes[0].lines[-2].set_label('label_smoothing=0.1, Arcface')
+    axes[0].legend()
+    axes[2].legend()
+    axes[0].figure.savefig('./checkpoints/label_smoothing.svg')
+    ```
+    ![](checkpoints/label_smoothing.svg)
 ***
 
 # Model conversion
@@ -707,4 +770,6 @@
   - [TensorFlow Addons Losses: TripletSemiHardLoss](https://www.tensorflow.org/addons/tutorials/losses_triplet)
   - [TensorFlow Addons Layers: WeightNormalization](https://www.tensorflow.org/addons/tutorials/layers_weightnormalization)
   - [deepinsight/insightface](https://github.com/deepinsight/insightface)
+  - [Github titu1994/keras-squeeze-excite-network](https://github.com/titu1994/keras-squeeze-excite-network)
+  - [Github qubvel/EfficientNet](https://github.com/qubvel/efficientnet)
 ***

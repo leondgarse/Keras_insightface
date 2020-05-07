@@ -47,7 +47,7 @@ def process_path(file_path, label, classes=0, img_shape=(112, 112), random_statu
     if random_status >= 3:
         img = tf.image.random_crop(img, [100, 100, 3])
         img = tf.image.resize(img, img_shape)
-    img = (img - 0.5) * 2
+    img = (tf.clip_by_value(img, 0., 1.) - 0.5) * 2
     return img, label
 
 

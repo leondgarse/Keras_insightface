@@ -35,11 +35,29 @@ def buildin_models(name, dropout=1, emb_shape=512, **kwargs):
 
         if name[-2] == "B":
             compound_scale = int(name[-1])
-            models = [efntf.EfficientNetB0, efntf.EfficientNetB1, efntf.EfficientNetB2, efntf.EfficientNetB3, efntf.EfficientNetB4, efntf.EfficientNetB5, efntf.EfficientNetB6, efntf.EfficientNetB7]
+            models = [
+                efntf.EfficientNetB0,
+                efntf.EfficientNetB1,
+                efntf.EfficientNetB2,
+                efntf.EfficientNetB3,
+                efntf.EfficientNetB4,
+                efntf.EfficientNetB5,
+                efntf.EfficientNetB6,
+                efntf.EfficientNetB7,
+            ]
             model = models[compound_scale]
         else:
             model = efntf.EfficientNetL2
-        xx = model(weights='imagenet', include_top=False, input_shape=(112, 112, 3))  # or weights='noisy-student'
+        xx = model(weights="imagenet", include_top=False, input_shape=(112, 112, 3))  # or weights='noisy-student'
+    elif name.startswith("se_resnext"):
+        from keras_squeeze_excite_network import se_resnext
+
+        if name.endswith("101"):  # se_resnext101
+            depth = [3, 4, 23, 3]
+        else:  # se_resnext50
+            depth = [3, 4, 6, 3]
+        xx = se_resnext.SEResNextImageNet(weights="imagenet", input_shape=(112, 112, 3), include_top=False, depth=depth)
+
     else:
         return None
     # xx = keras.models.load_model('checkpoints/mobilnet_v1_basic_922667.h5', compile=False)
