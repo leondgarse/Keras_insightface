@@ -103,12 +103,12 @@ def prepare_dataset(
         lambda: train_data_gen, output_types=(tf.float32, tf.int32), output_shapes=([None, 112, 112, 3], [None, classes])
     )
     # train_ds = train_ds.cache()
-    if shuffle_buffer_size == None:
-        shuffle_buffer_size = batch_size * 100
+    # if shuffle_buffer_size == None:
+    #     shuffle_buffer_size = batch_size * 100
 
     # train_ds = train_ds.shuffle(buffer_size=shuffle_buffer_size)
-    if cache:
-        train_ds = train_ds.cache(cache) if isinstance(cache, str) else train_ds.cache()
+    # if cache:
+    #     train_ds = train_ds.cache(cache) if isinstance(cache, str) else train_ds.cache()
     if is_train:
         train_ds = train_ds.repeat()
     train_ds = train_ds.map(lambda xx, yy: ((tf.clip_by_value(xx, 0., 1.) - 0.5) * 2, yy), num_parallel_calls=AUTOTUNE)

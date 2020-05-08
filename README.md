@@ -55,7 +55,7 @@
   | MobileNetV2    | 0.993000 | 0.930429 | 0.930000 |
   | Mobilefacenet  | 0.994167 | 0.944143 | 0.942500 |
   | ResNet101V2    | 0.997000 | 0.973286 | 0.965667 |
-  | EfficientNetB4 | 0.997000 | 0.965714 | 0.959833 |
+  | EfficientNetB4 | 0.997167 | 0.967000 | 0.962500 |
 ***
 
 # Usage
@@ -103,6 +103,7 @@
 ## Training scripts
   - **Scripts**
     - [data.py](data.py) loads image data as `tf.dataset` for training. `Triplet` dataset is different from others.
+    - [data_gen.py](data_gen.py) NOT working, using `ImageDataGenerator` and `AutoAugment` to load images.
     - [evals.py](evals.py) contains evaluating callback using `bin` files.
     - [losses.py](losses.py) contains `softmax` / `arcface` / `centerloss` / `triplet` loss functions.
     - [mobile_facenet.py](mobile_facenet.py) / [mobilenetv3.py](mobilenetv3.py) basic model implementation. Other backbones like `ResNet101V2` is loaded from `keras.applications` in `train.buildin_models`.
@@ -450,12 +451,12 @@
     import plot
     # plot.hist_plot_split("./checkpoints/keras_resnet101_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
     customs = ["lfw", "agedb_30", "cfp_fp"]
-    epochs = [15, 10, 4, 15]
-    axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=None)
-    axes[0].lines[0].set_label('Resnet101, BS = 1024')
+    epochs = [15, 10, 4, 25]
+    axes, _ = plot.hist_plot_split("checkpoints/keras_EB4_emore_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=None)
+    axes[0].lines[0].set_label('EB4, BS = 840')
     pre_lines = len(axes[0].lines)
-    axes, _ = plot.hist_plot_split("checkpoints/keras_EB4_emore_hist.json", epochs, ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64", "Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, save=None, axes=axes)
-    axes[0].lines[pre_lines].set_label('EB4, BS = 840')
+    axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_hist.json", epochs, ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64", "Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, save=None, axes=axes)
+    axes[0].lines[pre_lines].set_label('Resnet101, BS = 1024')
     axes[0].legend(loc='upper right')
     axes[0].figure.savefig('./checkpoints/keras_EB4_emore_hist.svg')
     ```
@@ -512,15 +513,19 @@
     ```py
     import plot
     axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_256_hist.json', [3], [""], save=None, init_epoch=0, axes=None)
-    axes[0].lines[-2].set_label('label_smoothing=0, Softmax')
+    axes[0].lines[-2].set_label('LS=0, Softmax')
     axes, pre_1 = plot.hist_plot_split('checkpoints/keras_mobilenet_ls_0.1_256_hist.json', [3, 5], ["Softmax", "Arcface"], save=None, init_epoch=0, axes=axes)
-    axes[0].lines[-3].set_label('label_smoothing=0.1, Softmax')
+    axes[0].lines[-3].set_label('LS=0.1, Softmax')
     axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_ls_0_256_hist.json', [3], [""], save=None, init_epoch=8, pre_item=pre_1, axes=axes)
-    axes[0].lines[-2].set_label('label_smoothing=0, Arcface')
-    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_ls_0.1_256_hist.json', [3], ["Arcface"], save=None, init_epoch=8, pre_item=pre_1, axes=axes)
-    axes[0].lines[-2].set_label('label_smoothing=0.1, Arcface')
-    axes[0].legend()
-    axes[2].legend()
+    axes[0].lines[-2].set_label('LS=0, Arcface')
+    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_ls_0.1_256_hist.json', [3], [""], save=None, init_epoch=8, pre_item=pre_1, axes=axes)
+    axes[0].lines[-2].set_label('LS=0.1, Arcface')
+    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_randaug_256_hist.json', [3], [""], save=None, init_epoch=8, pre_item=pre_1, axes=axes)
+    axes[0].lines[-2].set_label('Random=3, LS=0, Arcface')
+    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_randaug_ls0.1_256_hist.json', [5], ["Arcface"], save=None, init_epoch=8, pre_item=pre_1, axes=axes)
+    axes[0].lines[-2].set_label('Random=3, LS=0.1, Arcface')
+    axes[0].legend(fontsize=8, loc='lower right')
+    axes[2].legend(fontsize=8, loc='lower center')
     axes[0].figure.savefig('./checkpoints/label_smoothing.svg')
     ```
     ![](checkpoints/label_smoothing.svg)

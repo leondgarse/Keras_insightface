@@ -52,7 +52,7 @@ def hist_plot(loss_lists, accuracy_lists, customs_dict, loss_names, save="", axe
         arrays_plot(axes[2], vv, label=kk, init_epoch=init_epoch, pre_value=pre_item.get(kk, 0))
         peak_scatter(axes[2], vv, np.argmax, init_epoch=init_epoch)
     axes[2].set_title(", ".join(customs_dict))
-    axes[2].legend(loc="lower right")
+    axes[2].legend(loc="lower right", fontsize=8)
 
     for ax in axes:
         ymin, ymax = ax.get_ylim()
