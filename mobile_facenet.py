@@ -21,7 +21,7 @@ from tensorflow.keras.models import Model
 
 def se_block(inputs, reduction=16):
     channel_axis = 1 if K.image_data_format() == "channels_first" else -1
-    filters = inputs._keras_shape[channel_axis]
+    filters = inputs.shape[channel_axis]
     nn = GlobalAveragePooling2D()(inputs)
     nn = Reshape((1, 1, filters))(nn)
     nn = Conv2D(filters // reduction, kernel_size=1)(nn)
@@ -33,7 +33,7 @@ def se_block(inputs, reduction=16):
 
 def se_block_2(inputs, reduction=16):
     channel_axis = 1 if K.image_data_format() == "channels_first" else -1
-    filters = inputs._keras_shape[channel_axis]
+    filters = inputs.shape[channel_axis]
     se = GlobalAveragePooling2D()(inputs)
     se = Dense(filters // reduction, activation="relu", use_bias=False)(se)
     se = Dense(filters, activation="sigmoid", use_bias=False)(se)

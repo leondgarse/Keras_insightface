@@ -72,8 +72,8 @@ def prepare_dataset(
         shuffle_buffer_size = batch_size * 100
 
     ds = ds.shuffle(buffer_size=shuffle_buffer_size)
-    if cache:
-        ds = ds.cache(cache) if isinstance(cache, str) else ds.cache()
+    # if cache:
+    #     ds = ds.cache(cache) if isinstance(cache, str) else ds.cache()
     if is_train:
         ds = ds.repeat()
     ds = ds.map(lambda xx, yy: process_path(xx, yy, classes, random_status=random_status), num_parallel_calls=AUTOTUNE)

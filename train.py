@@ -218,7 +218,7 @@ class Train:
         else:
             if self.train_ds == None or self.is_triplet_dataset == True:
                 print(">>>> Init softmax dataset...")
-                self.train_ds, self.steps_per_epoch, self.classes = data_gen.prepare_dataset(
+                self.train_ds, self.steps_per_epoch, self.classes = data.prepare_dataset(
                     self.data_path, batch_size=self.batch_size, random_status=self.random_status
                 )
                 self.is_triplet_dataset = False
