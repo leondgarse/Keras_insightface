@@ -363,35 +363,6 @@
     axes[0].figure.savefig('./checkpoints/keras_mobilefacenet_256_hist.svg')
     ```
     ![](checkpoints/keras_mobilefacenet_256_hist.svg)
-    ```py
-    import plot
-    # plot.hist_plot_split("./checkpoints/keras_mobile_facenet_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
-    customs = ["agedb_30", "cfp_fp"]
-    epochs = [15, 10, 4, 35]
-    _, axes = plt.subplots(1, 3, figsize=(24, 8))
-    axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=axes)
-    axes[0].lines[0].set_label('Mobilefacenet, BS=768')
-    pre_lines = len(axes[0].lines)
-
-    axes, pre_1 = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_hist.json', epochs, ["", ""], customs=customs, save=None, axes=axes)
-    axes[0].lines[pre_lines].set_label('se, BS = 640, LS=0.1')
-    pre_lines = len(axes[0].lines)
-    axes, _ = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_II_hist.json', [4, 35], ["", ""], customs=customs, save=None, init_epoch=25, pre_item=pre_1, axes=axes)
-    axes[0].lines[pre_lines].set_label('se, BS = 640, LS=0.1')
-    pre_lines = len(axes[0].lines)
-    axes, _ = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_III_hist.json', [4, 35], ["", ""], customs=customs, save=None, init_epoch=25, pre_item=pre_1, axes=axes)
-    axes[0].lines[pre_lines].set_label('se, BS = 640, LS=0')
-    pre_lines = len(axes[0].lines)
-
-    axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist_all.json", epochs, ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"], customs=customs, save=None, axes=axes)
-    axes[0].lines[pre_lines].set_label('Mobilefacenet, BS=160')
-
-    axes[0].plot((30, 50), (13.3198, 13.3198), 'k:')
-
-    axes[0].legend(loc='upper right')
-    axes[0].figure.savefig('./checkpoints/keras_mobilefacenet_256_hist.svg')
-    ```
-    ![](checkpoints/keras_mobilefacenet_256_hist.svg)
 ## Loss function test on Mobilefacenet epoch 44
   - For `Epoch 44`, trained steps are `15 epochs softmax + 10 epochs margin softmax + 4 epochs arcface bottleneck only + 15 epochs arcface`
   - Run a batch of `optimizer` + `loss` test. Each test run is `10 epochs`.
