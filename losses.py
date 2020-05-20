@@ -9,7 +9,7 @@ def scale_softmax(y_true, y_pred, scale=64.0, from_logits=True, label_smoothing=
     )
 
 
-def margin_softmax(y_true, y_pred, power=2, scale=0.4, from_logits=False, label_smoothing=0.1):
+def margin_softmax(y_true, y_pred, power=2, scale=0.4, from_logits=False, label_smoothing=0):
     margin_soft = tf.where(tf.cast(y_true, dtype=tf.bool), (y_pred ** power + y_pred * scale) / 2, y_pred)
     return tf.keras.losses.categorical_crossentropy(
         y_true, margin_soft, from_logits=from_logits, label_smoothing=label_smoothing

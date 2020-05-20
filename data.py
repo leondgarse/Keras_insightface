@@ -90,7 +90,7 @@ class Triplet_dataset:
         image_names_reg=None,
         image_classes_rule=None,
         batch_size=48,
-        image_per_class=4,
+        image_per_class=6,
         img_shape=(112, 112, 3),
         random_status=3,
     ):

@@ -326,7 +326,7 @@
     | TripletSemiHardLoss     | 0.0047  |          | 0.957500 | 0.520159   | 0.837857 | 0.441421      | 0.778833 | 0.626684        | 4400s      | 148ms    |
 ## Mobilefacenet
   - Training script is the last exampled one.
-  - **Record** Two models are trained, with `batch_size=160` and `batch_size=768` respectively.
+  - **Mobilefacenet Record** Two models are trained, with `batch_size=160` and `batch_size=768` respectively.
     | Loss               | Epochs | First epoch (batch_size=768)                        |
     | ------------------ | ------ | --------------------------------------------------- |
     | Softmax            | 15     | 12744s 2s/step - loss: 4.8241 - accuracy: 0.3282    |
@@ -334,6 +334,14 @@
     | Bottleneck Arcface | 4      | 4292s 566ms/step - loss: 21.6166 - accuracy: 0.8569 |
     | Arcface 64         | 35     | 12793s 2s/step - loss: 15.4268 - accuracy: 0.9441   |
 
+  - **se_mobilefacenet Record** Two models are trained, with `label_smoothing=0` and `label_smoothing=0.1` respectively, `batch_size = 640`
+    | Loss               | Epochs | First epoch (label_smoothing=0.1)                   | First epoch (label_smoothing=0)                     |
+    | ------------------ | ------ | --------------------------------------------------- | --------------------------------------------------- |
+    | Softmax            | 15     | 13256s 2s/step - loss: 5.9982 - accuracy: 0.3615    |                                                     |
+    | Bottleneck Arcface | 4      | 4111s 452ms/step - loss: 21.7145 - accuracy: 0.8624 | 4104s 451ms/step - loss: 20.7879 - accuracy: 0.8643 |
+    | Arcface 64         | 35     | 13043s 1s/step - loss: 16.7003 - accuracy: 0.9491   | 13092s 1s/step - loss: 15.0788 - accuracy: 0.9498   |
+
+  - **Plot**
     ```py
     import plot
     # plot.hist_plot_split("./checkpoints/keras_mobile_facenet_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
@@ -423,6 +431,7 @@
     | Arcface 64         | 65     | 11507s 2s/step - loss: 11.7330 - accuracy: 0.9774   | 6229s 2s/step - loss: 4.9359 - accuracy: 0.9896 |
     | Triplet            | 30     |                                                     | 5943s 3s/step - loss: 0.1149                    |
 
+  - **Plot**
     ```py
     """ Evaluating accuracy is not improving from my end point """
     import plot
@@ -467,6 +476,7 @@
     | Arcface 64         | 35     | 11047s 2s/step - loss: 11.3806 - accuracy: 0.9781   |
     | Triplet            | 30     |                                                     |
 
+  - **Plot**
     ```py
     """ Comparing EfficientNetB4 and ResNet101 """
     import plot
