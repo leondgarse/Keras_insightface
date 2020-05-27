@@ -41,6 +41,9 @@
   	- [Mobilefacenet](#mobilefacenet)
   	- [Loss function test on Mobilefacenet epoch 44](#loss-function-test-on-mobilefacenet-epoch-44)
   	- [ResNet101V2](#resnet101v2)
+  	- [EfficientNetB4](#efficientnetb4)
+  	- [Comparing early softmax training](#comparing-early-softmax-training)
+  	- [Label smoothing](#label-smoothing)
   - [Model conversion](#model-conversion)
   	- [ONNX](#onnx)
   	- [TFlite](#tflite)
@@ -839,4 +842,5 @@
   - [deepinsight/insightface](https://github.com/deepinsight/insightface)
   - [Github titu1994/keras-squeeze-excite-network](https://github.com/titu1994/keras-squeeze-excite-network)
   - [Github qubvel/EfficientNet](https://github.com/qubvel/efficientnet)
+  - [Github QiaoranC/tf_ResNeSt_RegNet_model](https://github.com/QiaoranC/tf_ResNeSt_RegNet_model)
 ***
