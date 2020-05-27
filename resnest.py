@@ -134,24 +134,54 @@ class ResNest:
     def _make_stem(self, input_tensor, stem_width=64, deep_stem=False):
         x = input_tensor
         if deep_stem:
-            x = Conv2D(stem_width, kernel_size=3, strides=2, padding="same", kernel_initializer="he_normal", use_bias=False, data_format="channels_last",)(x)
+            x = Conv2D(
+                stem_width,
+                kernel_size=3,
+                strides=2,
+                padding="same",
+                kernel_initializer="he_normal",
+                use_bias=False,
+                data_format="channels_last",
+            )(x)
 
             x = BatchNormalization(axis=self.channel_axis, epsilon=1.001e-5)(x)
             x = Activation(self.active)(x)
 
-            x = Conv2D(stem_width, kernel_size=3, strides=1, padding="same", kernel_initializer="he_normal", use_bias=False, data_format="channels_last",)(x)
+            x = Conv2D(
+                stem_width,
+                kernel_size=3,
+                strides=1,
+                padding="same",
+                kernel_initializer="he_normal",
+                use_bias=False,
+                data_format="channels_last",
+            )(x)
 
             x = BatchNormalization(axis=self.channel_axis, epsilon=1.001e-5)(x)
             x = Activation(self.active)(x)
 
-            x = Conv2D(stem_width * 2, kernel_size=3, strides=1, padding="same", kernel_initializer="he_normal", use_bias=False, data_format="channels_last",)(
-                x
-            )
+            x = Conv2D(
+                stem_width * 2,
+                kernel_size=3,
+                strides=1,
+                padding="same",
+                kernel_initializer="he_normal",
+                use_bias=False,
+                data_format="channels_last",
+            )(x)
 
             # x = BatchNormalization(axis=self.channel_axis,epsilon=1.001e-5)(x)
             # x = Activation(self.active)(x)
         else:
-            x = Conv2D(stem_width, kernel_size=7, strides=2, padding="same", kernel_initializer="he_normal", use_bias=False, data_format="channels_last",)(x)
+            x = Conv2D(
+                stem_width,
+                kernel_size=7,
+                strides=2,
+                padding="same",
+                kernel_initializer="he_normal",
+                use_bias=False,
+                data_format="channels_last",
+            )(x)
             # x = BatchNormalization(axis=self.channel_axis,epsilon=1.001e-5)(x)
             # x = Activation(self.active)(x)
         return x
@@ -216,14 +246,18 @@ class ResNest:
             out = atten * x
         return out
 
-    def _make_block(self, input_tensor, first_block=True, filters=64, stride=2, radix=1, avd=False, avd_first=False, is_first=False):
+    def _make_block(
+        self, input_tensor, first_block=True, filters=64, stride=2, radix=1, avd=False, avd_first=False, is_first=False
+    ):
         x = input_tensor
         inplanes = input_tensor.shape[-1]
         if stride != 1 or inplanes != filters * self.block_expansion:
             short_cut = input_tensor
             if self.avg_down:
                 if self.dilation == 1:
-                    short_cut = AveragePooling2D(pool_size=stride, strides=stride, padding="same", data_format="channels_last")(short_cut)
+                    short_cut = AveragePooling2D(pool_size=stride, strides=stride, padding="same", data_format="channels_last")(
+                        short_cut
+                    )
                 else:
                     short_cut = AveragePooling2D(pool_size=1, strides=1, padding="same", data_format="channels_last")(short_cut)
                 short_cut = Conv2D(
@@ -251,7 +285,15 @@ class ResNest:
             short_cut = input_tensor
 
         group_width = int(filters * (self.bottleneck_width / 64.0)) * self.cardinality
-        x = Conv2D(group_width, kernel_size=1, strides=1, padding="same", kernel_initializer="he_normal", use_bias=False, data_format="channels_last",)(x)
+        x = Conv2D(
+            group_width,
+            kernel_size=1,
+            strides=1,
+            padding="same",
+            kernel_initializer="he_normal",
+            use_bias=False,
+            data_format="channels_last",
+        )(x)
         x = BatchNormalization(axis=self.channel_axis, epsilon=1.001e-5)(x)
         x = Activation(self.active)(x)
 
@@ -266,7 +308,15 @@ class ResNest:
             x = avd_layer(x)
 
         if radix >= 1:
-            x = self._SplAtConv2d(x, filters=group_width, kernel_size=3, stride=stride, dilation=self.dilation, groups=self.cardinality, radix=radix,)
+            x = self._SplAtConv2d(
+                x,
+                filters=group_width,
+                kernel_size=3,
+                stride=stride,
+                dilation=self.dilation,
+                groups=self.cardinality,
+                radix=radix,
+            )
         else:
             x = Conv2D(
                 group_width,
@@ -300,7 +350,9 @@ class ResNest:
         m2 = Activation(self.active)(m2)
         return m2
 
-    def _make_block_basic(self, input_tensor, first_block=True, filters=64, stride=2, radix=1, avd=False, avd_first=False, is_first=False):
+    def _make_block_basic(
+        self, input_tensor, first_block=True, filters=64, stride=2, radix=1, avd=False, avd_first=False, is_first=False
+    ):
         """Conv2d_BN_Relu->Bn_Relu_Conv2d
         """
         x = input_tensor
@@ -312,15 +364,29 @@ class ResNest:
         if stride != 1 or inplanes != filters * self.block_expansion:
             if self.avg_down:
                 if self.dilation == 1:
-                    short_cut = AveragePooling2D(pool_size=stride, strides=stride, padding="same", data_format="channels_last")(short_cut)
+                    short_cut = AveragePooling2D(pool_size=stride, strides=stride, padding="same", data_format="channels_last")(
+                        short_cut
+                    )
                 else:
                     short_cut = AveragePooling2D(pool_size=1, strides=1, padding="same", data_format="channels_last")(short_cut)
                 short_cut = Conv2D(
-                    filters, kernel_size=1, strides=1, padding="same", kernel_initializer="he_normal", use_bias=False, data_format="channels_last",
+                    filters,
+                    kernel_size=1,
+                    strides=1,
+                    padding="same",
+                    kernel_initializer="he_normal",
+                    use_bias=False,
+                    data_format="channels_last",
                 )(short_cut)
             else:
                 short_cut = Conv2D(
-                    filters, kernel_size=1, strides=stride, padding="same", kernel_initializer="he_normal", use_bias=False, data_format="channels_last",
+                    filters,
+                    kernel_size=1,
+                    strides=stride,
+                    padding="same",
+                    kernel_initializer="he_normal",
+                    use_bias=False,
+                    data_format="channels_last",
                 )(short_cut)
 
         group_width = int(filters * (self.bottleneck_width / 64.0)) * self.cardinality
@@ -335,7 +401,15 @@ class ResNest:
             x = avd_layer(x)
 
         if radix >= 1:
-            x = self._SplAtConv2d(x, filters=group_width, kernel_size=3, stride=stride, dilation=self.dilation, groups=self.cardinality, radix=radix,)
+            x = self._SplAtConv2d(
+                x,
+                filters=group_width,
+                kernel_size=3,
+                stride=stride,
+                dilation=self.dilation,
+                groups=self.cardinality,
+                radix=radix,
+            )
         else:
             x = Conv2D(
                 filters,
@@ -371,22 +445,40 @@ class ResNest:
         x = input_tensor
         if self.using_basic_block is True:
             x = self._make_block_basic(
-                x, first_block=True, filters=filters, stride=stride, radix=self.radix, avd=self.avd, avd_first=self.avd_first, is_first=is_first,
+                x,
+                first_block=True,
+                filters=filters,
+                stride=stride,
+                radix=self.radix,
+                avd=self.avd,
+                avd_first=self.avd_first,
+                is_first=is_first,
             )
             # print('0',x.shape)
 
             for i in range(1, blocks):
-                x = self._make_block_basic(x, first_block=False, filters=filters, stride=1, radix=self.radix, avd=self.avd, avd_first=self.avd_first)
+                x = self._make_block_basic(
+                    x, first_block=False, filters=filters, stride=1, radix=self.radix, avd=self.avd, avd_first=self.avd_first
+                )
                 # print(i,x.shape)
 
         elif self.using_basic_block is False:
             x = self._make_block(
-                x, first_block=True, filters=filters, stride=stride, radix=self.radix, avd=self.avd, avd_first=self.avd_first, is_first=is_first,
+                x,
+                first_block=True,
+                filters=filters,
+                stride=stride,
+                radix=self.radix,
+                avd=self.avd,
+                avd_first=self.avd_first,
+                is_first=is_first,
             )
             # print('0',x.shape)
 
             for i in range(1, blocks):
-                x = self._make_block(x, first_block=False, filters=filters, stride=1, radix=self.radix, avd=self.avd, avd_first=self.avd_first)
+                x = self._make_block(
+                    x, first_block=False, filters=filters, stride=1, radix=self.radix, avd=self.avd, avd_first=self.avd_first
+                )
                 # print(i,x.shape)
         return x
 
