@@ -20,21 +20,25 @@ for gpu in gpus:
 
 
 def buildin_models(name, dropout=1, emb_shape=512, **kwargs):
+    name = name.lower()
     """ Basic model """
-    if name == "MobileNet":
+    if name == "mobilenet":
         xx = keras.applications.MobileNet(input_shape=(112, 112, 3), include_top=False, weights=None, **kwargs)
-    elif name == "MobileNetV2":
+    elif name == "mobilenetv2":
         xx = keras.applications.MobileNetV2(input_shape=(112, 112, 3), include_top=False, weights=None, **kwargs)
-    elif name == "ResNet50V2":
+    elif name == "resnet50v2":
         xx = keras.applications.ResNet50V2(input_shape=(112, 112, 3), include_top=False, weights="imagenet", **kwargs)
-    elif name == "ResNet101V2":
+    elif name == "resnet101v2":
         xx = keras.applications.ResNet101V2(input_shape=(112, 112, 3), include_top=False, weights="imagenet", **kwargs)
-    elif name == "NASNetMobile":
+    elif name == "nasnetmobile":
         xx = keras.applications.NASNetMobile(input_shape=(112, 112, 3), include_top=False, weights=None, **kwargs)
-    elif name.startswith("EfficientNet"):
-        import efficientnet.tfkeras as efntf
+    elif name.startswith("efficientnet"):
+        if "-dev" in tf.__version__:
+            import tensorflow.keras.applications.efficientnet as efntf
+        else:
+            import efficientnet.tfkeras as efntf
 
-        if name[-2] == "B":
+        if name[-2] == "b":
             compound_scale = int(name[-1])
             models = [
                 efntf.EfficientNetB0,
@@ -58,7 +62,13 @@ def buildin_models(name, dropout=1, emb_shape=512, **kwargs):
         else:  # se_resnext50
             depth = [3, 4, 6, 3]
         xx = se_resnext.SEResNextImageNet(weights="imagenet", input_shape=(112, 112, 3), include_top=False, depth=depth)
+    elif name.lower().startswith("resnest"):
+        import resnest
 
+        if name == "resnest50":
+            xx = resnest.ResNest50(input_shape=(112, 112, 3))
+        else:
+            xx = resnest.ResNest101(input_shape=(112, 112, 3))
     else:
         return None
     # xx = keras.models.load_model('checkpoints/mobilnet_v1_basic_922667.h5', compile=False)

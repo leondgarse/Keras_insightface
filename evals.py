@@ -80,9 +80,9 @@ class eval_callback(tf.keras.callbacks.Callback):
                 if self.model is not None and len(self.model.history.__dict__.get("epoch", [])) != 0
                 else 0
             )
-            cur_step = "%d_batch_%d" % (cur_epoch, cur_step)
+            cur_step = "%d_batch_%d" % (cur_epoch + 1, cur_step)
         else:
-            cur_step = str(cur_step)
+            cur_step = str(cur_step + 1)
         dists = []
         tf.print("")
         if self.is_distribute:

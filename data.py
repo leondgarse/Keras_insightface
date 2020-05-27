@@ -47,7 +47,7 @@ def process_path(file_path, label, classes=0, img_shape=(112, 112), random_statu
     if random_status >= 3:
         img = tf.image.random_crop(img, [100, 100, 3])
         img = tf.image.resize(img, img_shape)
-    img = (tf.clip_by_value(img, 0., 1.) - 0.5) * 2
+    img = (tf.clip_by_value(img, 0.0, 1.0) - 0.5) * 2
     return img, label
 
 
@@ -138,7 +138,7 @@ class Triplet_dataset:
 
     def process_batch_path(self, image_name_batch):
         image_names = tf.reshape(image_name_batch, [-1])
-        if '-dev' in tf.__version__:
+        if "-dev" in tf.__version__:
             images, _ = tf.map_fn(self.process_path, image_names, fn_output_signature=(tf.float32, tf.int32))
             labels = tf.map_fn(self.get_label, image_names, fn_output_signature=tf.int32)
         else:

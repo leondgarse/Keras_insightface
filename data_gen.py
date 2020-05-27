@@ -71,9 +71,9 @@ def prepare_dataset(
                 brightness_range=(1.0 - random_status * 0.1, 1.0 + random_status * 0.1),
                 shear_range=random_status * 5,
                 zoom_range=random_status * 0.15,
-                fill_mode='constant',
+                fill_mode="constant",
                 cval=0,
-                preprocessing_function=lambda img: image_aug_random(img, random_status)
+                preprocessing_function=lambda img: image_aug_random(img, random_status),
             )
         else:
             from autoaugment import ImageNetPolicy
@@ -111,7 +111,7 @@ def prepare_dataset(
     #     train_ds = train_ds.cache(cache) if isinstance(cache, str) else train_ds.cache()
     if is_train:
         train_ds = train_ds.repeat()
-    train_ds = train_ds.map(lambda xx, yy: ((tf.clip_by_value(xx, 0., 1.) - 0.5) * 2, yy), num_parallel_calls=AUTOTUNE)
+    train_ds = train_ds.map(lambda xx, yy: ((tf.clip_by_value(xx, 0.0, 1.0) - 0.5) * 2, yy), num_parallel_calls=AUTOTUNE)
     train_ds = train_ds.prefetch(buffer_size=AUTOTUNE)
 
     return train_ds, steps_per_epoch, classes
