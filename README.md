@@ -55,7 +55,7 @@
 ***
 
 # Current accuracy
-  - Rerunning all with `label smothing`.
+  - Rerunning all with `label smoothing`.
 
   | Model backbone   | lfw      | cfp_fp   | agedb_30 | Epochs |
   | ---------------- | -------- | -------- | -------- | ------ |
@@ -135,7 +135,7 @@
     basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="mobile_facenet_256")
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, batch_size=768, random_status=0)
+    tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, batch_size=768, random_status=3)
     sch = [
       {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "optimizer": "nadam", "epoch": 25},
       # {"loss": losses.margin_softmax, "epoch": 10},
@@ -151,7 +151,7 @@
     import losses, data, evals, myCallbacks, mobile_facenet
     # Dataset
     data_path = '/datasets/faces_emore_112x112_folders'
-    train_ds, steps_per_epoch, classes = data.prepare_dataset(data_path, batch_size=512, random_status=0)
+    train_ds, steps_per_epoch, classes = data.prepare_dataset(data_path, batch_size=512, random_status=3)
     # Model
     basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="mobile_facenet_256")
     model_output = keras.layers.Dense(classes, activation="softmax")(basic_model.outputs[0])
@@ -200,7 +200,7 @@
     import train
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, 'keras_mobilefacenet_256_II.h5', eval_paths, basic_model=-2, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=768, random_status=0, custom_objects={'margin_softmax': losses.margin_softmax})
+    tt = train.Train(data_path, 'keras_mobilefacenet_256_II.h5', eval_paths, basic_model=-2, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=768, random_status=3, custom_objects={'margin_softmax': losses.margin_softmax})
     sch = [
       # {"loss": keras.losses.categorical_crossentropy, "optimizer": "nadam", "epoch": 15},
       {"loss": losses.margin_softmax, "epoch": 6},
@@ -306,7 +306,7 @@
     basic_model = train.buildin_models("MobileNet", dropout=0.4, emb_shape=256)
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, 'keras_mobilenet_256.h5', eval_paths, basic_model=basic_model, model=None, compile=False, lr_base=0.001, batch_size=128, random_status=0)
+    tt = train.Train(data_path, 'keras_mobilenet_256.h5', eval_paths, basic_model=basic_model, model=None, compile=False, lr_base=0.001, batch_size=128, random_status=3)
     sch = [{"loss": losses.ArcfaceLoss(), "optimizer": None, "epoch": 6}]
     tt.train(sch, 0)
     ```
@@ -317,7 +317,7 @@
     import train
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, 'keras_mobilenet_256_V.h5', eval_paths, basic_model="./checkpoints/keras_mobilenet_256_basic_agedb_30_epoch_6_0.900333.h5", model=None, compile=False, lr_base=0.001, batch_size=128, random_status=0)
+    tt = train.Train(data_path, 'keras_mobilenet_256_V.h5', eval_paths, basic_model="./checkpoints/keras_mobilenet_256_basic_agedb_30_epoch_6_0.900333.h5", model=None, compile=False, lr_base=0.001, batch_size=128, random_status=3)
 
     ''' Choose one loss function each time --> train one epoch --> reload'''
     sch = [{"loss": keras.losses.categorical_crossentropy, "optimizer": "adam", "epoch": 1}]
@@ -374,32 +374,15 @@
     customs = ["agedb_30", "cfp_fp"]
     epochs = [15, 10, 4, 35]
     _, axes = plt.subplots(1, 3, figsize=(24, 8))
-    axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=axes)
-    axes[0].lines[0].set_label('Mobilefacenet, BS=768')
-    pre_lines = len(axes[0].lines)
+    axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", epochs, customs=customs, axes=axes, fig_label="Mobilefacenet, BS=768")
+    axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist_all.json", epochs, customs=customs, axes=axes, fig_label="Mobilefacenet, BS=160")
 
-    axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist_all.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=axes)
-    axes[0].lines[pre_lines].set_label('Mobilefacenet, BS=160')
-    pre_lines = len(axes[0].lines)
-
-    axes, pre_1 = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_hist.json', epochs, ["Softmax", "Margin Softmax"], customs=customs, save=None, axes=axes)
-    axes[0].lines[pre_lines].set_label('se, BS = 640, LS=0.1')
-    pre_lines = len(axes[0].lines)
-    axes, _ = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_II_hist.json', [4, 35], ["", ""], customs=customs, save=None, init_epoch=25, pre_item=pre_1, axes=axes)
-    axes[0].lines[pre_lines].set_label('se, BS = 640, LS=0.1')
-    pre_lines = len(axes[0].lines)
-    axes, pre_2 = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_III_hist_E45.json', [4, 35], ["Bottleneck Arcface", "Arcface scale=64"], customs=customs, save=None, init_epoch=25, pre_item=pre_1, axes=axes)
-    axes[0].lines[pre_lines].set_label('se, BS = 640, LS=0')
-    pre_lines = len(axes[0].lines)
-    axes, _ = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_triplet_III_hist.json', [10, 10, 10, 20], ["Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, save=None, init_epoch=59, pre_item=pre_2, axes=axes)
-    axes[0].lines[pre_lines].set_label('se, BS = 640, triplet')
-
-    axes[0].plot((30, 50), (13.3198, 13.3198), 'k:')
-
-    axes[0].legend(loc='upper right')
-    axes[0].figure.savefig('./checkpoints/keras_mobilefacenet_256_hist.svg')
+    axes, pre_1 = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_hist.json', epochs, names=["Softmax", "Margin Softmax"], customs=customs, axes=axes, fig_label="se, BS = 640, LS=0.1")
+    axes, _ = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_II_hist.json', [4, 35], customs=customs, init_epoch=25, pre_item=pre_1, axes=axes, fig_label="se, BS = 640, LS=0.1")
+    axes, pre_2 = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_III_hist_E45.json', [4, 35], names=["Bottleneck Arcface", "Arcface scale=64"], customs=customs, init_epoch=25, pre_item=pre_1, axes=axes, fig_label="se, BS = 640, LS=0")
+    axes, _ = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_triplet_III_hist.json', [10, 10, 10, 20], names=["Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, init_epoch=59, pre_item=pre_2, axes=axes, save="", fig_label="se, BS = 640, triplet")
     ```
-    ![](checkpoints/keras_mobilefacenet_256_hist.svg)
+    ![](checkpoints/keras_se_mobile_facenet_emore_triplet_III_hist.svg)
 ## Loss function test on Mobilefacenet epoch 44
   - For `Epoch 44`, trained steps are `15 epochs softmax + 10 epochs margin softmax + 4 epochs arcface bottleneck only + 15 epochs arcface`
   - Run a batch of `optimizer` + `loss` test. Each test run is `10 epochs`.
@@ -421,28 +404,16 @@
   - **Result**
     ```py
     import plot
-    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_II_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, axes=None)
-    axes[0].lines[-2].set_label('S=32, lr=5e-5, nadam')
-    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_III_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, axes=axes)
-    axes[0].lines[-2].set_label('S=32, lr decay, nadam')
-    axes[0].legend()
-    axes[0].set_xticks(np.arange(41, 51))
-    axes[0].figure.savefig('./checkpoints/keras_mobilefacenet_256_III_hist.svg')
+    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_II_hist.json', [10], customs=["lr"], init_epoch=40, axes=None, fig_label="S=32, lr=5e-5, nadam")
+    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_III_hist.json', [10], customs=["lr"], init_epoch=40, axes=axes, save="", fig_label="S=32, lr decay, nadam")
     ```
     ![](checkpoints/keras_mobilefacenet_256_III_hist.svg)
     ```py
     import plot
-    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_IV_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, axes=None)
-    axes[0].lines[-2].set_label('S=64, lr decay, SGD')
-    axes, pre_1 = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VI_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=40, axes=axes)
-    axes[0].lines[-2].set_label('S=64, lr decay, nadam')
-    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VII_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=50, pre_item=pre_1, axes=axes)
-    axes[0].lines[-2].set_label('S=64, lr decay, nadam')
-    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VIII_hist.json', [10], [""], customs=["lr"], save=None, init_epoch=50, pre_item=pre_1, axes=axes)
-    axes[0].lines[-2].set_label('S=64, lr decay, adam')
-    axes[0].legend()
-    axes[0].set_xticks(np.arange(41, 61, 2))
-    axes[0].figure.savefig('./checkpoints/keras_mobilefacenet_256_VIII_hist.svg')
+    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_IV_hist.json', [10], customs=["lr"], init_epoch=40, axes=None, fig_label="S=64, lr decay, SGD")
+    axes, pre_1 = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VI_hist.json', [10], customs=["lr"], init_epoch=40, axes=axes, fig_label="S=64, lr decay, nadam")
+    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VII_hist.json', [10], customs=["lr"], init_epoch=50, pre_item=pre_1, axes=axes, fig_label="S=64, lr decay, nadam")
+    axes, _ = plot.hist_plot_split('./checkpoints/keras_mobilefacenet_256_VIII_hist.json', [10], customs=["lr"], init_epoch=50, pre_item=pre_1, axes=axes, save="", fig_label="S=64, lr decay, adam")
     ```
     ![](checkpoints/keras_mobilefacenet_256_VIII_hist.svg)
 ## ResNet101V2
@@ -451,13 +422,13 @@
     basic_model = train.buildin_models("ResNet101V2", dropout=0.4, emb_shape=512)
     tt = train.Train(data_path, 'keras_resnet101_512.h5', eval_paths, basic_model=basic_model, batch_size=1024)
     ```
-  - **Record** Two models are trained, with `batch_size=128` and `batch_size=1024` respectively.
-    | Loss               | epochs | First epoch (batch_size=1024)                       | First epoch (2 GPUs, batch_size=2048)           |
+  - **Record** Two models are trained, with `batch_size=1024` and `batch_size=896, label_smoothing=0.1` respectively.
+    | Loss               | epochs | First epoch (batch_size=896)                        | First epoch (2 GPUs, batch_size=1792)           |
     | ------------------ | ------ | --------------------------------------------------- | ----------------------------------------------- |
     | Softmax            | 25     | 11272s 2s/step - loss: 4.6730 - accuracy: 0.5484    |                                                 |
-    | Bottleneck Arcface | 4      | 4627s 814ms/step - loss: 18.5677 - accuracy: 0.9113 |                                                 |
-    | Arcface 64         | 65     | 11507s 2s/step - loss: 11.7330 - accuracy: 0.9774   | 6229s 2s/step - loss: 4.9359 - accuracy: 0.9896 |
-    | Triplet            | 30     |                                                     | 5943s 3s/step - loss: 0.1149                    |
+    | Bottleneck Arcface | 4      | 4053s 624ms/step - loss: 16.5645 - accuracy: 0.9414 |                                                 |
+    | Arcface 64         | 35     | 11181s 2s/step - loss: 10.8983 - accuracy: 0.9870   |                                                 |
+    | Triplet            | 30     |                                                     |                                                 |
 
   - **Plot**
     ```py
@@ -465,37 +436,27 @@
     import plot
     # plot.hist_plot_split("./checkpoints/keras_resnet101_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
     customs = ["lfw", "agedb_30", "cfp_fp"]
+    epochs = [15, 10, 4, 65, 15, 5, 5, 15]
     history = ['./checkpoints/keras_resnet101_emore_hist.json', './checkpoints/keras_resnet101_emore_basic_hist.json']
-    axes, _ = plot.hist_plot_split(history, [15, 10, 4, 65, 15, 5, 5, 15], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64", "Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, save=None)
-
-    for line in [axes[0].lines[0], axes[1].lines[0], *(axes[2].lines[:3])]:
-        idd = 64
-        ax = line.axes
-        vvs = line.get_ydata()
-        vv = vvs[idd]
-        scale_min, scale_max = ax.get_ylim()
-        scale = (scale_max - scale_min) / 20
-        vvmin = max(vvs.min(), vv - scale)
-        vvmax = min(vvs.max(), vv + scale)
-        ax.plot([idd, idd], [vvmin, vvmax], 'k:')
-        ax.text(idd, vv, '({}, {:.4f})'.format(idd, vv), va="bottom", ha="left", fontsize=8)
-    axes[0].figure.savefig('./checkpoints/keras_resnet101_emore_hist.svg')
+    axes, _ = plot.hist_plot_split(history, epochs, customs=customs, fig_label="ResNet101V2, BS=1024")
+    axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_II_hist.json", epochs, names=["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64", "Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, axes=axes, save="", fig_label='Resnet101, BS=896, label_smoothing=0.1')
     ```
-    ![](checkpoints/keras_resnet101_emore_hist.svg)
+    ![](checkpoints/keras_resnet101_emore_II_hist.svg)
     ```py
     """ Plot triplet loss only """
     import plot
     customs = ["lfw", "agedb_30", "cfp_fp"]
-    axes, _ = plot.hist_plot_split('./checkpoints/keras_resnet101_emore_basic_hist.json', [15, 5, 5, 15], ["Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, init_epoch=94)
+    axes, _ = plot.hist_plot_split('./checkpoints/keras_resnet101_emore_basic_hist.json', [15, 5, 5, 15], names=["Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, init_epoch=94, save="", fig_label="ResNet101V2 Triplet")
     ```
     ![](checkpoints/keras_resnet101_emore_basic_hist.svg)
 ## EfficientNetB4
-  - **Record**
+  - **Training script**
     ```py
     with tf.distribute.MirroredStrategy().scope():
         basic_model = train.buildin_models('EfficientNetB4', 0.4, 512)
-        tt = train.Train(data_path, 'keras_EB4_emore.h5', eval_paths, basic_model=basic_model, batch_size=420, random_status=0)
+        tt = train.Train(data_path, 'keras_EB4_emore.h5', eval_paths, basic_model=basic_model, batch_size=420, random_status=3)
     ```
+  - **Record**
     | Loss               | epochs | First epoch (batch_size=420)                        | First epoch (2 GPUs, batch_size=840)                |
     | ------------------ | ------ | --------------------------------------------------- |--------------------------------------------------- |
     | Softmax            | 25     | 17404s 1s/step - loss: 4.4620 - accuracy: 0.5669    |                                                    |
@@ -507,45 +468,44 @@
     ```py
     """ Comparing EfficientNetB4 and ResNet101 """
     import plot
-    # plot.hist_plot_split("./checkpoints/keras_resnet101_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
     customs = ["lfw", "agedb_30", "cfp_fp"]
     epochs = [15, 10, 4, 30]
-    axes, _ = plot.hist_plot_split("checkpoints/keras_EB4_emore_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=None)
-    axes[0].lines[0].set_label('EB4, BS = 840')
-    pre_lines = len(axes[0].lines)
-    axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_hist.json", epochs, ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64", "Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, save=None, axes=axes)
-    axes[0].lines[pre_lines].set_label('Resnet101, BS = 1024')
-    axes[0].legend(loc='upper right')
-    axes[0].figure.savefig('./checkpoints/keras_EB4_emore_hist.svg')
+    axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_II_hist.json", epochs, customs=customs, axes=None, fig_label='Resnet101, BS=1024, label_smoothing=0.1')
+    axes, _ = plot.hist_plot_split("checkpoints/keras_EB4_emore_hist.json", epochs, names=["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64", "Triplet"], customs=customs, axes=axes, save="", fig_label='EB4, BS=840, label_smoothing=0.1')
     ```
     ![](checkpoints/keras_EB4_emore_hist.svg)
+## ResNeSt101
+  - **Training script** is similar with `Mobilefacenet`, just replace `basic_model` with `ResNet101V2`, and set a new `save_path`
+    ```py
+    basic_model = train.buildin_models("ResNeSt101", dropout=0.4, emb_shape=512)
+    tt = train.Train(data_path, 'keras_ResNest101_emore.h5', eval_paths, basic_model=basic_model, batch_size=600)
+    ```
+  - **Record** Two models are trained, with `batch_size=128` and `batch_size=1024` respectively.
+    | Loss               | epochs | First epoch (batch_size=600)                        | First epoch (2 GPUs, batch_size=1200)           |
+    | ------------------ | ------ | --------------------------------------------------- | ----------------------------------------------- |
+    | Softmax            | 25     | 16820s 2s/step - loss: 5.2594 - accuracy: 0.4863    |                                                 |
+    | Bottleneck Arcface | 4      |                                                     |                                                 |
+    | Arcface 64         | 65     |                                                     |                                                 |
+    | Triplet            | 30     |                                                     |                                                 |
+
+  - **Plot**
+    ```py
+    plot.hist_plot_split("./checkpoints/keras_ResNest101_emore_hist.json", [25, 4, 35], names=["Softmax", "Bottleneck Arcface", "Arcface scale=64"], save="", fig_label='ResNeSt101, BS=600')
+    ```
+    ![](checkpoints/keras_ResNest101_emore_hist.svg)
 ## Comparing early softmax training
   ```py
   import plot
   customs = ["agedb_30"]
   epochs = [15, 10]
-  _, axes = plt.subplots(1, 3, figsize=(24, 8))
-  axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=axes)
-  axes[0].lines[0].set_label('Resnet101, BS=1024')
-  pre_lines = len(axes[0].lines)
-  axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=axes)
-  axes[0].lines[pre_lines].set_label('Resnet101, BS=128')
-  pre_lines = len(axes[0].lines)
-  axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=axes)
-  axes[0].lines[pre_lines].set_label('Mobilefacenet, BS=768')
-  pre_lines = len(axes[0].lines)
-  axes, _ = plot.hist_plot_split("checkpoints/keras_EB4_emore_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=axes)
-  axes[0].lines[pre_lines].set_label('EB4, BS=420, label_smothing=0.1')
-  pre_lines = len(axes[0].lines)
-  axes, _ = plot.hist_plot_split("checkpoints/keras_se_mobile_facenet_emore_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=axes)
-  axes[0].lines[pre_lines].set_label('se_mobilefacenet, BS=680, label_smothing=0.1')
-  pre_lines = len(axes[0].lines)
-  axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_II_hist.json", epochs, ["", "", "", ""], customs=customs, save=None, axes=axes)
-  axes[0].lines[pre_lines].set_label('Resnet101, BS=960, label_smothing=0.1')
-  pre_lines = len(axes[0].lines)
-  axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist_all.json", epochs, ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"], customs=customs, save=None, axes=axes)
-  axes[0].lines[pre_lines].set_label('Mobilefacenet, BS=160')
-  axes[0].legend(loc='upper right')
+  axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist_all.json", epochs, customs=customs, axes=None, fig_label='Mobilefacenet, BS=160')
+  axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", epochs, customs=customs, axes=axes, fig_label='Mobilefacenet, BS=768')
+  axes, _ = plot.hist_plot_split("checkpoints/keras_se_mobile_facenet_emore_hist.json", epochs, customs=customs, axes=axes, fig_label='se_mobilefacenet, BS=680, label_smoothing=0.1')
+  axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", epochs, customs=customs, axes=axes, fig_label='Resnet101, BS=128')
+  axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_hist.json", epochs, customs=customs, axes=axes, fig_label='Resnet101, BS=1024')
+  axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_II_hist.json", epochs, customs=customs, axes=axes, fig_label='Resnet101, BS=960, label_smoothing=0.1')
+  axes, _ = plot.hist_plot_split("checkpoints/keras_ResNest101_emore_hist.json", epochs, customs=customs, axes=axes, fig_label='Resnest101, BS=600, label_smoothing=0.1')
+  axes, _ = plot.hist_plot_split("checkpoints/keras_EB4_emore_hist.json", epochs, names=["Softmax", "Margin Softmax"], customs=customs, axes=axes, fig_label='EB4, BS=420, label_smoothing=0.1')
 
   axes[0].plot((2, 15), (0.3807, 0.3807), 'k:')
   axes[1].plot((2, 15), (0.9206, 0.9206), 'k:')
@@ -577,19 +537,12 @@
   - **Result**
     ```py
     import plot
-    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_256_hist.json', [3], [""], save=None, init_epoch=0, axes=None)
-    axes[0].lines[-2].set_label('LS=0, Softmax')
-    axes, pre_1 = plot.hist_plot_split('checkpoints/keras_mobilenet_ls_0.1_256_hist.json', [3, 5], ["Softmax", "Arcface"], save=None, init_epoch=0, axes=axes)
-    axes[0].lines[-3].set_label('LS=0.1, Softmax')
-    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_ls_0_256_hist.json', [3], [""], save=None, init_epoch=8, pre_item=pre_1, axes=axes)
-    axes[0].lines[-2].set_label('LS=0, Arcface')
-    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_ls_0.1_256_hist.json', [3], [""], save=None, init_epoch=8, pre_item=pre_1, axes=axes)
-    axes[0].lines[-2].set_label('LS=0.1, Arcface')
-    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_randaug_256_hist.json', [3], [""], save=None, init_epoch=8, pre_item=pre_1, axes=axes)
-    axes[0].lines[-2].set_label('Random=3, LS=0, Arcface')
-    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_randaug_ls0.1_256_hist.json', [5], ["Arcface"], save=None, init_epoch=8, pre_item=pre_1, axes=axes)
-    axes[0].lines[-2].set_label('Random=3, LS=0.1, Arcface')
-    axes[0].legend(fontsize=8, loc='lower right')
+    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_256_hist.json', [3], init_epoch=0, axes=None, fig_label="LS=0, Softmax")
+    axes, pre_1 = plot.hist_plot_split('checkpoints/keras_mobilenet_ls_0.1_256_hist.json', [3, 5], names=["Softmax", "Arcface"], init_epoch=0, axes=axes, fig_label="LS=0.1, Softmax")
+    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_ls_0_256_hist.json', [3], init_epoch=8, pre_item=pre_1, axes=axes, fig_label="LS=0, Arcface")
+    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_ls_0.1_256_hist.json', [3], init_epoch=8, pre_item=pre_1, axes=axes, fig_label="LS=0.1, Arcface")
+    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_randaug_256_hist.json', [3], init_epoch=8, pre_item=pre_1, axes=axes, fig_label="Random=3, LS=0, Arcface")
+    axes, _ = plot.hist_plot_split('checkpoints/keras_mobilenet_arcface_randaug_ls0.1_256_hist.json', [5], names=["Arcface"], init_epoch=8, pre_item=pre_1, axes=axes, fig_label="Random=3, LS=0.1, Arcface")
     axes[2].legend(fontsize=8, loc='lower center')
     axes[0].figure.savefig('./checkpoints/label_smoothing.svg')
     ```
