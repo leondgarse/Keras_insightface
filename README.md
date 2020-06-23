@@ -42,6 +42,7 @@
   	- [Loss function test on Mobilefacenet epoch 44](#loss-function-test-on-mobilefacenet-epoch-44)
   	- [ResNet101V2](#resnet101v2)
   	- [EfficientNetB4](#efficientnetb4)
+  	- [ResNeSt101](#resnest101)
   	- [Comparing early softmax training](#comparing-early-softmax-training)
   	- [Label smoothing](#label-smoothing)
   - [Model conversion](#model-conversion)
@@ -60,9 +61,10 @@
   | Model backbone   | lfw      | cfp_fp   | agedb_30 | Epochs |
   | ---------------- | -------- | -------- | -------- | ------ |
   | Mobilefacenet    | 0.994167 | 0.944143 | 0.942500 | 50     |
-  | ResNet101V2      | 0.997000 | 0.973286 | 0.965667 | 100    |
+  | ResNet101V2      | 0.997333 | 0.976714 | 0.971000 | 110    |
   | EfficientNetB4   | 0.997167 | 0.967000 | 0.962500 | 54     |
   | se_mobilefacenet | 0.996333 | 0.964714 | 0.958833 | 100    |
+  | ResNeSt101       | 0.997667 | 0.981000 | 0.973333 | 100    |
 ***
 
 # Usage
@@ -136,6 +138,7 @@
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
     tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, batch_size=768, random_status=3)
+    # tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, decay_type='cos', lr_decay=100, lr_min=1e-6, batch_size=768, random_status=3)
     sch = [
       {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "optimizer": "nadam", "epoch": 25},
       # {"loss": losses.margin_softmax, "epoch": 10},
@@ -200,7 +203,7 @@
     import train
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, 'keras_mobilefacenet_256_II.h5', eval_paths, basic_model=-2, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=768, random_status=3, custom_objects={'margin_softmax': losses.margin_softmax})
+    tt = train.Train(data_path, 'keras_mobilefacenet_256_II.h5', eval_paths, basic_model=-2, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=768, random_status=3)
     sch = [
       # {"loss": keras.losses.categorical_crossentropy, "optimizer": "nadam", "epoch": 15},
       {"loss": losses.margin_softmax, "epoch": 6},
@@ -218,13 +221,17 @@
     - This is a callback collecting training `loss`, `accuracy` and `evaluating accuracy`.
     - On every epoch end, backup to the path `save_path` defined in `train.Train` with suffix `_hist.json`.
     - Reload when initializing, if the backup `<save_path>_hist.json` file exists.
-  - **Learning rate** uses `exponential decay`, `lr_base` and `lr_decay` in `train.Train` set it. Default is `lr_base=0.001, lr_decay=0.05`.
+  - **Learning rate**
+    - `Exponential decay`, default one, `lr_base` and `lr_decay` in `train.Train` set it. Default is `lr_base=0.001, lr_decay=0.05`.
+    - `Cosine decay`, use `decay_type="cos"` in `train.Train` to set it, and for `cosine`, `lr_decay` means `total decay steps`.
     ```py
     import myCallbacks
     epochs = np.arange(100)
     plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.1) for ii in epochs], label="lr 0.001, decay 0.1")
     plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.05) for ii in epochs], label="lr 0.001, decay 0.05")
     plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.02) for ii in epochs], label="lr 0.001, decay 0.02")
+    aa = myCallbacks.CosineLrScheduler(0.001, 100, 1e-6, 10)
+    plt.plot(epochs, [aa.on_epoch_begin(ii) for ii in epochs], label="Cosine, lr 0.001, decay_steps 120, min 1e-6")
     plt.legend()
     ```
     ![](learning_rate_decay.png)
@@ -427,28 +434,24 @@
     | ------------------ | ------ | --------------------------------------------------- | ----------------------------------------------- |
     | Softmax            | 25     | 11272s 2s/step - loss: 4.6730 - accuracy: 0.5484    |                                                 |
     | Bottleneck Arcface | 4      | 4053s 624ms/step - loss: 16.5645 - accuracy: 0.9414 |                                                 |
-    | Arcface 64         | 35     | 11181s 2s/step - loss: 10.8983 - accuracy: 0.9870   |                                                 |
-    | Triplet            | 30     |                                                     |                                                 |
+    | Arcface 64         | 35     | 11181s 2s/step - loss: 10.8983 - accuracy: 0.9870   | 6419s 2s/step - loss: 5.8991 - accuracy: 0.9896 |
+    | Triplet            | 30     |                                                     | 5758s 2s/step - loss: 0.1562                    |
 
   - **Plot**
     ```py
     """ Evaluating accuracy is not improving from my end point """
     import plot
+    # epochs = [15, 10, 4, 65, 15, 5, 5, 15]
+    # history = ['./checkpoints/keras_resnet101_emore_hist.json', './checkpoints/keras_resnet101_emore_basic_hist.json']
     # plot.hist_plot_split("./checkpoints/keras_resnet101_emore_hist.json", [15, 10, 4, 35], ["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64"])
+    # axes, _ = plot.hist_plot_split(history, epochs, names=["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64", "Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, axes=axes, save="", fig_label='Resnet101, BS=896, label_smoothing=0.1')
+    # axes, _ = plot.hist_plot_split(history, epochs, customs=customs, fig_label="ResNet101V2, BS=1024")
     customs = ["lfw", "agedb_30", "cfp_fp"]
-    epochs = [15, 10, 4, 65, 15, 5, 5, 15]
-    history = ['./checkpoints/keras_resnet101_emore_hist.json', './checkpoints/keras_resnet101_emore_basic_hist.json']
-    axes, _ = plot.hist_plot_split(history, epochs, customs=customs, fig_label="ResNet101V2, BS=1024")
-    axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_II_hist.json", epochs, names=["Softmax", "Margin Softmax", "Bottleneck Arcface", "Arcface scale=64", "Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, axes=axes, save="", fig_label='Resnet101, BS=896, label_smoothing=0.1')
+    history = ['./checkpoints/keras_resnet101_emore_II_hist.json', './checkpoints/keras_resnet101_emore_II_triplet_hist.json']
+    epochs = [25, 4, 35, 10, 10, 10, 10, 10]
+    axes, _ = plot.hist_plot_split(history, epochs, names=["Softmax", "Bottleneck Arcface", "Arcface scale=64", "Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2", "Triplet alpha=0.15"], customs=customs, save="", fig_label='Resnet101, BS=896, label_smoothing=0.1')
     ```
-    ![](checkpoints/keras_resnet101_emore_II_hist.svg)
-    ```py
-    """ Plot triplet loss only """
-    import plot
-    customs = ["lfw", "agedb_30", "cfp_fp"]
-    axes, _ = plot.hist_plot_split('./checkpoints/keras_resnet101_emore_basic_hist.json', [15, 5, 5, 15], names=["Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2"], customs=customs, init_epoch=94, save="", fig_label="ResNet101V2 Triplet")
-    ```
-    ![](checkpoints/keras_resnet101_emore_basic_hist.svg)
+    ![](checkpoints/keras_resnet101_emore_II_triplet_hist.svg)
 ## EfficientNetB4
   - **Training script**
     ```py
@@ -481,18 +484,24 @@
     tt = train.Train(data_path, 'keras_ResNest101_emore.h5', eval_paths, basic_model=basic_model, batch_size=600)
     ```
   - **Record** Two models are trained, with `batch_size=128` and `batch_size=1024` respectively.
-    | Loss               | epochs | First epoch (batch_size=600)                        | First epoch (2 GPUs, batch_size=1200)           |
-    | ------------------ | ------ | --------------------------------------------------- | ----------------------------------------------- |
-    | Softmax            | 25     | 16820s 2s/step - loss: 5.2594 - accuracy: 0.4863    |                                                 |
-    | Bottleneck Arcface | 4      |                                                     |                                                 |
-    | Arcface 64         | 65     |                                                     |                                                 |
-    | Triplet            | 30     |                                                     |                                                 |
+    | Loss               | epochs | First epoch (batch_size=600)                     | First epoch (2 GPUs, batch_size=1024)               |
+    | ------------------ | ------ | ------------------------------------------------ | --------------------------------------------------- |
+    | Softmax            | 25     | 16820s 2s/step - loss: 5.2594 - accuracy: 0.4863 |                                                     |
+    | Bottleneck Arcface | 4      |                                                  | 2835s 499ms/step - loss: 14.9653 - accuracy: 0.9517 |
+    | Arcface 64         | 65     |                                                  | 9165s 2s/step - loss: 9.4768 - accuracy: 0.9905     |
+    | Triplet            | 30     |                                                  | 8217s 2s/step - loss: 0.1169                        |
 
   - **Plot**
     ```py
-    plot.hist_plot_split("./checkpoints/keras_ResNest101_emore_hist.json", [25, 4, 35], names=["Softmax", "Bottleneck Arcface", "Arcface scale=64"], save="", fig_label='ResNeSt101, BS=600')
+    import plot
+    customs = ["lfw", "agedb_30", "cfp_fp"]
+    epochs = [25, 4, 35, 10, 10, 10, 10, 10]
+    history = ['./checkpoints/keras_resnet101_emore_II_hist.json', './checkpoints/keras_resnet101_emore_II_triplet_hist.json']
+    axes, _ = plot.hist_plot_split(history, epochs, customs=customs, fig_label='Resnet101, BS=896, label_smoothing=0.1')
+    hists = ['./checkpoints/keras_ResNest101_emore_arcface_60_hist.json', './checkpoints/keras_ResNest101_emore_triplet_hist.json']
+    axes, _ = plot.hist_plot_split(hists, epochs, names=["Softmax", "Bottleneck Arcface", "Arcface scale=64", "Triplet alpha=0.35", "Triplet alpha=0.3", "Triplet alpha=0.25", "Triplet alpha=0.2", "Triplet alpha=0.15"], customs=customs, axes=axes, save="", fig_label='ResNeSt101, BS=600')
     ```
-    ![](checkpoints/keras_ResNest101_emore_hist.svg)
+    ![](checkpoints/keras_ResNest101_emore_triplet_hist.svg)
 ## Comparing early softmax training
   ```py
   import plot

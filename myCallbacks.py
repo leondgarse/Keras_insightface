@@ -5,6 +5,7 @@ import json
 import numpy as np
 from tensorflow import keras
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, LearningRateScheduler
+from tensorflow.python.keras import backend as K
 
 
 class Gently_stop_callback(keras.callbacks.Callback):
@@ -50,20 +51,51 @@ class My_history(keras.callbacks.Callback):
             print("  %s = %s" % (kk, vv))
 
 
-def scheduler(epoch, lr_base, decay=0.05, lr_min=0):
-    lr = lr_base if epoch < 10 else lr_base * np.exp(decay * (10 - epoch))
+class CosineLrScheduler(keras.callbacks.Callback):
+    def __init__(self, lr_base, decay_steps, lr_min=0.0, warmup_iters=0, on_batch=False):
+        super(CosineLrScheduler, self).__init__()
+        self.lr_base, self.decay_steps, self.warmup_iters, self.on_batch = lr_base, decay_steps, warmup_iters, on_batch
+        self.decay_steps -= self.warmup_iters
+        self.schedule = keras.experimental.CosineDecay(self.lr_base, self.decay_steps, alpha=lr_min/lr_base)
+        if on_batch == True:
+            self.on_train_batch_begin = self.__lr_sheduler__
+        else:
+            self.on_epoch_begin = self.__lr_sheduler__
+
+    def __lr_sheduler__(self, iterNum, logs=None):
+        if iterNum < self.warmup_iters:
+            lr = self.lr_base
+        else:
+            lr = self.schedule(iterNum - self.warmup_iters)
+        if self.model is not None:
+            K.set_value(self.model.optimizer.lr, lr)
+        if self.on_batch == False:
+            print("\nLearning rate for epoch {} is {}".format(iterNum + 1, lr))
+        return lr
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        logs['lr'] = K.get_value(self.model.optimizer.lr)
+
+
+def scheduler(epoch, lr_base, decay_rate=0.05, lr_min=0):
+    lr = lr_base if epoch < 10 else lr_base * np.exp(decay_rate * (10 - epoch))
     lr = lr_min if lr < lr_min else lr
     print("\nLearning rate for epoch {} is {}".format(epoch + 1, lr))
     return lr
 
 
-def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_decay=0.05, lr_min=0):
+def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_decay=0.05, decay_type='exp', lr_min=0):
     checkpoint_base = "./checkpoints"
     if not os.path.exists(checkpoint_base):
         os.mkdir(checkpoint_base)
     checkpoint = os.path.join(checkpoint_base, checkpoint)
     model_checkpoint = ModelCheckpoint(checkpoint, verbose=1)
-    ss = lambda epoch: scheduler(epoch, lr, lr_decay, lr_min)
-    lr_scheduler = LearningRateScheduler(ss)
+
+    if decay_type.lower().startswith("exp"):
+        ss = lambda epoch: scheduler(epoch, lr, lr_decay, lr_min)
+        lr_scheduler = LearningRateScheduler(ss)
+    else:
+        lr_scheduler = CosineLrScheduler(lr_base=lr, decay_steps=lr_decay, lr_min=lr_min, warmup_iters=10, on_batch=False)
     my_history = My_history(os.path.splitext(checkpoint)[0] + "_hist.json", evals=evals)
     return [model_checkpoint, lr_scheduler, my_history, Gently_stop_callback()]
