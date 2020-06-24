@@ -31,33 +31,36 @@ def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None)
     classes = np.max(image_classes) + 1
     return image_names, image_classes, classes
 
-
-def process_path(file_path, label, classes=0, img_shape=(112, 112), random_status=2, one_hot_label=True):
+def read_image(file_path, label, classes=0, one_hot_label=True):
     if one_hot_label:
         label = tf.one_hot(label, depth=classes, dtype=tf.int32)
     img = tf.io.read_file(file_path)
     img = tf.image.decode_jpeg(img, channels=3)
     img = tf.image.convert_image_dtype(img, tf.float32)
+    return img, label
+
+def random_process_image(img, label, img_shape=(112, 112), random_status=2, random_crop=None):
     img = tf.image.random_flip_left_right(img)
     if random_status >= 1:
         img = tf.image.random_brightness(img, 0.1 * random_status)
     if random_status >= 2:
         img = tf.image.random_contrast(img, 1 - 0.1 * random_status, 1 + 0.1 * random_status)
         img = tf.image.random_saturation(img, 1 - 0.1 * random_status, 1 + 0.1 * random_status)
-    if random_status >= 3:
-        img = tf.image.random_crop(img, [100, 100, 3])
+    if random_crop is not None:
+        img = tf.image.random_crop(img, random_crop)
         img = tf.image.resize(img, img_shape)
     img = (tf.clip_by_value(img, 0.0, 1.0) - 0.5) * 2
     return img, label
-
 
 def prepare_dataset(
     data_path,
     image_names_reg=None,
     image_classes_rule=None,
     batch_size=128,
+    img_shape=(112, 112),
     random_status=2,
-    cache=True,
+    random_crop=None,
+    cache=False,
     shuffle_buffer_size=None,
     is_train=True,
 ):
@@ -66,17 +69,20 @@ def prepare_dataset(
         return None, 0
     print(len(image_names), len(image_classes), classes)
 
-    ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes))
     AUTOTUNE = tf.data.experimental.AUTOTUNE
+    ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes))
+    ds = ds.map(lambda xx, yy: read_image(xx, yy, classes), num_parallel_calls=AUTOTUNE)
+    if cache:
+        ds = ds.cache(cache) if isinstance(cache, str) else ds.cache()
+
     if shuffle_buffer_size == None:
         shuffle_buffer_size = batch_size * 100
 
     ds = ds.shuffle(buffer_size=shuffle_buffer_size)
-    if cache:
-        ds = ds.cache(cache) if isinstance(cache, str) else ds.cache()
     if is_train:
         ds = ds.repeat()
-    ds = ds.map(lambda xx, yy: process_path(xx, yy, classes, random_status=random_status), num_parallel_calls=AUTOTUNE)
+
+    ds = ds.map(lambda xx, yy: random_process_image(xx, yy, img_shape, random_status, random_crop), num_parallel_calls=AUTOTUNE)
     ds = ds.batch(batch_size)
     ds = ds.prefetch(buffer_size=AUTOTUNE)
     steps_per_epoch = np.ceil(len(image_names) / batch_size)
@@ -93,6 +99,7 @@ class Triplet_dataset:
         image_per_class=6,
         img_shape=(112, 112, 3),
         random_status=3,
+        random_crop=None,
     ):
         self.AUTOTUNE = tf.data.experimental.AUTOTUNE
         image_names, image_classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)
@@ -109,8 +116,8 @@ class Triplet_dataset:
         self.channels = img_shape[2] if len(img_shape) > 2 else 3
         print("The final train_dataset batch will be %s" % ([batch_size * image_per_class, *self.img_shape, self.channels]))
 
-        self.process_path = lambda img_name: process_path(
-            img_name, label=0, img_shape=self.img_shape, random_status=random_status, one_hot_label=False
+        self.process_path = lambda img_name: random_process_image(
+            *read_image(img_name, label=0, one_hot_label=False), img_shape=self.img_shape, random_status=random_status, random_crop=random_crop
         )
         self.get_label = lambda xx: tf.cast(tf.strings.to_number(tf.strings.split(xx, os.path.sep)[-2]), tf.int32)
         image_data = self.image_data_shuffle()

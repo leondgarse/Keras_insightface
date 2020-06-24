@@ -24,7 +24,6 @@ class Gently_stop_callback(keras.callbacks.Callback):
         print()
         return (0, sys.stdin.readline().strip()) if inputs else (-1, default)
 
-
 class My_history(keras.callbacks.Callback):
     def __init__(self, initial_file=None, evals=[]):
         super(My_history, self).__init__()

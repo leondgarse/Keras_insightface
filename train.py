@@ -19,19 +19,19 @@ for gpu in gpus:
 # strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
 
 
-def buildin_models(name, dropout=1, emb_shape=512, **kwargs):
+def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), **kwargs):
     name = name.lower()
     """ Basic model """
     if name == "mobilenet":
-        xx = keras.applications.MobileNet(input_shape=(112, 112, 3), include_top=False, weights=None, **kwargs)
+        xx = keras.applications.MobileNet(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name == "mobilenetv2":
-        xx = keras.applications.MobileNetV2(input_shape=(112, 112, 3), include_top=False, weights=None, **kwargs)
+        xx = keras.applications.MobileNetV2(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name == "resnet50v2":
-        xx = keras.applications.ResNet50V2(input_shape=(112, 112, 3), include_top=False, weights="imagenet", **kwargs)
+        xx = keras.applications.ResNet50V2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name == "resnet101v2":
-        xx = keras.applications.ResNet101V2(input_shape=(112, 112, 3), include_top=False, weights="imagenet", **kwargs)
+        xx = keras.applications.ResNet101V2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name == "nasnetmobile":
-        xx = keras.applications.NASNetMobile(input_shape=(112, 112, 3), include_top=False, weights=None, **kwargs)
+        xx = keras.applications.NASNetMobile(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name.startswith("efficientnet"):
         if "-dev" in tf.__version__:
             import tensorflow.keras.applications.efficientnet as efntf
@@ -53,7 +53,7 @@ def buildin_models(name, dropout=1, emb_shape=512, **kwargs):
             model = models[compound_scale]
         else:
             model = efntf.EfficientNetL2
-        xx = model(weights="imagenet", include_top=False, input_shape=(112, 112, 3))  # or weights='noisy-student'
+        xx = model(weights="imagenet", include_top=False, input_shape=input_shape)  # or weights='noisy-student'
     elif name.startswith("se_resnext"):
         from keras_squeeze_excite_network import se_resnext
 
@@ -61,14 +61,14 @@ def buildin_models(name, dropout=1, emb_shape=512, **kwargs):
             depth = [3, 4, 23, 3]
         else:  # se_resnext50
             depth = [3, 4, 6, 3]
-        xx = se_resnext.SEResNextImageNet(weights="imagenet", input_shape=(112, 112, 3), include_top=False, depth=depth)
+        xx = se_resnext.SEResNextImageNet(weights="imagenet", input_shape=input_shape, include_top=False, depth=depth)
     elif name.lower().startswith("resnest"):
         import resnest
 
         if name == "resnest50":
-            xx = resnest.ResNest50(input_shape=(112, 112, 3))
+            xx = resnest.ResNest50(input_shape=input_shape)
         else:
-            xx = resnest.ResNest101(input_shape=(112, 112, 3))
+            xx = resnest.ResNest101(input_shape=input_shape)
     else:
         return None
     # xx = keras.models.load_model('checkpoints/mobilnet_v1_basic_922667.h5', compile=False)
@@ -223,14 +223,14 @@ class Train:
                 print(">>>> Init triplet dataset...")
                 # batch_size = int(self.batch_size / 4 * 1.5)
                 batch_size = self.batch_size // 4
-                tt = data.Triplet_dataset(self.data_path, batch_size=batch_size, random_status=self.random_status)
+                tt = data.Triplet_dataset(self.data_path, batch_size=batch_size, random_status=self.random_status, random_crop=(100, 100, 3))
                 self.train_ds, self.steps_per_epoch = tt.train_dataset, tt.steps_per_epoch
                 self.is_triplet_dataset = True
         else:
             if self.train_ds == None or self.is_triplet_dataset == True:
                 print(">>>> Init softmax dataset...")
                 self.train_ds, self.steps_per_epoch, self.classes = data.prepare_dataset(
-                    self.data_path, batch_size=self.batch_size, random_status=self.random_status
+                    self.data_path, batch_size=self.batch_size, random_status=self.random_status, random_crop=(100, 100, 3)
                 )
                 self.is_triplet_dataset = False
 
