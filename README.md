@@ -1,6 +1,8 @@
 # ___Keras insightface___
   - Keras Insightface implementation.
   - This is still under working, many things are still testing here, so there may lots of errors atm.
+  - **Any advise is welcome**!
+  - **NOTE** Seems adding `TripletLoss` train will improve evaluating accuracy on `agedb_30` / `lfw`, but getting worse in real world test.
   - **Environment**
     ```py
     # $ ipython
@@ -47,6 +49,7 @@
   	- [Label smoothing](#label-smoothing)
   - [Model conversion](#model-conversion)
   	- [ONNX](#onnx)
+  	- [TensorRT](#tensorrt)
   	- [TFlite](#tflite)
   	- [MXNet format](#mxnet-format)
   	- [Pytorch and Caffe2](#pytorch-and-caffe2)
@@ -588,6 +591,8 @@
     params_file = "%s-%04d.params" % (prefix, epoch)
     converted_model_path = onnx_mxnet.export_model(sym_file, params_file, [(1, 3, 112, 112)], np.float32, "mx_output.onnx")
     ```
+## TensorRT
+  - [Atom_notebook TensorRT](https://github.com/leondgarse/Atom_notebook/blob/master/public/2019/08-19_tensorrt.md)
 ## TFlite
   - Convert to TFlite
     ```py

@@ -45,8 +45,10 @@ def prepare_dataset(
     data_path,
     image_names_reg=None,
     image_classes_rule=None,
+    img_shape=(112, 112),
     batch_size=128,
     random_status=2,
+    random_crop=None,
     cache=True,
     shuffle_buffer_size=None,
     is_train=True,
@@ -90,7 +92,7 @@ def prepare_dataset(
         x_col="image_names",
         y_col="image_classes",
         class_mode="categorical",
-        target_size=(112, 112),
+        target_size=img_shape,
         batch_size=batch_size,
         validate_filenames=False,
     )
@@ -100,7 +102,7 @@ def prepare_dataset(
     """ Convert to tf.data.Dataset """
     AUTOTUNE = tf.data.experimental.AUTOTUNE
     train_ds = tf.data.Dataset.from_generator(
-        lambda: train_data_gen, output_types=(tf.float32, tf.int32), output_shapes=([None, 112, 112, 3], [None, classes])
+        lambda: train_data_gen, output_types=(tf.float32, tf.int32), output_shapes=([None, *img_shape, 3], [None, classes])
     )
     # train_ds = train_ds.cache()
     # if shuffle_buffer_size == None:

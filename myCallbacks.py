@@ -53,17 +53,19 @@ class My_history(keras.callbacks.Callback):
 class CosineLrScheduler(keras.callbacks.Callback):
     def __init__(self, lr_base, decay_steps, lr_min=0.0, warmup_iters=0, on_batch=False):
         super(CosineLrScheduler, self).__init__()
-        self.lr_base, self.decay_steps, self.warmup_iters, self.on_batch = lr_base, decay_steps, warmup_iters, on_batch
+        self.lr_base, self.decay_steps, self.warmup_iters, self.on_batch, self.lr_min= lr_base, decay_steps, warmup_iters, on_batch, lr_min
         self.decay_steps -= self.warmup_iters
         self.schedule = keras.experimental.CosineDecay(self.lr_base, self.decay_steps, alpha=lr_min/lr_base)
         if on_batch == True:
             self.on_train_batch_begin = self.__lr_sheduler__
         else:
             self.on_epoch_begin = self.__lr_sheduler__
+        if warmup_iters != 0:
+            self.warmup_lr_func = lambda ii: lr_min + (lr_base - lr_min) * ii / warmup_iters
 
     def __lr_sheduler__(self, iterNum, logs=None):
         if iterNum < self.warmup_iters:
-            lr = self.lr_base
+            lr = self.warmup_lr_func(iterNum)
         else:
             lr = self.schedule(iterNum - self.warmup_iters)
         if self.model is not None:
