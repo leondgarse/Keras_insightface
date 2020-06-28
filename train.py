@@ -140,8 +140,8 @@ class Train:
         compile=True,
         batch_size=128,
         lr_base=0.001,
-        lr_decay=0.05,      # decay_rate for exponential, or decay_steps for cosine
-        decay_type='exponential',   # exponential / exp / cosine / cos
+        lr_decay=0.05,  # lr_decay < 1 for exponential, or it's cosine decay_steps
+        lr_on_batch=0,  # lr_on_batch < 1 for update lr on epoch, or update on every [NUM] batches
         lr_min=0,
         eval_freq=1,
         random_status=0,
@@ -211,7 +211,7 @@ class Train:
         if len(my_evals) != 0:
             my_evals[-1].save_model = os.path.splitext(save_path)[0]
         basic_callbacks = myCallbacks.basic_callbacks(
-            checkpoint=save_path, evals=my_evals, lr=lr_base, lr_decay=lr_decay, lr_min=lr_min, decay_type=decay_type
+            checkpoint=save_path, evals=my_evals, lr=lr_base, lr_decay=lr_decay, lr_min=lr_min, lr_on_batch=lr_on_batch
         )
         self.my_evals = my_evals
         self.basic_callbacks = basic_callbacks

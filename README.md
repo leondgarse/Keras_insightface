@@ -140,13 +140,13 @@
     basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="mobile_facenet_256")
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, batch_size=768, random_status=3)
-    # tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, decay_type='cos', lr_decay=100, lr_min=1e-6, batch_size=768, random_status=3)
+    tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, batch_size=640, random_status=3)
+    # tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, lr_decay=105, lr_min=1e-7, batch_size=640, random_status=3)
     sch = [
       {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "optimizer": "nadam", "epoch": 25},
       # {"loss": losses.margin_softmax, "epoch": 10},
-      {"loss": losses.ArcfaceLoss(), "bottleneckOnly": True, "epoch": 4},
-      {"loss": losses.ArcfaceLoss(), "epoch": 35},
+      {"loss": losses.ArcfaceLoss(), "bottleneckOnly": True, "centerloss": True, "epoch": 4},
+      {"loss": losses.ArcfaceLoss(), "centerloss": True, "epoch": 35},
       {"loss": losses.batch_hard_triplet_loss, "optimizer": "nadam", "epoch": 30},
     ]
     tt.train(sch, 0)
@@ -157,7 +157,7 @@
     import losses, data, evals, myCallbacks, mobile_facenet
     # Dataset
     data_path = '/datasets/faces_emore_112x112_folders'
-    train_ds, steps_per_epoch, classes = data.prepare_dataset(data_path, batch_size=512, random_status=3)
+    train_ds, steps_per_epoch, classes = data.prepare_dataset(data_path, batch_size=512, random_status=3, random_crop=(100, 100, 3))
     # Model
     basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="mobile_facenet_256")
     model_output = keras.layers.Dense(classes, activation="softmax")(basic_model.outputs[0])
@@ -226,16 +226,24 @@
     - Reload when initializing, if the backup `<save_path>_hist.json` file exists.
   - **Learning rate**
     - `Exponential decay`, default one, `lr_base` and `lr_decay` in `train.Train` set it. Default is `lr_base=0.001, lr_decay=0.05`.
-    - `Cosine decay`, use `decay_type="cos"` in `train.Train` to set it, and for `cosine`, `lr_decay` means `total decay steps`.
+    - `Cosine decay with restart`
+      - Set `lr_decay` with a value `> 1` will use `cosine lr decay`, in this case `lr_decay` means `total decay steps`.
+      - Set `lr_on_batch` with a value `> 1` will set decay on every `NUM` batches, default `lr_on_batch=0` means decay on every epoch.
+      - Other default values `restarts=3, t_mul=2.0, m_mul=0.5` are set in `myCallbacks.py`. See `keras.experimental.CosineDecayRestarts` for detail.
     ```py
     import myCallbacks
     epochs = np.arange(100)
-    plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.1) for ii in epochs], label="lr 0.001, decay 0.1")
-    plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.05) for ii in epochs], label="lr 0.001, decay 0.05")
-    plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.02) for ii in epochs], label="lr 0.001, decay 0.02")
-    aa = myCallbacks.CosineLrScheduler(0.001, 100, 1e-6, 10)
-    plt.plot(epochs, [aa.on_epoch_begin(ii) for ii in epochs], label="Cosine, lr 0.001, decay_steps 120, min 1e-6")
+    plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.1) for ii in epochs], label="lr=0.001, decay=0.1")
+    plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.05) for ii in epochs], label="lr=0.001, decay=0.05")
+    plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.02) for ii in epochs], label="lr=0.001, decay=0.02")
+    aa = myCallbacks.CosineLrScheduler(0.001, 100, 1e-6, 0, restarts=1)
+    plt.plot(epochs, [aa.on_epoch_begin(ii) for ii in epochs], label="Cosine, lr=0.001, decay_steps=100, min=1e-6")
+    aa = myCallbacks.CosineLrScheduler(0.001, 105, 1e-7, 0, restarts=3)
+    plt.plot(epochs, [aa.on_epoch_begin(ii) for ii in epochs], label="Cosine restart, lr=0.001, decay_steps=105, min=1e-7, restarts=3")
+    bb = myCallbacks.CosineLrScheduler(0.001, 105 * 1000, lr_min=1e-7, warmup_iters=5 * 1000, lr_on_batch=1000, restarts=4)
+    plt.plot([bb.on_train_batch_begin(ii * 1000) for ii in range(100)], label="Cosine restart, lr=0.001, decay_steps=105000, on batch, min=1e-7, warmup=5000, restarts=4")
     plt.legend()
+    plt.tight_layout()
     ```
     ![](learning_rate_decay.png)
   - **Evaluation**
@@ -258,7 +266,7 @@
     # '2.3.0-dev20200523'
     mm = tf.keras.applications.efficientnet.EfficientNetB4(include_top=False, weights='imagenet', input_shape=(112, 112, 3))
     ```
-    Others implementation can be found here [EfficientNet](https://github.com/qubvel/efficientnet)
+    Others implementation can be found here [Github qubvel/EfficientNet](https://github.com/qubvel/efficientnet)
     ```py
     !pip install -U git+https://github.com/qubvel/efficientnet
 
@@ -513,6 +521,7 @@
   axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist_all.json", epochs, customs=customs, axes=None, fig_label='Mobilefacenet, BS=160')
   axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", epochs, customs=customs, axes=axes, fig_label='Mobilefacenet, BS=768')
   axes, _ = plot.hist_plot_split("checkpoints/keras_se_mobile_facenet_emore_hist.json", epochs, customs=customs, axes=axes, fig_label='se_mobilefacenet, BS=680, label_smoothing=0.1')
+  axes, _ = plot.hist_plot_split("checkpoints/keras_se_mobile_facenet_emore_V_hist.json", epochs, customs=customs, axes=axes, fig_label='se_mobilefacenet, BS=560, cos decay, label_smoothing=0.1')
   axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", epochs, customs=customs, axes=axes, fig_label='Resnet101, BS=128')
   axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_hist.json", epochs, customs=customs, axes=axes, fig_label='Resnet101, BS=1024')
   axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_II_hist.json", epochs, customs=customs, axes=axes, fig_label='Resnet101, BS=960, label_smoothing=0.1')
