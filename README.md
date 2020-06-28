@@ -173,7 +173,7 @@
     model.fit(train_ds, epochs=15, steps_per_epoch=steps_per_epoch, callbacks=callbacks, verbose=1)
     ```
   - **train.Train** `basic_model` and `model` parameters. Combine these two parameters to initializing model from different sources. Sometimes may need `custom_objects` to load model.
-    | basic_model                              | model           | Use for                                    |
+    | basic_model                              | model           | Used for                                   |
     | ---------------------------------------- | --------------- | ------------------------------------------ |
     | model structure                          | None            | Scratch train                              |
     | model layer index for basic model output | model .h5 file  | Continue training from last saved model    |
@@ -184,7 +184,7 @@
     - **optimizer** is the optimizer used in this plan, `None` indicates using the last one.
     - **epoch** indicates how many epochs will be trained.
     - **bottleneckOnly** True / False, `True` will set `basic_model.trainable = False`, train the bottleneck layer only.
-    - **centerloss** True / False, if set `True`, `loss` will be the `logits_loss` add to `center_loss`, `loss` could also be an instance of `CenterLoss`.
+    - **centerloss** True / False, if set `True`, `loss` is an instance of `CenterLoss`, or the `logits_loss` added to `center_loss`.
     - **type** `softmax` / `arcface` / `triplet`, but mostly this could be guessed from `loss`.
     ```py
     # Scheduler examples
@@ -255,7 +255,7 @@
     # >>>> lfw evaluation max accuracy: 0.993167, thresh: 0.316535, previous max accuracy: 0.000000, PCA accuray = 0.993167 ± 0.003905
     # >>>> Improved = 0.993167
     ```
-    Default evaluating strategy is `on_epoch_end`. Setting a `eval_freq` greater than `1` in `train.Train` will also **add** an `on_batch_end` evaluation.
+    Default evaluating strategy is `on_epoch_end`. Setting an `eval_freq` greater than `1` in `train.Train` will also **add** an `on_batch_end` evaluation.
     ```py
     # Change evaluating strategy to `on_epoch_end`, as long as `on_batch_end` for every `1000` batch.
     tt = train.Train(data_path, 'keras_mobilefacenet_256.h5', eval_paths, basic_model=basic_model, eval_freq=1000)
