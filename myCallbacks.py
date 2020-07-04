@@ -38,6 +38,7 @@ class My_history(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
         for k, v in logs.items():
+            k = "accuracy" if "accuracy" in k else k
             self.history.setdefault(k, []).append(float(v))
         for ee in self.evals:
             self.history.setdefault(ee.test_names, []).append(float(ee.cur_acc))
@@ -107,4 +108,5 @@ def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_de
         # Cosine decay on epoch / batch
         lr_scheduler = CosineLrScheduler(lr_base=lr, decay_steps=lr_decay, lr_min=lr_min, warmup_iters=0, lr_on_batch=lr_on_batch, restarts=3)
     my_history = My_history(os.path.splitext(checkpoint)[0] + "_hist.json", evals=evals)
+    # tensor_board_log = keras.callbacks.TensorBoard(log_dir=os.path.splitext(checkpoint)[0] + '_logs')
     return [model_checkpoint, lr_scheduler, my_history, Gently_stop_callback()]

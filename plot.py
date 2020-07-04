@@ -108,6 +108,8 @@ def hist_plot_split(history, epochs, names=None, customs=[], save=None, axes=Non
     loss_lists = split_func(hh.pop("loss"))
     if "accuracy" in hh:
         accuracy_lists = split_func(hh.pop("accuracy"))
+    elif "logits_accuracy" in hh:
+        accuracy_lists = split_func(hh.pop("logits_accuracy"))
     else:
         accuracy_lists = []
     if len(customs) != 0:

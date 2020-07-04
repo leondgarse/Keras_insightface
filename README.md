@@ -118,7 +118,7 @@
     - [data_gen.py](data_gen.py) NOT working, accuracy wont increase. Using `ImageDataGenerator` and `AutoAugment` to load images.
     - [evals.py](evals.py) contains evaluating callback using `bin` files.
     - [losses.py](losses.py) contains `softmax` / `arcface` / `centerloss` / `triplet` loss functions.
-    - [mobile_facenet.py](mobile_facenet.py) / [mobilenetv3.py](mobilenetv3.py) basic model implementation. Other backbones like `ResNet101V2` is loaded from `keras.applications` in `train.buildin_models`.
+    - [backbones](backbones) basic model implementation of `mobilefacenet` / `mobilenetv3` / `resnest`. Other backbones like `ResNet101V2` is loaded from `keras.applications` in `train.buildin_models`.
     - [myCallbacks.py](myCallbacks.py) contains my other callbacks, like saving model / learning rate adjusting / save history.
     - [plot.py](plot.py) contains a history plot function.
     - [train.py](train.py) contains a `Train` class. It uses a `scheduler` to connect different `loss` / `optimizer` / `epochs`. The basic function is simple `load data --> model --> compile --> fit`.
@@ -128,7 +128,7 @@
   - **Training example**
     ```py
     from tensorflow import keras
-    import mobile_facenet
+    from backbones import mobile_facenet
     import losses
     import train
     # basic_model = train.buildin_models("MobileNet", dropout=0.4, emb_shape=256)
@@ -154,10 +154,12 @@
     `train.Train` is mostly functioned as a scheduler, the basic strategy is simple
     ```py
     from tensorflow import keras
-    import losses, data, evals, myCallbacks, mobile_facenet
+    import losses, data, evals, myCallbacks
+    from backbones import mobile_facenet
     # Dataset
     data_path = '/datasets/faces_emore_112x112_folders'
-    train_ds, steps_per_epoch, classes = data.prepare_dataset(data_path, batch_size=512, random_status=3, random_crop=(100, 100, 3))
+    train_ds = data.prepare_dataset(data_path, batch_size=512, random_status=3, random_crop=(100, 100, 3))
+    classes = train_ds.element_spec[-1].shape[-1]
     # Model
     basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="mobile_facenet_256")
     model_output = keras.layers.Dense(classes, activation="softmax")(basic_model.outputs[0])
@@ -170,7 +172,7 @@
     callbacks = my_evals + basic_callbacks
     # Compile and fit
     model.compile(optimizer='nadam', loss=losses.arcface_loss, metrics=["accuracy"])
-    model.fit(train_ds, epochs=15, steps_per_epoch=steps_per_epoch, callbacks=callbacks, verbose=1)
+    model.fit(train_ds, epochs=15, callbacks=callbacks, verbose=1)
     ```
   - **train.Train** `basic_model` and `model` parameters. Combine these two parameters to initializing model from different sources. Sometimes may need `custom_objects` to load model.
     | basic_model                              | model           | Used for                                   |
@@ -198,7 +200,18 @@
     sch = [{"loss": losses.batch_hard_triplet_loss, "optimizer": "adam", "epoch": 1}]
     sch = [{"loss": losses.BatchHardTripletLoss(0.3), "epoch": 1}]
     ```
-    Some combinations are errors, like `centerloss` + `triplet`, and training `bottleneckOnly` + `triplet` will change nothing.
+    Some more complicated combinations are also supported, but it may lead to nowhere...
+    ```py
+    # `softmax` / `arcface` + `triplet`
+    sch = [{"loss": losses.BatchHardTripletLoss(0.3, logits_loss=keras.losses.CategoricalCrossentropy(label_smoothing=0.1)), "epoch": 5}]
+    # `triplet` + `centerloss`
+    sch = [{"loss": losses.BatchHardTripletLoss(0.35), "centerloss": True, "epoch": 5}]
+    # `softmax` / `arcface` + `triplet` + `centerloss`
+    sch = [{"loss": losses.BatchHardTripletLoss(0.3, logits_loss=losses.ArcfaceLoss()), "centerloss": True, "epoch": 5}]
+    ```
+  - **Saving strategy**
+    - **Model** will save the latest one on every epoch end to local path `./checkpoints`, name is specified by `train.Train` `save_path`.
+    - **basic_model** will be saved monitoring on the last `eval_paths` evaluating `bin` item, and save the best only.
     ```py
     ''' Continue training from last saved file '''
     from tensorflow import keras
@@ -206,7 +219,7 @@
     import train
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, 'keras_mobilefacenet_256_II.h5', eval_paths, basic_model=-2, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=768, random_status=3)
+    tt = train.Train(data_path, 'keras_mobilefacenet_256_II.h5', eval_paths, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=768, random_status=3)
     sch = [
       # {"loss": keras.losses.categorical_crossentropy, "optimizer": "nadam", "epoch": 15},
       {"loss": losses.margin_softmax, "epoch": 6},
@@ -216,9 +229,6 @@
     ]
     tt.train(sch, 19) # 19 is the initial_epoch
     ```
-  - **Saving strategy**
-    - **Model** will save the latest one on every epoch end to local path `./checkpoints`, name is specified by `train.Train` `save_path`.
-    - **basic_model** will be saved monitoring on the last `eval_paths` evaluating `bin` item, and save the best only.
   - **Gently stop** is a callback to stop training gently. Input an `n` and `<Enter>` anytime during training, will set training stop on that epoch ends.
   - **My history**
     - This is a callback collecting training `loss`, `accuracy` and `evaluating accuracy`.
@@ -395,6 +405,9 @@
     axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", epochs, customs=customs, axes=axes, fig_label="Mobilefacenet, BS=768")
     axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist_all.json", epochs, customs=customs, axes=axes, fig_label="Mobilefacenet, BS=160")
 
+    axes, _ = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_VI_hist.json', epochs, customs=customs, axes=axes, fig_label="se, Cosine, BS = 640, LS=0.1")
+    axes, _ = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_VII_nadam_hist.json', epochs, customs=customs, axes=axes, fig_label="se, Cosine, BS = 640, nadam, LS=0.1", init_epoch=3)
+
     axes, pre_1 = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_hist.json', epochs, names=["Softmax", "Margin Softmax"], customs=customs, axes=axes, fig_label="se, BS = 640, LS=0.1")
     axes, _ = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_II_hist.json', [4, 35], customs=customs, init_epoch=25, pre_item=pre_1, axes=axes, fig_label="se, BS = 640, LS=0.1")
     axes, pre_2 = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_III_hist_E45.json', [4, 35], names=["Bottleneck Arcface", "Arcface scale=64"], customs=customs, init_epoch=25, pre_item=pre_1, axes=axes, fig_label="se, BS = 640, LS=0")
@@ -489,7 +502,7 @@
     ```
     ![](checkpoints/keras_EB4_emore_hist.svg)
 ## ResNeSt101
-  - **Training script** is similar with `Mobilefacenet`, just replace `basic_model` with `ResNet101V2`, and set a new `save_path`
+  - **Training script** is similar with `Mobilefacenet`, just replace `basic_model` with `ResNest101`, and set a new `save_path`
     ```py
     basic_model = train.buildin_models("ResNeSt101", dropout=0.4, emb_shape=512)
     tt = train.Train(data_path, 'keras_ResNest101_emore.h5', eval_paths, basic_model=basic_model, batch_size=600)
@@ -520,9 +533,15 @@
   epochs = [15, 10]
   axes, _ = plot.hist_plot_split("checkpoints/keras_mobilefacenet_256_hist_all.json", epochs, customs=customs, axes=None, fig_label='Mobilefacenet, BS=160')
   axes, _ = plot.hist_plot_split("checkpoints/keras_mobile_facenet_emore_hist.json", epochs, customs=customs, axes=axes, fig_label='Mobilefacenet, BS=768')
+
   axes, _ = plot.hist_plot_split("checkpoints/keras_se_mobile_facenet_emore_hist.json", epochs, customs=customs, axes=axes, fig_label='se_mobilefacenet, BS=680, label_smoothing=0.1')
-  axes, _ = plot.hist_plot_split("checkpoints/keras_se_mobile_facenet_emore_V_hist.json", epochs, customs=customs, axes=axes, fig_label='se_mobilefacenet, BS=560, cos decay, label_smoothing=0.1')
-  axes, _ = plot.hist_plot_split("./checkpoints/keras_resnet101_512_II_hist.json", epochs, customs=customs, axes=axes, fig_label='Resnet101, BS=128')
+  axes, _ = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_VI_hist.json', epochs, customs=customs, axes=axes, fig_label="se_mobilefacenet, Cosine, BS = 640, LS=0.1")
+  axes, _ = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_VII_nadam_hist.json', epochs, customs=customs, axes=axes, fig_label="se_mobilefacenet, Cosine, nadam, BS = 640, nadam, LS=0.1", init_epoch=3)
+  axes, _ = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_VIII_hist.json', epochs, customs=customs, axes=axes, fig_label="new se_mobilefacenet, Cosine, center, BS = 640, nadam, LS=0.1")
+  axes, _ = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_IX_hist.json', epochs, customs=customs, axes=axes, fig_label="new se_mobilefacenet, Cosine, no center, BS = 640, nadam, LS=0.1")
+  axes, _ = plot.hist_plot_split('checkpoints/keras_se_mobile_facenet_emore_X_hist.json', epochs, customs=customs, axes=axes, fig_label="new se_mobilefacenet, Cosine, center, leaky, BS = 640, nadam, LS=0.1")
+
+  axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_512_II_hist.json", epochs, customs=customs, axes=axes, fig_label='Resnet101, BS=128')
   axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_hist.json", epochs, customs=customs, axes=axes, fig_label='Resnet101, BS=1024')
   axes, _ = plot.hist_plot_split("checkpoints/keras_resnet101_emore_II_hist.json", epochs, customs=customs, axes=axes, fig_label='Resnet101, BS=960, label_smoothing=0.1')
   axes, _ = plot.hist_plot_split("checkpoints/keras_ResNest101_emore_hist.json", epochs, customs=customs, axes=axes, fig_label='Resnest101, BS=600, label_smoothing=0.1')
@@ -609,7 +628,7 @@
     # '1.15.0'
 
     import glob2
-    converter = tf.lite.TFLiteConverter.from_keras_model_file(glob2.glob('./keras_mobilefacenet_256_basic_*.h5')[0])
+    converter = tf.lite.TFLiteConverter.from_keras_model_file("checkpoints/keras_se_mobile_facenet_emore_triplet_basic_agedb_30_epoch_100_0.958333.h5")
     tflite_model = converter.convert()
     open('./model.tflite', 'wb').write(tflite_model)
     ```
@@ -734,20 +753,40 @@
     ```
   - **Convert**
     ```py
+    # tf save
+    mm = tf.keras.models.load_model("checkpoints/keras_se_mobile_facenet_emore_triplet_basic_agedb_30_epoch_100_0.958333.h5", compile=False)
+    json_config = mm.to_json()
+    with open('model/model_config.json', 'w') as json_file:
+        json_file.write(json_config)
+    mm.save_weights("model/weights_only.h5")
+
+    ''' Modify json file '''
+    # For tf15 / tf20 saved json file, delete '"ragged": false,'
+    !sed -i 's/"ragged": false, //' model/model_config.json
+    # For tf-nightly saved json file, also replace '"class_name": "Functional"' by '"class_name": "Model"'
+    !sed -i 's/"class_name": "Functional"/"class_name": "Model"/' model/model_config.json
+    ```
+    Start a new ipython session by `KERAS_BACKEND='mxnet' ipython`
+    ```py
+    # mxnet load
     import numpy as np
     import keras
+    # Using MXNet backend
     # from keras import backend as K
     # K.common.set_image_data_format('channels_first')
     from keras.initializers import glorot_normal, glorot_uniform
     from keras.utils import CustomObjectScope
-    with CustomObjectScope({'GlorotNormal': glorot_normal(), "GlorotUniform": glorot_uniform()}):
-        mm = keras.models.load_model('./checkpoints/keras_mobilefacenet_256_basic_agedb_30_epoch_39_0.942500.h5', compile=True)
 
-    bb = keras.models.Model(mm.inputs[0], mm.layers[-2].output) # Have to exclude the last `batch_norm` layer.
-    bb.compile(optimizer='adam', loss=keras.losses.categorical_crossentropy)
-    # mm.compiled = True
-    bb.predict(np.zeros((1, 112, 112, 3)))
-    keras.models.save_mxnet_model(model=bb, prefix='mm')
+    with open('model/model_config.json') as json_file:
+        json_config = json_file.read()
+    with CustomObjectScope({'GlorotNormal': glorot_normal(), "GlorotUniform": glorot_uniform()}):
+        new_model = keras.models.model_from_json(json_config)
+    new_model.load_weights('model/weights_only.h5')
+
+    new_model.predict(np.zeros((1, 112, 112, 3))) # MUST do a predict
+    # new_model.compile(optimizer='adam', loss=keras.losses.categorical_crossentropy)
+    new_model.compiled = True
+    keras.models.save_mxnet_model(model=new_model, prefix='mm')
     ```
   - **Test**
     ```py
@@ -758,7 +797,7 @@
     mod = mx.mod.Module(symbol=sym, data_names=['/input_11'], context=mx.cpu(), label_names=None)
     mod.bind(for_training=False, data_shapes=[('/input_11', (1, 112, 112, 3))], label_shapes=mod._label_shapes)
     mod.set_params(arg_params, aux_params, allow_missing=True)
-    data_iter = mx.io.NDArrayIter(np.zeros((1, 112, 112, 3)), None, 1)
+    data_iter = mx.io.NDArrayIter(np.ones((1, 112, 112, 3)), None, 1)
     mod.predict(data_iter)
     ```
 ## Pytorch and Caffe2

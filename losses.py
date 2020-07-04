@@ -112,6 +112,7 @@ class CenterLoss(tf.keras.losses.Loss):
         centers = tf.Variable(tf.zeros([num_classes, feature_dim]), trainable=False)
         if initial_file:
             if os.path.exists(initial_file):
+                print(">>>> Reload from center backup:", initial_file)
                 aa = np.load(initial_file)
                 centers.assign(aa)
             self.save_centers_callback = Save_Numpy_Callback(initial_file, centers)
@@ -123,7 +124,7 @@ class CenterLoss(tf.keras.losses.Loss):
         labels = tf.argmax(y_true, axis=1)
         centers_batch = tf.gather(self.centers, labels)
         # loss = tf.reduce_mean(tf.square(embedding - centers_batch))
-        loss = tf.reduce_mean(tf.square(embedding - centers_batch), axis=-1)
+        loss = tf.reduce_mean(tf.square(embedding - centers_batch), axis=-1) * self.factor
 
         # Update centers
         # diff = (1 - self.alpha) * (centers_batch - embedding)
@@ -138,9 +139,10 @@ class CenterLoss(tf.keras.losses.Loss):
         self.centers.assign(tf.tensor_scatter_nd_sub(self.centers, tf.expand_dims(labels, 1), diff))
         # centers_batch = tf.gather(self.centers, labels)
         if self.logits_loss:
-            return self.logits_loss(y_true, y_pred[:, self.feature_dim :]) + loss * self.factor
+            tf.print("\033[k - centerloss:", tf.reduce_mean(loss), end="")
+            return self.logits_loss(y_true, y_pred[:, self.feature_dim :]) + loss
         else:
-            return loss * self.factor
+            return loss
 
     def accuracy(self, y_true, y_pred):
         """ Accuracy function for logits only """
@@ -156,7 +158,7 @@ class CenterLoss(tf.keras.losses.Loss):
                 "alpha": self.alpha,
                 "factor": self.factor,
                 "initial_file": self.initial_file,
-                "logits_loss": self.logits_loss,
+                "logits_loss": tf.losses.serialize(self.logits_loss),
             }
         )
         return config
@@ -167,8 +169,9 @@ class CenterLoss(tf.keras.losses.Loss):
 
 
 def batch_hard_triplet_loss(labels, embeddings, alpha=0.35):
-    labels = tf.squeeze(labels)
-    labels.set_shape([None])
+    labels = tf.argmax(labels, axis=1)
+    # labels = tf.squeeze(labels)
+    # labels.set_shape([None])
     pos_mask = tf.equal(tf.expand_dims(labels, 0), tf.expand_dims(labels, 1))
     norm_emb = tf.nn.l2_normalize(embeddings, 1)
     dists = tf.matmul(norm_emb, tf.transpose(norm_emb))
@@ -180,11 +183,13 @@ def batch_hard_triplet_loss(labels, embeddings, alpha=0.35):
     hardest_neg_dist = tf.reduce_max(neg_dists, -1)
     basic_loss = hardest_neg_dist - hardest_pos_dist + alpha
     return tf.reduce_mean(tf.maximum(basic_loss, 0.0))
+    # return tf.maximum(basic_loss, 0.0)
 
 
 def batch_all_triplet_loss(labels, embeddings, alpha=0.35):
-    labels = tf.squeeze(labels)
-    labels.set_shape([None])
+    labels = tf.argmax(labels, axis=1)
+    # labels = tf.squeeze(labels)
+    # labels.set_shape([None])
     pos_mask = tf.equal(tf.expand_dims(labels, 0), tf.expand_dims(labels, 1))
     norm_emb = tf.nn.l2_normalize(embeddings, 1)
     dists = tf.matmul(norm_emb, tf.transpose(norm_emb))
@@ -199,38 +204,50 @@ def batch_all_triplet_loss(labels, embeddings, alpha=0.35):
     return pos_dists_loss + neg_dists_loss
 
 
-# Two helper class definitions
-class BatchHardTripletLoss(tf.keras.losses.Loss):
-    def __init__(self, alpha, **kwargs):
-        super(BatchHardTripletLoss, self).__init__(**kwargs)
-        self.alpha = alpha
+# TripletLoss helper class definitions
+class TripletLossWapper(tf.keras.losses.Loss):
+    def __init__(self, triplet_loss_func, alpha, feature_dim=512, factor=1.0, logits_loss=None, **kwargs):
+        super(TripletLossWapper, self).__init__(**kwargs)
+        self.alpha, self.feature_dim, self.factor, self.logits_loss = alpha, feature_dim, factor, logits_loss
+        self.triplet_loss_func = triplet_loss_func
 
     def call(self, y_true, y_pred):
-        return batch_hard_triplet_loss(y_true, y_pred, self.alpha)
+        if self.logits_loss is not None:
+            embedding = y_pred[:, : self.feature_dim]
+            logits = y_pred[:, self.feature_dim :]
+            # labels = tf.one_hot(tf.squeeze(y_true), depth=classes, dtype=tf.int32)
+            loss = self.triplet_loss_func(y_true, embedding, self.alpha) * self.factor
+            tf.print(" - tripletloss:", loss, end="")
+            return loss + self.logits_loss(y_true, logits)
+        else:
+            return self.triplet_loss_func(y_true, y_pred, self.alpha)
+
+    def accuracy(self, y_true, y_pred):
+        """ Accuracy function for logits only """
+        logits = y_pred[:, self.feature_dim :]
+        # labels = tf.one_hot(tf.squeeze(y_true), depth=classes, dtype=tf.int32)
+        return tf.keras.metrics.categorical_accuracy(y_true, logits)
 
     def get_config(self):
-        config = super(BatchHardTripletLoss, self).get_config()
-        config.update({"alpha": self.alpha})
+        config = super(TripletLossWapper, self).get_config()
+        config.update(
+            {
+                "alpha": self.alpha,
+                "feature_dim": self.feature_dim,
+                "factor": self.factor,
+                "logits_loss": tf.losses.serialize(self.logits_loss)
+            }
+        )
         return config
 
     @classmethod
     def from_config(cls, config):
         return cls(**config)
 
+class BatchHardTripletLoss(TripletLossWapper):
+    def __init__(self, alpha, feature_dim=512, factor=1.0, logits_loss=None, **kwargs):
+        super(BatchHardTripletLoss, self).__init__(batch_hard_triplet_loss, alpha, feature_dim, factor, logits_loss, **kwargs)
 
-class BatchAllTripletLoss(tf.keras.losses.Loss):
-    def __init__(self, alpha, **kwargs):
-        super(BatchAllTripletLoss, self).__init__(**kwargs)
-        self.alpha = alpha
-
-    def call(self, y_true, y_pred):
-        return batch_all_triplet_loss(y_true, y_pred, self.alpha)
-
-    def get_config(self):
-        config = super(BatchHardTripletLoss, self).get_config()
-        config.update({"alpha": self.alpha})
-        return config
-
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)
+class BatchAllTripletLoss(TripletLossWapper):
+    def __init__(self, alpha, feature_dim=512, factor=1.0, logits_loss=None, **kwargs):
+        super(BatchAllTripletLoss, self).__init__(batch_hard_triplet_loss, alpha, feature_dim, factor, logits_loss, **kwargs)
