@@ -6,7 +6,7 @@ import numpy as np
 from tensorflow import keras
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, LearningRateScheduler
 from tensorflow.python.keras import backend as K
-
+from tensorflow.python.keras.utils import losses_utils
 
 class Gently_stop_callback(keras.callbacks.Callback):
     def __init__(self, prompt="Continue? ([Y]/n)", time_out=3):
@@ -34,6 +34,7 @@ class My_history(keras.callbacks.Callback):
             self.history = {}
         self.evals = evals
         self.initial_file = initial_file
+        self.custom_obj = {}
 
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
@@ -42,6 +43,9 @@ class My_history(keras.callbacks.Callback):
             self.history.setdefault(k, []).append(float(v))
         for ee in self.evals:
             self.history.setdefault(ee.test_names, []).append(float(ee.cur_acc))
+        for kk, vv in self.custom_obj.items():
+            tt = losses_utils.compute_weighted_loss(vv())
+            self.history.setdefault(kk, []).append(tt)
         if self.initial_file:
             with open(self.initial_file, "w") as ff:
                 json.dump(self.history, ff)

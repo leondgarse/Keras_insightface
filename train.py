@@ -42,7 +42,8 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), **
         xx = keras.applications.NASNetMobile(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name.startswith("efficientnet"):
         if "-dev" in tf.__version__:
-            import tensorflow.keras.applications.efficientnet as efntf
+            # import tensorflow.keras.applications.efficientnet as efntf
+            import efficientnet.tfkeras as efntf
         else:
             import efficientnet.tfkeras as efntf
 
@@ -61,7 +62,7 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), **
             model = models[compound_scale]
         else:
             model = efntf.EfficientNetL2
-        xx = model(weights="imagenet", include_top=False, input_shape=input_shape)  # or weights='noisy-student'
+        xx = model(weights="noisy-student", include_top=False, input_shape=input_shape)  # or weights='imagenet'
     elif name.startswith("se_resnext"):
         from keras_squeeze_excite_network import se_resnext
 
@@ -356,6 +357,7 @@ class Train:
                         self.classes, feature_dim=feature_dim, factor=1.0, initial_file=initial_file, logits_loss=logits_loss
                     )
                     cur_loss = center_loss
+                    # self.my_hist.custom_obj["centerloss"] = lambda : cur_loss.centerloss
                 self.model = keras.models.Model(
                     self.model.inputs[0], keras.layers.concatenate([self.basic_model.outputs[0], self.model.outputs[-1]])
                 )

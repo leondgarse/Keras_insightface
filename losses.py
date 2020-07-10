@@ -139,7 +139,8 @@ class CenterLoss(tf.keras.losses.Loss):
         self.centers.assign(tf.tensor_scatter_nd_sub(self.centers, tf.expand_dims(labels, 1), diff))
         # centers_batch = tf.gather(self.centers, labels)
         if self.logits_loss:
-            tf.print("\033[k - centerloss:", tf.reduce_mean(loss), end="")
+            self.centerloss = tf.reduce_mean(loss)
+            tf.print("\033[k - centerloss:", self.centerloss, end="")
             return self.logits_loss(y_true, y_pred[:, self.feature_dim :]) + loss
         else:
             return loss
