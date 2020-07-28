@@ -110,7 +110,7 @@ class CenterLoss(tf.keras.losses.Loss):
         self.num_classes, self.feature_dim, self.alpha, self.factor = num_classes, feature_dim, alpha, factor
         self.initial_file = initial_file
         # centers = tf.Variable(tf.zeros([num_classes, feature_dim]), trainable=False)
-        centers = tf.Variable(tf.zeros([num_classes, feature_dim]), trainable=False, aggregation=tf.VariableAggregation.SUM)
+        centers = tf.Variable(tf.zeros([num_classes, feature_dim]), trainable=False, aggregation=tf.VariableAggregation.MEAN)
         if initial_file:
             if os.path.exists(initial_file):
                 print(">>>> Reload from center backup:", initial_file)
@@ -119,6 +119,10 @@ class CenterLoss(tf.keras.losses.Loss):
             self.save_centers_callback = Save_Numpy_Callback(initial_file, centers)
         self.centers = centers
         self.logits_loss = logits_loss
+        if tf.distribute.has_strategy():
+            self.num_replicas = tf.distribute.get_strategy().num_replicas_in_sync
+        else:
+            self.num_replicas = 1
 
     def call(self, y_true, y_pred):
         embedding = y_pred[:, : self.feature_dim]
@@ -135,7 +139,7 @@ class CenterLoss(tf.keras.losses.Loss):
         appear_times = tf.reshape(appear_times, [-1, 1])
 
         diff = diff / tf.cast((1 + appear_times), tf.float32)
-        diff = self.alpha * diff
+        diff = self.num_replicas * self.alpha * diff
         # print(centers_batch.shape, self.centers.shape, labels.shape, diff.shape)
         self.centers.assign(tf.tensor_scatter_nd_sub(self.centers, tf.expand_dims(labels, 1), diff))
         # centers_batch = tf.gather(self.centers, labels)
@@ -209,7 +213,8 @@ def batch_all_triplet_loss(labels, embeddings, alpha=0.35):
 # TripletLoss helper class definitions
 class TripletLossWapper(tf.keras.losses.Loss):
     def __init__(self, triplet_loss_func, alpha, feature_dim=512, factor=1.0, logits_loss=None, **kwargs):
-        super(TripletLossWapper, self).__init__(**kwargs)
+        reduction = tf.keras.losses.Reduction.NONE if tf.distribute.has_strategy() else tf.keras.losses.Reduction.AUTO
+        super(TripletLossWapper, self).__init__(**kwargs, reduction=reduction)
         self.alpha, self.feature_dim, self.factor, self.logits_loss = alpha, feature_dim, factor, logits_loss
         self.triplet_loss_func = triplet_loss_func
 
