@@ -46,11 +46,13 @@ def arcface_loss(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=64
 # ArcfaceLoss class
 class ArcfaceLoss(tf.keras.losses.Loss):
     def __init__(self, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
-        super(ArcfaceLoss, self).__init__(**kwargs)
+        reduction = tf.keras.losses.Reduction.NONE if tf.distribute.has_strategy() else tf.keras.losses.Reduction.AUTO
+        super(ArcfaceLoss, self).__init__(**kwargs, reduction=reduction)
         self.margin1, self.margin2, self.margin3, self.scale = margin1, margin2, margin3, scale
         self.from_logits, self.label_smoothing = from_logits, label_smoothing
         self.threshold = np.cos((np.pi - margin2) / margin1)  # grad(theta) == 0
         self.theta_min = (-1 - margin3) * 2
+        self.reduction_func = tf.keras.losses.CategoricalCrossentropy(from_logits=from_logits, label_smoothing=label_smoothing, reduction=reduction)
 
     def call(self, y_true, y_pred):
         norm_logits = y_pred
@@ -62,9 +64,7 @@ class ArcfaceLoss(tf.keras.losses.Loss):
         theta_valid = tf.where(y_pred_vals > self.threshold, theta, self.theta_min - theta)
         theta_one_hot = tf.expand_dims(theta_valid - y_pred_vals, 1) * tf.cast(y_true, dtype=tf.float32)
         arcface_logits = (theta_one_hot + norm_logits) * self.scale
-        return tf.keras.losses.categorical_crossentropy(
-            y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
-        )
+        return self.reduction_func(y_true, arcface_logits)
 
     def get_config(self):
         config = super(ArcfaceLoss, self).get_config()
@@ -109,7 +109,8 @@ class CenterLoss(tf.keras.losses.Loss):
         super(CenterLoss, self).__init__(**kwargs)
         self.num_classes, self.feature_dim, self.alpha, self.factor = num_classes, feature_dim, alpha, factor
         self.initial_file = initial_file
-        centers = tf.Variable(tf.zeros([num_classes, feature_dim]), trainable=False)
+        # centers = tf.Variable(tf.zeros([num_classes, feature_dim]), trainable=False)
+        centers = tf.Variable(tf.zeros([num_classes, feature_dim]), trainable=False, aggregation=tf.VariableAggregation.SUM)
         if initial_file:
             if os.path.exists(initial_file):
                 print(">>>> Reload from center backup:", initial_file)

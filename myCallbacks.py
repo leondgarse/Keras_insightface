@@ -56,13 +56,13 @@ class My_history(keras.callbacks.Callback):
 
 
 class CosineLrScheduler(keras.callbacks.Callback):
-    def __init__(self, lr_base, decay_steps, lr_min=0.0, warmup_iters=0, lr_on_batch=0, restarts=1):
+    def __init__(self, lr_base, decay_steps, lr_min=0.0, warmup_iters=0, lr_on_batch=0, restarts=1, m_mul=0.5):
         super(CosineLrScheduler, self).__init__()
         self.lr_base, self.decay_steps, self.lr_min= lr_base, decay_steps, lr_min
         if restarts > 1:
             # with restarts == 3, t_mul == 2, restart_step 1 + 2 + 4 == 7
             restart_step = sum([2 ** ii for ii in range(restarts)]) * max(1, lr_on_batch)
-            self.schedule = keras.experimental.CosineDecayRestarts(lr_base, self.decay_steps // restart_step, t_mul=2.0, m_mul=0.5, alpha=lr_min / lr_base)
+            self.schedule = keras.experimental.CosineDecayRestarts(lr_base, self.decay_steps // restart_step, t_mul=2.0, m_mul=m_mul, alpha=lr_min / lr_base)
         else:
             self.schedule = keras.experimental.CosineDecay(lr_base, self.decay_steps, alpha=lr_min/lr_base)
         if lr_on_batch < 1:
@@ -110,7 +110,7 @@ def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_de
         lr_scheduler = LearningRateScheduler(lambda epoch: scheduler(epoch, lr, lr_decay, lr_min))
     else:
         # Cosine decay on epoch / batch
-        lr_scheduler = CosineLrScheduler(lr_base=lr, decay_steps=lr_decay, lr_min=lr_min, warmup_iters=0, lr_on_batch=lr_on_batch, restarts=3)
+        lr_scheduler = CosineLrScheduler(lr_base=lr, decay_steps=lr_decay, lr_min=lr_min, warmup_iters=1, lr_on_batch=lr_on_batch, restarts=4)
     my_history = My_history(os.path.splitext(checkpoint)[0] + "_hist.json", evals=evals)
     # tensor_board_log = keras.callbacks.TensorBoard(log_dir=os.path.splitext(checkpoint)[0] + '_logs')
     return [model_checkpoint, lr_scheduler, my_history, Gently_stop_callback()]

@@ -313,6 +313,9 @@
     conda create -n tf-nightly
     conda activate tf-nightly
     pip install tf-nightly glob2 pandas tqdm scikit-image scikit-learn ipython
+
+    # Install cuda 10.1 if not installed
+    conda install cudnn=7.6.5=cuda10.1_0
     ```
   - Add an overall `tf.distribute.MirroredStrategy().scope()` `with` block. This is just working in my case... The `batch_size` will be multiplied by `GPU numbers`.
     ```py

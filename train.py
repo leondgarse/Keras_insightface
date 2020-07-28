@@ -184,7 +184,7 @@ class Train:
                     self.model = keras.models.load_model(model, compile=compile, custom_objects=custom_objects)
                 basic_model = basic_model if basic_model is not None else self.__search_embedding_layer__(self.model)
                 self.basic_model = keras.models.Model(self.model.inputs[0], self.model.layers[basic_model].output)
-                self.model.summary()
+                # self.model.summary()
         elif isinstance(model, keras.models.Model):
             self.model = model
             basic_model = basic_model if basic_model is not None else self.__search_embedding_layer__(self.model)
@@ -354,7 +354,7 @@ class Train:
                     initial_file = os.path.splitext(self.save_path)[0] + "_centers.npy"
                     logits_loss = cur_loss
                     center_loss = losses.CenterLoss(
-                        self.classes, feature_dim=feature_dim, factor=1.0, initial_file=initial_file, logits_loss=logits_loss
+                        self.classes, feature_dim=feature_dim, factor=float(sch["centerloss"]), initial_file=initial_file, logits_loss=logits_loss
                     )
                     cur_loss = center_loss
                     # self.my_hist.custom_obj["centerloss"] = lambda : cur_loss.centerloss

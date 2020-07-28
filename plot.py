@@ -1,14 +1,14 @@
-try:
-    import seaborn as sns
-
-    sns.set(style="darkgrid")
-except:
-    pass
 
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 
+# try:
+#     import seaborn as sns
+#     sns.set(style="darkgrid")
+# except:
+#     pass
+plt.style.use('seaborn')
 
 def peak_scatter(ax, array, peak_method, color="r", init_epoch=0):
     start = init_epoch + 1
@@ -41,7 +41,7 @@ def hist_plot(loss_lists, accuracy_lists, customs_dict, loss_names=None, save=No
         fig, axes = plt.subplots(1, 3, sharex=True, figsize=(24, 8))
     else:
         fig = axes[0].figure
-
+    axes = axes.tolist()
     if loss_names == None:
         loss_names = [""] * len(loss_lists)
 
@@ -58,13 +58,18 @@ def hist_plot(loss_lists, accuracy_lists, customs_dict, loss_names=None, save=No
     if fig_label:
         axes[1].legend(loc="lower right", fontsize=8)
 
-    # for ss, aa in zip(["lfw", "cfp_fp", "agedb_30"], [lfws, cfp_fps, agedb_30s]):
+    if "lr" in customs_dict and len(axes) == 3:
+        axes.append(axes[2].twinx())
+
     for kk, vv in customs_dict.items():
+        ax = axes[3] if kk == "lr" else axes[2]
         label =  kk + " - " + fig_label if fig_label else kk
-        arrays_plot(axes[2], vv, label=label, init_epoch=init_epoch, pre_value=pre_item.get(kk, 0))
-        peak_scatter(axes[2], vv, np.argmax, init_epoch=init_epoch)
+        arrays_plot(ax, vv, label=label, init_epoch=init_epoch, pre_value=pre_item.get(kk, 0))
+        peak_scatter(ax, vv, np.argmax, init_epoch=init_epoch)
     axes[2].set_title(", ".join(customs_dict))
-    axes[2].legend(loc="lower right", fontsize=8)
+    axes[2].legend(loc="lower left", fontsize=8)
+    if len(axes) == 4:
+        axes[3].legend(loc="lower right", fontsize=8)
 
     for ax in axes:
         ymin, ymax = ax.get_ylim()
@@ -84,7 +89,7 @@ def hist_plot(loss_lists, accuracy_lists, customs_dict, loss_names=None, save=No
     last_item["loss"] = loss_lists[-1][-1]
     if len(accuracy_lists) != 0:
         last_item["accuracy"] = accuracy_lists[-1][-1]
-    return axes, last_item
+    return np.array(axes), last_item
 
 
 def hist_plot_split(history, epochs, names=None, customs=[], save=None, axes=None, init_epoch=0, pre_item={}, fig_label=None):
