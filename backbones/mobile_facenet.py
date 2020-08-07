@@ -19,6 +19,7 @@ from tensorflow.keras.models import Model
 
 """Building Block Functions"""
 
+
 def se_block(inputs, reduction=16):
     channel_axis = 1 if K.image_data_format() == "channels_first" else -1
     filters = inputs.shape[channel_axis]

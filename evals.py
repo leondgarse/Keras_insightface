@@ -16,7 +16,7 @@ from sklearn.decomposition import PCA
 
 
 class eval_callback(tf.keras.callbacks.Callback):
-    def __init__(self, basic_model, test_bin_file, batch_size=128, save_model=None, eval_freq=1, flip=True, PCA_acc=True):
+    def __init__(self, basic_model, test_bin_file, batch_size=128, save_model=None, eval_freq=1, flip=True, PCA_acc=False):
         super(eval_callback, self).__init__()
         bins, issame_list = np.load(test_bin_file, encoding="bytes", allow_pickle=True)
         ds = tf.data.Dataset.from_tensor_slices(bins)
@@ -95,8 +95,6 @@ class eval_callback(tf.keras.callbacks.Callback):
             tf.print("NAN in embs, not a good one")
             return
         embs = normalize(embs)
-        _, _, accuracy, val, val_std, far = evaluate(embs, self.test_issame, nrof_folds=10)
-        acc2, std2 = np.mean(accuracy), np.std(accuracy)
         embs_a = embs[::2]
         embs_b = embs[1::2]
         dists = (embs_a * embs_b).sum(1)
@@ -114,10 +112,19 @@ class eval_callback(tf.keras.callbacks.Callback):
         acc_thresh = ff[acc_max_indx - t_steps]
         self.cur_acc = acc_max
 
-        tf.print(
-            "\n>>>> %s evaluation max accuracy: %f, thresh: %f, previous max accuracy: %f, PCA accuray = %f ± %f"
-            % (self.test_names, acc_max, acc_thresh, self.max_accuracy, acc2, std2)
-        )
+        if self.PCA_acc:
+            _, _, accuracy, val, val_std, far = evaluate(embs, self.test_issame, nrof_folds=10)
+            acc2, std2 = np.mean(accuracy), np.std(accuracy)
+            tf.print(
+                "\n>>>> %s evaluation max accuracy: %f, thresh: %f, previous max accuracy: %f, PCA accuray = %f ± %f"
+                % (self.test_names, acc_max, acc_thresh, self.max_accuracy, acc2, std2)
+            )
+        else:
+            tf.print(
+                "\n>>>> %s evaluation max accuracy: %f, thresh: %f, previous max accuracy: %f"
+                % (self.test_names, acc_max, acc_thresh, self.max_accuracy)
+            )
+
         if acc_max > self.max_accuracy:
             tf.print(">>>> Improved = %f" % (acc_max - self.max_accuracy))
             self.max_accuracy = acc_max

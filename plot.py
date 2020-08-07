@@ -1,4 +1,3 @@
-
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -8,7 +7,9 @@ import os
 #     sns.set(style="darkgrid")
 # except:
 #     pass
-plt.style.use('seaborn')
+plt.style.use("seaborn")
+EVALS_NAME = ["lfw", "cfp_fp", "agedb_30"]
+
 
 def peak_scatter(ax, array, peak_method, color="r", init_epoch=0):
     start = init_epoch + 1
@@ -36,7 +37,9 @@ def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0):
         ax.set_xticks(xticks)
 
 
-def hist_plot(loss_lists, accuracy_lists, customs_dict, loss_names=None, save=None, axes=None, init_epoch=0, pre_item={}, fig_label=None):
+def hist_plot(
+    loss_lists, accuracy_lists, customs_dict, loss_names=None, save=None, axes=None, init_epoch=0, pre_item={}, fig_label=None
+):
     if axes is None:
         fig, axes = plt.subplots(1, 3, sharex=True, figsize=(24, 8))
     else:
@@ -58,12 +61,14 @@ def hist_plot(loss_lists, accuracy_lists, customs_dict, loss_names=None, save=No
     if fig_label:
         axes[1].legend(loc="lower right", fontsize=8)
 
-    if "lr" in customs_dict and len(axes) == 3:
-        axes.append(axes[2].twinx())
+    for ii in customs_dict:
+        if ii not in EVALS_NAME and len(axes) == 3:
+            axes.append(axes[0].twinx())
+            break
 
     for kk, vv in customs_dict.items():
-        ax = axes[3] if kk == "lr" else axes[2]
-        label =  kk + " - " + fig_label if fig_label else kk
+        ax = axes[2] if kk in EVALS_NAME else axes[3]
+        label = kk + " - " + fig_label if fig_label else kk
         arrays_plot(ax, vv, label=label, init_epoch=init_epoch, pre_value=pre_item.get(kk, 0))
         peak_scatter(ax, vv, np.argmax, init_epoch=init_epoch)
     axes[2].set_title(", ".join(customs_dict))
@@ -120,6 +125,6 @@ def hist_plot_split(history, epochs, names=None, customs=[], save=None, axes=Non
     if len(customs) != 0:
         customs_dict = {kk: split_func(hh[kk]) for kk in customs if kk in hh}
     else:
-        hh.pop("lr")
-        customs_dict = {kk: split_func(vv) for kk, vv in hh.items()}
+        # hh.pop("lr")
+        customs_dict = {kk: split_func(vv) for kk, vv in hh.items() if kk in EVALS_NAME}
     return hist_plot(loss_lists, accuracy_lists, customs_dict, names, save, axes, init_epoch, pre_item, fig_label)

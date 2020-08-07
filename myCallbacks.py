@@ -8,6 +8,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, Learn
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.utils import losses_utils
 
+
 class Gently_stop_callback(keras.callbacks.Callback):
     def __init__(self, prompt="Continue? ([Y]/n)", time_out=3):
         super(Gently_stop_callback, self).__init__()
@@ -23,6 +24,7 @@ class Gently_stop_callback(keras.callbacks.Callback):
         inputs, outputs, errors = select.select([sys.stdin], [], [], timeout)
         print()
         return (0, sys.stdin.readline().strip()) if inputs else (-1, default)
+
 
 class My_history(keras.callbacks.Callback):
     def __init__(self, initial_file=None, evals=[]):
@@ -55,16 +57,58 @@ class My_history(keras.callbacks.Callback):
             print("  %s = %s" % (kk, vv))
 
 
+class OptimizerWeightDecay(keras.callbacks.Callback):
+    def __init__(self, lr_base=1e-1, wd_base=5e-4):
+        super(OptimizerWeightDecay, self).__init__()
+        self.lr_base, self.wd_base = lr_base, wd_base
+
+    def on_epoch_begin(self, step, log=None):
+        ss = K.get_value(self.model.optimizer.lr) / self.lr_base
+        wd = self.wd_base * ss
+        if self.model is not None:
+            K.set_value(self.model.optimizer.weight_decay, wd)
+        print("Weight decay for iter {} is {}".format(step + 1, wd))
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        logs["wd"] = K.get_value(self.model.optimizer.weight_decay)
+
+
+class ConstantDecayScheduler(keras.callbacks.Callback):
+    def __init__(self, sch, lr_base=1e-1, decay_rate=0.1):
+        super(ConstantDecayScheduler, self).__init__()
+        self.schedule = lambda step: self.constant_decay(step, lr_base, sch, decay_rate=decay_rate)
+
+    def on_epoch_begin(self, step, log=None):
+        lr = self.schedule(step)
+        if self.model is not None:
+            K.set_value(self.model.optimizer.lr, lr)
+        print("\nLearning rate for iter {} is {}".format(step + 1, lr))
+        return lr
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        logs["lr"] = K.get_value(self.model.optimizer.lr)
+
+    def constant_decay(self, cur_step, lr_base, sch, decay_rate=0.1):
+        for id, ii in enumerate(sch):
+            if cur_step < ii:
+                return lr_base * decay_rate ** id
+        return lr_base * decay_rate ** len(sch)
+
+
 class CosineLrScheduler(keras.callbacks.Callback):
     def __init__(self, lr_base, decay_steps, lr_min=0.0, warmup_iters=0, lr_on_batch=0, restarts=1, m_mul=0.5):
         super(CosineLrScheduler, self).__init__()
-        self.lr_base, self.decay_steps, self.lr_min= lr_base, decay_steps, lr_min
+        self.lr_base, self.decay_steps, self.lr_min = lr_base, decay_steps, lr_min
         if restarts > 1:
             # with restarts == 3, t_mul == 2, restart_step 1 + 2 + 4 == 7
             restart_step = sum([2 ** ii for ii in range(restarts)]) * max(1, lr_on_batch)
-            self.schedule = keras.experimental.CosineDecayRestarts(lr_base, self.decay_steps // restart_step, t_mul=2.0, m_mul=m_mul, alpha=lr_min / lr_base)
+            self.schedule = keras.experimental.CosineDecayRestarts(
+                lr_base, self.decay_steps // restart_step, t_mul=2.0, m_mul=m_mul, alpha=lr_min / lr_base
+            )
         else:
-            self.schedule = keras.experimental.CosineDecay(lr_base, self.decay_steps, alpha=lr_min/lr_base)
+            self.schedule = keras.experimental.CosineDecay(lr_base, self.decay_steps, alpha=lr_min / lr_base)
         if lr_on_batch < 1:
             self.on_epoch_begin = self.__lr_sheduler__
         else:
@@ -88,29 +132,45 @@ class CosineLrScheduler(keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
-        logs['lr'] = K.get_value(self.model.optimizer.lr)
+        logs["lr"] = K.get_value(self.model.optimizer.lr)
+
+
+def scheduler_warmup(lr_target, cur_epoch, lr_init=0.1, epochs=10):
+    stags = int(np.log10(lr_init / lr_target)) + 1
+    steps = epochs / stags
+    lr = lr_init
+    while cur_epoch > steps:
+        lr *= 0.1
+        cur_epoch -= steps
+    return lr
 
 
 def scheduler(epoch, lr_base, decay_rate=0.05, lr_min=0):
     lr = lr_base if epoch < 10 else lr_base * np.exp(decay_rate * (10 - epoch))
+    # lr = scheduler_warmup(lr_base, epoch) if epoch < 10 else lr_base * np.exp(decay_rate * (10 - epoch))
     lr = lr_min if lr < lr_min else lr
-    print("\nLearning rate for epoch {} is {}".format(epoch + 1, lr))
+    print("\nLearning rate for iter {} is {}".format(epoch + 1, lr))
     return lr
 
 
-def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_decay=0.05, lr_min=0, lr_on_batch=0):
+def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_decay=0.05, lr_min=0, lr_decay_steps=0):
     checkpoint_base = "./checkpoints"
     if not os.path.exists(checkpoint_base):
         os.mkdir(checkpoint_base)
     checkpoint = os.path.join(checkpoint_base, checkpoint)
     model_checkpoint = ModelCheckpoint(checkpoint, verbose=1)
 
-    if lr_decay < 1:
+    if isinstance(lr_decay_steps, list):
+        # Constant decay on epoch
+        lr_scheduler = ConstantDecayScheduler(sch=lr_decay_steps, lr_base=lr, decay_rate=lr_decay)
+    elif lr_decay < 1:
         # Exponential decay
         lr_scheduler = LearningRateScheduler(lambda epoch: scheduler(epoch, lr, lr_decay, lr_min))
     else:
         # Cosine decay on epoch / batch
-        lr_scheduler = CosineLrScheduler(lr_base=lr, decay_steps=lr_decay, lr_min=lr_min, warmup_iters=1, lr_on_batch=lr_on_batch, restarts=4)
+        lr_scheduler = CosineLrScheduler(
+            lr_base=lr, decay_steps=lr_decay, lr_min=lr_min, warmup_iters=1, lr_on_batch=lr_decay_steps, restarts=4
+        )
     my_history = My_history(os.path.splitext(checkpoint)[0] + "_hist.json", evals=evals)
     # tensor_board_log = keras.callbacks.TensorBoard(log_dir=os.path.splitext(checkpoint)[0] + '_logs')
     return [model_checkpoint, lr_scheduler, my_history, Gently_stop_callback()]

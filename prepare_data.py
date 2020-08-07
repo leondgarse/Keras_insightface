@@ -33,7 +33,7 @@ def MXnet_record_to_folder(dataset_dir):
             ff.write(img)
 
 
-def MXnet_bin_files_to_tf(test_bins):
+def MXnet_bin_files_to_tf(test_bins, limit=0):
     import io
     import pickle
     import tensorflow as tf
@@ -44,10 +44,10 @@ def MXnet_bin_files_to_tf(test_bins):
         with open(test_bin_file, "rb") as ff:
             bins, issame_list = pickle.load(ff, encoding="bytes")
 
-        bb = [tf.image.encode_jpeg(imread(io.BytesIO(ii))).numpy() for ii in bins]
+        bb = [tf.image.encode_jpeg(imread(io.BytesIO(ii))).numpy() for ii in bins[: limit * 2] + bins[-limit * 2 :]]
         print("Saving to %s" % test_bin_file)
         with open(test_bin_file, "wb") as ff:
-            pickle.dump([bb, issame_list], ff)
+            pickle.dump([bb, issame_list[:limit] + issame_list[-limit:]], ff)
 
 
 """ CUDA_VISIBLE_DEVICES='-1' ./prepare_data.py -D /datasets/faces_emore """

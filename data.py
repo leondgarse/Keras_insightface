@@ -31,6 +31,7 @@ def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None)
     classes = np.max(image_classes) + 1
     return image_names, image_classes, classes
 
+
 def read_image(file_path, label, classes=0, one_hot_label=True):
     if one_hot_label:
         label = tf.one_hot(label, depth=classes, dtype=tf.int32)
@@ -38,6 +39,7 @@ def read_image(file_path, label, classes=0, one_hot_label=True):
     img = tf.image.decode_jpeg(img, channels=3)
     img = tf.image.convert_image_dtype(img, tf.float32)
     return img, label
+
 
 def random_process_image(img, label, img_shape=(112, 112), random_status=2, random_crop=None):
     img = tf.image.random_flip_left_right(img)
@@ -51,6 +53,7 @@ def random_process_image(img, label, img_shape=(112, 112), random_status=2, rand
         img = tf.image.resize(img, img_shape)
     img = (tf.clip_by_value(img, 0.0, 1.0) - 0.5) * 2
     return img, label
+
 
 def prepare_dataset(
     data_path,
@@ -79,10 +82,11 @@ def prepare_dataset(
         ds = ds.cache(cache) if isinstance(cache, str) else ds.cache()
 
     if is_train:
-        ds = ds.map(lambda xx, yy: random_process_image(xx, yy, img_shape, random_status, random_crop), num_parallel_calls=AUTOTUNE)
+        process_func = lambda xx, yy: random_process_image(xx, yy, img_shape, random_status, random_crop)
     else:
-        ds = ds.map(lambda xx, yy: ((xx - 0.5) * 2, yy), num_parallel_calls=AUTOTUNE)
-    ds = ds.batch(batch_size)   # Use batch --> map has slightly effect on dataset reading time, but harm the randomness
+        process_func = lambda xx, yy: ((xx - 0.5) * 2, yy)
+    ds = ds.map(process_func, num_parallel_calls=AUTOTUNE)
+    ds = ds.batch(batch_size)  # Use batch --> map has slightly effect on dataset reading time, but harm the randomness
     ds = ds.prefetch(buffer_size=AUTOTUNE)
     # ds = ds.prefetch(buffer_size=1000)
     # steps_per_epoch = np.ceil(len(image_names) / batch_size)
