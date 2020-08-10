@@ -185,13 +185,13 @@ class Train:
                 print(">>>> Load model from h5 file: %s..." % model)
                 with keras.utils.custom_object_scope(custom_objects):
                     self.model = keras.models.load_model(model, compile=compile, custom_objects=custom_objects)
-                basic_model = basic_model if basic_model is not None else self.__search_embedding_layer__(self.model)
-                self.basic_model = keras.models.Model(self.model.inputs[0], self.model.layers[basic_model].output)
+                embedding_layer = basic_model if basic_model is not None else self.__search_embedding_layer__(self.model)
+                self.basic_model = keras.models.Model(self.model.inputs[0], self.model.layers[embedding_layer].output)
                 # self.model.summary()
         elif isinstance(model, keras.models.Model):
             self.model = model
-            basic_model = basic_model if basic_model is not None else self.__search_embedding_layer__(self.model)
-            self.basic_model = keras.models.Model(self.model.inputs[0], self.model.layers[basic_model].output)
+            embedding_layer = basic_model if basic_model is not None else self.__search_embedding_layer__(self.model)
+            self.basic_model = keras.models.Model(self.model.inputs[0], self.model.layers[embedding_layer].output)
         elif isinstance(basic_model, str):
             if basic_model.endswith(".h5") and os.path.exists(basic_model):
                 print(">>>> Load basic_model from h5 file: %s..." % basic_model)
@@ -276,7 +276,8 @@ class Train:
         embedding = self.basic_model.outputs[0]
         is_multi_output = lambda mm: len(mm.outputs) != 1 or isinstance(mm.layers[-1], keras.layers.Concatenate)
         if self.model != None and is_multi_output(self.model):
-            self.model = keras.models.Model(inputs, self.model.layers[len(self.basic_model.layers)].output)
+            output_layer = min(len(self.basic_model.layers), len(self.model.layers) - 1)
+            self.model = keras.models.Model(inputs, self.model.layers[output_layer].output)
 
         if type == self.softmax:
             if self.model == None or self.model.output_names[-1] != self.softmax:
@@ -318,6 +319,7 @@ class Train:
 
     def __basic_train__(self, loss, epochs, initial_epoch=0, loss_weights=None):
         self.model.compile(optimizer=self.optimizer, loss=loss, metrics=self.metrics, loss_weights=loss_weights)
+        # self.model.compile(optimizer=self.optimizer, loss=loss, metrics=self.metrics)
         self.model.fit(
             self.train_ds,
             epochs=epochs,

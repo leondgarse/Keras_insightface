@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 
-def scale_softmax(y_true, y_pred, scale=64.0, from_logits=True, label_smoothing=0):
+def scale_softmax(y_true, y_pred, scale=64.0, from_logits=False, label_smoothing=0):
     return tf.keras.losses.categorical_crossentropy(
         y_true, y_pred * scale, from_logits=from_logits, label_smoothing=label_smoothing
     )
@@ -46,16 +46,16 @@ def arcface_loss(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=64
 # ArcfaceLoss class
 class ArcfaceLoss(tf.keras.losses.Loss):
     def __init__(self, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
-        reduction = tf.keras.losses.Reduction.NONE if tf.distribute.has_strategy() else tf.keras.losses.Reduction.AUTO
+        # reduction = tf.keras.losses.Reduction.NONE if tf.distribute.has_strategy() else tf.keras.losses.Reduction.AUTO
         # super(ArcfaceLoss, self).__init__(**kwargs, reduction=reduction)
         super(ArcfaceLoss, self).__init__(**kwargs)
         self.margin1, self.margin2, self.margin3, self.scale = margin1, margin2, margin3, scale
         self.from_logits, self.label_smoothing = from_logits, label_smoothing
         self.threshold = np.cos((np.pi - margin2) / margin1)  # grad(theta) == 0
         self.theta_min = (-1 - margin3) * 2
-        self.reduction_func = tf.keras.losses.CategoricalCrossentropy(
-            from_logits=from_logits, label_smoothing=label_smoothing, reduction=reduction
-        )
+        # self.reduction_func = tf.keras.losses.CategoricalCrossentropy(
+        #     from_logits=from_logits, label_smoothing=label_smoothing, reduction=reduction
+        # )
 
     def call(self, y_true, y_pred):
         norm_logits = y_pred
@@ -67,7 +67,8 @@ class ArcfaceLoss(tf.keras.losses.Loss):
         theta_valid = tf.where(y_pred_vals > self.threshold, theta, self.theta_min - theta)
         theta_one_hot = tf.expand_dims(theta_valid - y_pred_vals, 1) * tf.cast(y_true, dtype=tf.float32)
         arcface_logits = (theta_one_hot + norm_logits) * self.scale
-        return self.reduction_func(y_true, arcface_logits)
+        return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
+        # return self.reduction_func(y_true, arcface_logits)
 
     def get_config(self):
         config = super(ArcfaceLoss, self).get_config()
@@ -145,7 +146,7 @@ class CenterLoss(tf.keras.losses.Loss):
         # print(centers_batch.shape, self.centers.shape, labels.shape, diff.shape)
         self.centers.assign(tf.tensor_scatter_nd_sub(self.centers, tf.expand_dims(labels, 1), diff))
         # centers_batch = tf.gather(self.centers, labels)
-        return tf.reduce_mean(loss)
+        return loss
 
     def get_config(self):
         config = super(CenterLoss, self).get_config()
@@ -184,8 +185,8 @@ def batch_hard_triplet_loss(labels, embeddings, alpha=0.35):
     neg_dists = tf.where(pos_mask, tf.ones_like(dists) * -1, dists)
     hardest_neg_dist = tf.reduce_max(neg_dists, -1)
     basic_loss = hardest_neg_dist - hardest_pos_dist + alpha
-    return tf.reduce_mean(tf.maximum(basic_loss, 0.0))
-    # return tf.maximum(basic_loss, 0.0)
+    # return tf.reduce_mean(tf.maximum(basic_loss, 0.0))
+    return tf.maximum(basic_loss, 0.0)
 
 
 def batch_all_triplet_loss(labels, embeddings, alpha=0.35):

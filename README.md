@@ -46,6 +46,7 @@
   - [Usage](#usage)
   	- [Beforehand Data Prepare](#beforehand-data-prepare)
   	- [Training scripts](#training-scripts)
+  	- [Optimizer with weight decay](#optimizer-with-weight-decay)
   	- [Multi GPU train](#multi-gpu-train)
   - [Training Record](#training-record)
   	- [Loss function test on Mobilenet](#loss-function-test-on-mobilenet)
@@ -63,6 +64,7 @@
   	- [MXNet format](#mxnet-format)
   	- [Pytorch and Caffe2](#pytorch-and-caffe2)
   - [Related Projects](#related-projects)
+  - [Tests](#tests)
 
   <!-- /TOC -->
 ***
@@ -256,7 +258,7 @@
     - On every epoch end, backup to the path `save_path` defined in `train.Train` with suffix `_hist.json`.
     - Reload when initializing, if the backup `<save_path>_hist.json` file exists.
   - **Learning rate**
-    - `train.Train` parameters `lr_base` / `lr_decay` / `lr_decay_steps` set differant decay strategies and their parameters.
+    - `train.Train` parameters `lr_base` / `lr_decay` / `lr_decay_steps` set different decay strategies and their parameters.
     - `Exponential decay`, default one, `lr_base` and `lr_decay` in `train.Train` set it. Default is `lr_base=0.001, lr_decay=0.05`.
     - `Cosine decay with restart`
       - Set `lr_decay` with a value `> 1` will use `cosine lr decay`, in this case `lr_decay` means `total decay steps`.
@@ -315,7 +317,7 @@
     # Change evaluating strategy to `on_epoch_end`, as long as `on_batch_end` for every `1000` batch.
     tt = train.Train(data_path, 'keras_mobilefacenet_256.h5', eval_paths, basic_model=basic_model, eval_freq=1000)
     ```
-  - **EfficientNet** `tf-nightly` now includes all `EfficientNet` backbone in `tensorflow.keras.applications`, but it has a `Rescaling` and `Normalization` layer on the head.
+  - **EfficientNet** `tf-nightly` / `tf 2.3.0` now includes all `EfficientNet` backbone in `tensorflow.keras.applications`, but it has a `Rescaling` and `Normalization` layer on the head.
     ```py
     tf.__version__
     # '2.3.0-dev20200523'
@@ -352,7 +354,8 @@
     mm = se_resnext.SEResNextImageNet(weights='imagenet', input_shape=(112, 112, 3), include_top=False)
     ```
     It's TOO slow training a `se_resnext 101`，takes almost 4 times longer than `ResNet101V2`.
-  - **Optimizer with weight decay** `tensorflow_addons` provides `SGDW` / `AdamW`.
+## Optimizer with weight decay
+  - [tensorflow_addons](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/AdamW) provides `SGDW` / `AdamW`.
     ```py
     !pip install tensorflow-addons
 
@@ -360,10 +363,12 @@
     optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
     optimizer = tfa.optimizers.AdamW(learning_rate=0.001, weight_decay=5e-4)
     ```
-    These optimizer can be used directly in `scheduler`, `weight decay` will be attached to `callback`.
+    `weight_decay` and `learning_rate` should share the same decay strategy. A callback `OptimizerWeightDecay` will set `weight_decay` according to `learning_rate`.
     ```py
-    sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "epoch": 60, "optimizer": optimizer}]
+    opt = tfa.optimizers.AdamW(weight_decay=1e-5)
+    sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "epoch": 60, "optimizer": opt}]
     ```
+  - [Train test on cifar10](https://colab.research.google.com/drive/1wCcsmyNF1YHaCjERevs9o2wCJp-MaAEP?usp=sharing)
 ## Multi GPU train
   - Add an overall `tf.distribute.MirroredStrategy().scope()` `with` block. This is just working in my case... The `batch_size` will be multiplied by `GPU numbers`.
     ```py
@@ -963,8 +968,10 @@
     axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_emore_hist.json", epochs, names=["", "Bottleneck Arcface", "Arcface scale=64"], axes=axes, customs=customs, fig_label='Mobilenet, exp, center, triplet, BS=1024')
     axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_ls_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, exp, center, triplet, ls=0.1, BS=1024')
 
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_center_emore_hist.json", epochs, names=["", "Bottleneck Arcface", "Arcface scale=64"], axes=axes, customs=customs, fig_label='Mobilenet, exp, center, triplet, center, BS=1024')
+    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_center_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, exp, center, triplet, center, BS=1024')
     axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_center_ls_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, exp, center, triplet, center, ls=0.1, BS=1024')
+    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_scales_2_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, exp, scale + center, ls=0.1, BS=1024')
+    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_adamw_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, exp, adamw, center, ls=0.1, BS=1024')
     ```
   - **Optimizers with weight decay test**
     ```py
@@ -1001,21 +1008,29 @@
     # model.compile(optimizer=optimizer, loss=keras.losses.categorical_crossentropy, metrics=["accuracy"])
     wd_callback = myCallbacks.OptimizerWeightDecay(optimizer.lr.numpy(), optimizer.weight_decay.numpy())
     model.fit(train_ds, epochs=15, callbacks=[ss, wd_callback, *callbacks], verbose=1)
+
+    opt = tfa.optimizers.AdamW(weight_decay=lambda : None)
+    opt.weight_decay = lambda : 5e-1 * opt.lr
+
+    mlp.compile(
+      optimizer=opt,
+      loss=tf.keras.losses.BinaryCrossentropy())
     ```
     ```py
     import losses, train
     import tensorflow_addons as tfa
     # with tf.distribute.MirroredStrategy().scope():
-    data_path = '/datasets/faces_emore_112x112_folders'
-    eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    # basic_model = train.buildin_models("MobileNet", dropout=0.4, emb_shape=256)
+    # data_path = '/datasets/faces_emore_112x112_folders'
+    # eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
+    basic_model = train.buildin_models("MobileNet", dropout=0.4, emb_shape=256)
     # tt = train.Train(data_path, save_path='temp_test.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[3, 5, 7, 16, 20, 24], batch_size=256, random_status=3)
-    tt = train.Train(data_path, save_path='keras_mxnet_test_sgdw.h5', eval_paths=eval_paths, basic_model=None, model='checkpoints/keras_mxnet_test_sgdw_E15.h5', lr_base=0.1, lr_decay=0.1, lr_decay_steps=[3, 5, 7, 16, 20, 24], batch_size=256, random_status=3)
+    tt = train.Train('faces_emore_test', save_path='keras_mxnet_test_sgdw.h5', eval_paths=['lfw.bin'], basic_model=basic_model, model=None, lr_base=0.001, batch_size=256, random_status=3)
     # optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
-    # optimizer = tfa.optimizers.AdamW(learning_rate=0.1, weight_decay=5e-4)
+    optimizer = tfa.optimizers.AdamW(weight_decay=5e-4)
+    # optimizer.weight_decay = tf.function(lambda: optimizer.lr * 1e-2)
     sch = [
-        # {"loss": losses.ArcfaceLoss(), "optimizer": optimizer, "epoch": 30},
-        {"loss": losses.ArcfaceLoss(), "epoch": 30},
+        {"loss": losses.ArcfaceLoss(), "optimizer": optimizer, "epoch": 2},
+        # {"loss": losses.ArcfaceLoss(), "epoch": 30},
     ]
     tt.train(sch, 15)
     ```
