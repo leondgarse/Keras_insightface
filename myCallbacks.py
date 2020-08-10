@@ -58,20 +58,17 @@ class My_history(keras.callbacks.Callback):
 
 
 class OptimizerWeightDecay(keras.callbacks.Callback):
-    def __init__(self, lr_base=1e-1, wd_base=5e-4):
+    def __init__(self, lr_base, wd_base):
         super(OptimizerWeightDecay, self).__init__()
-        self.lr_base, self.wd_base = lr_base, wd_base
+        self.wd_m = wd_base / lr_base
+        # self.model.optimizer.weight_decay = lambda: wd_m * self.model.optimizer.lr
 
     def on_epoch_begin(self, step, log=None):
-        ss = K.get_value(self.model.optimizer.lr) / self.lr_base
-        wd = self.wd_base * ss
         if self.model is not None:
+            wd = self.wd_m * K.get_value(self.model.optimizer.lr)
             K.set_value(self.model.optimizer.weight_decay, wd)
+        # wd = self.model.optimizer.weight_decay
         print("Weight decay for iter {} is {}".format(step + 1, wd))
-
-    def on_epoch_end(self, epoch, logs=None):
-        logs = logs or {}
-        logs["wd"] = K.get_value(self.model.optimizer.weight_decay)
 
 
 class ConstantDecayScheduler(keras.callbacks.Callback):
@@ -145,9 +142,9 @@ def scheduler_warmup(lr_target, cur_epoch, lr_init=0.1, epochs=10):
     return lr
 
 
-def scheduler(epoch, lr_base, decay_rate=0.05, lr_min=0):
-    lr = lr_base if epoch < 10 else lr_base * np.exp(decay_rate * (10 - epoch))
-    # lr = scheduler_warmup(lr_base, epoch) if epoch < 10 else lr_base * np.exp(decay_rate * (10 - epoch))
+def scheduler(epoch, lr_base, decay_rate=0.05, lr_min=0, warmup=10):
+    lr = lr_base if epoch < warmup else lr_base * np.exp(decay_rate * (warmup - epoch))
+    # lr = scheduler_warmup(lr_base, epoch) if epoch < warmup else lr_base * np.exp(decay_rate * (warmup - epoch))
     lr = lr_min if lr < lr_min else lr
     print("\nLearning rate for iter {} is {}".format(epoch + 1, lr))
     return lr
@@ -159,6 +156,7 @@ def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_de
         os.mkdir(checkpoint_base)
     checkpoint = os.path.join(checkpoint_base, checkpoint)
     model_checkpoint = ModelCheckpoint(checkpoint, verbose=1)
+    # model_checkpoint = keras.callbacks.experimental.BackupAndRestore(checkpoint_base)
 
     if isinstance(lr_decay_steps, list):
         # Constant decay on epoch
