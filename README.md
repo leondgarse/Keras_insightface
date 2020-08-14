@@ -368,7 +368,7 @@
     opt = tfa.optimizers.AdamW(weight_decay=1e-5)
     sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "epoch": 60, "optimizer": opt}]
     ```
-  - [Train test on cifar10](https://colab.research.google.com/drive/1wCcsmyNF1YHaCjERevs9o2wCJp-MaAEP?usp=sharing)
+  - [Train test on cifar10](https://colab.research.google.com/drive/1lFUixzn9XLfq-NbDAFxAmzz1vcKYqHfB?usp=sharing)
 ## Multi GPU train
   - Add an overall `tf.distribute.MirroredStrategy().scope()` `with` block. This is just working in my case... The `batch_size` will be multiplied by `GPU numbers`.
     ```py
@@ -794,6 +794,81 @@
     %timeit -n 100 foo(imm) # EfficientNetB0
     # 71.2 ms ± 52.5 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
     ```
+  - **Wapper trained model with `Rescale` / `L2_normalize`**
+    ```py
+    mm2 = keras.Sequential([
+        keras.layers.Input((112, 112, 3)),
+        keras.layers.experimental.preprocessing.Rescaling(1./127.5, offset=-1),
+        mm,
+        keras.layers.Lambda(tf.nn.l2_normalize, name='norm_embedding', arguments={'axis': 1})
+    ])
+    ```
+    ```py
+    mm2 = keras.Sequential([
+        keras.layers.Input((112, 112, 3), dtype='uint8'),
+        keras.layers.Lambda(lambda xx: (xx / 127) - 1),
+        # keras.layers.experimental.preprocessing.Rescaling(1./127.5, offset=-1),
+        mm,
+        # keras.layers.Lambda(tf.nn.l2_normalize, name='norm_embedding', arguments={'axis': 1}),
+        keras.layers.Lambda(lambda xx: tf.cast(xx / tf.sqrt(tf.reduce_sum(xx ** 2)) * 255, 'uint8')),
+        # keras.layers.Lambda(lambda xx: tf.cast(xx * 255, 'uint8')),
+    ])
+    ```
+  - **Dynamic input shape**
+    ```py
+    mm3 = keras.Sequential([
+        keras.layers.Input((None, None, 3)),
+        keras.layers.experimental.preprocessing.Resizing(112 ,112),
+        keras.layers.experimental.preprocessing.Rescaling(1./127.5, offset=-1),
+        mm,
+        keras.layers.Lambda(tf.nn.l2_normalize, name='norm_embedding', arguments={'axis': 1})
+    ])
+
+    converter = tf.lite.TFLiteConverter.from_keras_model(mm3)
+    tflite_model = converter.convert()
+    open('./norm_model_tf2.tflite', 'wb').write(tflite_model)
+
+    interpreter = tf.lite.Interpreter('./norm_model_tf2.tflite')
+    input_index = interpreter.get_input_details()[0]["index"]
+    output_index = interpreter.get_output_details()[0]["index"]
+
+    interpreter.resize_tensor_input(input_index, (1, 512, 512, 3))
+    interpreter.allocate_tensors()
+    interpreter.set_tensor(input_index, tf.ones([1, 512, 112, 3], dtype='float32'))
+    interpreter.invoke()
+    out = interpreter.get_tensor(output_index)[0]
+    ```
+  - **Integer-only quantization**
+    ```py
+    aa = np.load('faces_emore_112x112_folders_shuffle.pkl', allow_pickle=True)
+    image_names, image_classes = aa["image_names"], aa["image_classes"]
+    def representative_data_gen():
+        for input_value in tf.data.Dataset.from_tensor_slices(image_names).batch(1).take(100):
+            yield [tf_imread(input_value[0])]
+
+    converter = tf.lite.TFLiteConverter.from_keras_model(mm)
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.representative_dataset = representative_data_gen
+    # Ensure that if any ops can't be quantized, the converter throws an error
+    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+    # Set the input and output tensors to uint8 (APIs added in r2.3)
+    converter.inference_input_type = tf.uint8
+    converter.inference_output_type = tf.uint8
+
+    tflite_model_quant = converter.convert()
+    interpreter = tf.lite.Interpreter(model_content=tflite_model_quant)
+    input_type = interpreter.get_input_details()[0]['dtype']
+    print('input: ', input_type)
+    output_type = interpreter.get_output_details()[0]['dtype']
+    print('output: ', output_type)
+
+    interpreter.allocate_tensors()
+    input_index = interpreter.get_input_details()[0]["index"]
+    output_index = interpreter.get_output_details()[0]["index"]
+    interpreter.set_tensor(input_index, tf.ones([1, 112, 112, 3], dtype=input_type))
+    interpreter.invoke()
+    interpreter.get_tensor(output_index)[0]
+    ```
 ## MXNet format
   - Here uses `keras-mxnet` to perform conversion from `Keras h5` to `MXNet param + json` format.
     ```sh
@@ -953,25 +1028,23 @@
     import plot
     epochs = [25, 4, 35]
     customs = ["cfp_fp", "agedb_30"]
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_emore_hist.json", epochs, names=["Softmax", "Bottleneck Arcface", "Arcface scale=64"], customs=customs, fig_label='Mobilenet, exp, nadam+nadam, BS=1024')
-    # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, exp, adam, BS=1024')
-    # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_cos_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, cos, restarts=5, nadam+nadam, BS=1024')
-    # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_cos_4_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, cos, restarts=4, adam, BS=1024')
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_cos_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, exp, arcloss, center, adam, BS=1024')
+    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_cos_emore_hist.json", epochs, names=["Softmax", "Bottleneck Arcface", "Arcface scale=64"], customs=customs, fig_label='exp, [soft + center, adam, E25] [arc + center, E35]')
+    # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft, nadam, E25] [arc, nadam, E35]')
+    # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft, adam, E25] [arc, E35]')
+    # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_cos_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='cos, restarts=5, [soft, nadam, E25] [arc, nadam, E35]')
+    # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_cos_4_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='cos, restarts=4, [soft, adam, E25] [arc, E35]')
 
     epochs = [60, 4, 35]
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_emore_hist.json", epochs, names=["", "Bottleneck Arcface", "Arcface scale=64"], axes=axes, customs=customs, fig_label='Mobilenet, exp, center, adam, BS=1024')
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_ls_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, exp, arcloss, ls=0.1, adam, BS=1024')
-    # axes, _ = plot.hist_plot_split("checkpoints/keras_mobilenet_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, exp, BS=320')
-    # axes, _ = plot.hist_plot_split("checkpoints/keras_mobilenet_cos_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, cos, BS=320')
+    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_emore_hist.json", epochs, names=["", "Bottleneck Arcface", "Arcface scale=64"], axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [arc + center, E35]')
+    # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_ls_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [arc ls=0.1 + center 64, E35]')
 
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_emore_hist.json", epochs, names=["", "Bottleneck Arcface", "Arcface scale=64"], axes=axes, customs=customs, fig_label='Mobilenet, exp, center, triplet, BS=1024')
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_ls_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, exp, center, triplet, ls=0.1, BS=1024')
+    # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [soft + triplet, E12]')
+    # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_ls_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [soft ls=0.1 + triplet, E12]')
+    # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_center_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [soft + triplet + center, E30]')
+    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_center_ls_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [soft ls=0.1 + triplet + center, E30]')
 
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_center_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, exp, center, triplet, center, BS=1024')
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_center_ls_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, exp, center, triplet, center, ls=0.1, BS=1024')
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_scales_2_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, exp, scale + center, ls=0.1, BS=1024')
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_adamw_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='Mobilenet, exp, adamw, center, ls=0.1, BS=1024')
+    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_adamw_2_emore_hist.json", epochs, axes=axes, customs=customs+['center_embedding_loss'], fig_label='exp, [soft ls=0.1 + center, adamw 1e-5, E25] [center -> 10, adamw ->5e-5, E25] [center -> 32, E20]')
+    axes, _ = plot.hist_plot_split(["checkpoints/T_keras_mobilenet_basic_adamw_2_emore_hist_E25_bottleneck.json", "checkpoints/T_keras_mobilenet_basic_adamw_E25_arcloss_emore_hist.json"], epochs, axes=axes, customs=customs, fig_label=' exp, [soft ls=0.1 + center, adamw 1e-5, E25] [arc, adamw 5e-5, E35]')
     ```
   - **Optimizers with weight decay test**
     ```py
