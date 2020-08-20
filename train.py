@@ -46,26 +46,27 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), **
         xx = keras.applications.NASNetMobile(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name.startswith("efficientnet"):
         if "-dev" in tf.__version__:
-            # import tensorflow.keras.applications.efficientnet as efntf
-            import efficientnet.tfkeras as efntf
+            # import tensorflow.keras.applications.efficientnet as efficientnet
+            from backbones import efficientnet
         else:
-            import efficientnet.tfkeras as efntf
+            # import efficientnet.tfkeras as efficientnet
+            from backbones import efficientnet
 
         if name[-2] == "b":
             compound_scale = int(name[-1])
             models = [
-                efntf.EfficientNetB0,
-                efntf.EfficientNetB1,
-                efntf.EfficientNetB2,
-                efntf.EfficientNetB3,
-                efntf.EfficientNetB4,
-                efntf.EfficientNetB5,
-                efntf.EfficientNetB6,
-                efntf.EfficientNetB7,
+                efficientnet.EfficientNetB0,
+                efficientnet.EfficientNetB1,
+                efficientnet.EfficientNetB2,
+                efficientnet.EfficientNetB3,
+                efficientnet.EfficientNetB4,
+                efficientnet.EfficientNetB5,
+                efficientnet.EfficientNetB6,
+                efficientnet.EfficientNetB7,
             ]
             model = models[compound_scale]
         else:
-            model = efntf.EfficientNetL2
+            model = efficientnet.EfficientNetL2
         xx = model(weights="noisy-student", include_top=False, input_shape=input_shape)  # or weights='imagenet'
     elif name.startswith("se_resnext"):
         from keras_squeeze_excite_network import se_resnext

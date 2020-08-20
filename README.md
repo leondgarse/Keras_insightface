@@ -37,17 +37,18 @@
     # Install cuda 10.1 if not installed
     conda install cudnn=7.6.5=cuda10.1_0
     ```
-# Catalog
+# Table of Contents
   <!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
 
   - [___Keras insightface___](#keras-insightface)
-  - [Catalog](#catalog)
+  - [Table of Contents](#table-of-contents)
   - [Current accuracy](#current-accuracy)
   - [Usage](#usage)
   	- [Beforehand Data Prepare](#beforehand-data-prepare)
   	- [Training scripts](#training-scripts)
   	- [Optimizer with weight decay](#optimizer-with-weight-decay)
   	- [Multi GPU train](#multi-gpu-train)
+  	- [TFLite model inference time test on ARM32](#tflite-model-inference-time-test-on-arm32)
   - [Training Record](#training-record)
   	- [Loss function test on Mobilenet](#loss-function-test-on-mobilenet)
   	- [Mobilefacenet](#mobilefacenet)
@@ -327,8 +328,6 @@
     ```
     So I'm using another implementation here [Github qubvel/EfficientNet](https://github.com/qubvel/efficientnet)
     ```py
-    !pip install -U git+https://github.com/qubvel/efficientnet
-
     import efficientnet.tfkeras as efntf
     mm = efntf.EfficientNetB0(weights='imagenet', include_top=False, input_shape=(112, 112, 3))
     [ii.name for ii in mm.layers[:3]]
@@ -368,7 +367,7 @@
     opt = tfa.optimizers.AdamW(weight_decay=1e-5)
     sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "epoch": 60, "optimizer": opt}]
     ```
-  - [Train test on cifar10](https://colab.research.google.com/drive/1lFUixzn9XLfq-NbDAFxAmzz1vcKYqHfB?usp=sharing)
+  - [Train test on cifar10](https://colab.research.google.com/drive/1tD2OrnrYtFPC7q_i62b8al1o3qelU-Vi?usp=sharing)
 ## Multi GPU train
   - Add an overall `tf.distribute.MirroredStrategy().scope()` `with` block. This is just working in my case... The `batch_size` will be multiplied by `GPU numbers`.
     ```py
@@ -385,6 +384,35 @@
     ```py
     sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1, reduction=tf.keras.losses.Reduction.NONE), "epoch": 25}]
     ```
+## TFLite model inference time test on ARM32
+  - Test using [TFLite Model Benchmark Tool](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/tools/benchmark)
+  - **Platform**
+    - CPU: `rk3288`
+    - System: `Android`
+    - Inference: `TFLite`
+  - **mobilenet_v2** comparing `orignal` / `dynamic` / `float16` / `uint8` conversion of `TFLite` model.
+    | mobilenet_v2 | threads=1 (ms) | threads=4 (ms) | Size (MB) |
+    | ------------ | -------------- | -------------- | --------- |
+    | orignal      | 73.930         | 39.180         | 12.049    |
+    | orignal xnn  | 55.806         | 23.844         | 12.049    |
+    | dynamic      | 65.858         | 53.397         | 3.11019   |
+    | dynamic xnn  | 61.564         | 99.096         | 3.11019   |
+    | float16      | 73.648         | 38.593         | 6.06125   |
+    | float16 xnn  | 56.231         | 23.904         | 6.06125   |
+    | uint8        | 41.593         | 23.179         | 3.69072   |
+    | MNN          | 47.583         | 27.574         | 12        |
+  - **Model comparing**
+    | Model                     | threads=1 (ms) | threads=4 (ms) | Size (MB) |
+    | ------------------------- | -------------- | -------------- | --------- |
+    | mobilenet_v1 float16      | 111.696        | 50.433         | 7.74493   |
+    | mobilenet_v1 float16 xnn  | 94.774         | 37.345         | 7.74493   |
+    | mobilenet_v1 quant        | 47.551         | 22.335         | 4.31061   |
+    | EB0 float16               | 146.090        | 109.415        | 9.68934   |
+    | EB0 uint8                 | 80.863         | 64.178         | 5.99462   |
+    | mobilefacenet float16     | 188.111        | 111.990        | 2.14302   |
+    | mobilefacenet float16 xnn | 118.711        | 54.152         | 2.14302   |
+    | mobilefacenet quant       | 191.208        | 158.794        | 1.30752   |
+    | se_mobilefacenet float16  | 191.044        | 118.211        | 2.32702   |
 ***
 
 # Training Record
@@ -840,12 +868,21 @@
     ```
   - **Integer-only quantization**
     ```py
-    aa = np.load('faces_emore_112x112_folders_shuffle.pkl', allow_pickle=True)
-    image_names, image_classes = aa["image_names"], aa["image_classes"]
+    def tf_imread(file_path):
+        img = tf.io.read_file(file_path)
+        img = tf.image.decode_jpeg(img, channels=3)
+        img = tf.image.convert_image_dtype(img, tf.float32)
+        img = (img - 0.5) * 2
+        return tf.expand_dims(img, 0)
+
     def representative_data_gen():
         for input_value in tf.data.Dataset.from_tensor_slices(image_names).batch(1).take(100):
             yield [tf_imread(input_value[0])]
 
+    aa = np.load('faces_emore_112x112_folders_shuffle.pkl', allow_pickle=True)
+    image_names, image_classes = aa["image_names"], aa["image_classes"]
+
+    mm = tf.keras.models.load_model("checkpoints/keras_se_mobile_facenet_emore_triplet_basic_agedb_30_epoch_100_0.958333.h5", compile=False)
     converter = tf.lite.TFLiteConverter.from_keras_model(mm)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.representative_dataset = representative_data_gen
@@ -908,6 +945,8 @@
     !sed -i 's/"ragged": false, //' model/model_config.json
     # For tf-nightly saved json file, also replace '"class_name": "Functional"' by '"class_name": "Model"'
     !sed -i 's/"class_name": "Functional"/"class_name": "Model"/' model/model_config.json
+    # For tf23 saved json file, delete '"groups": 1, '
+    !sed -i 's/"groups": 1, //g' model/model_config.json
     ```
     Start a new ipython session by `KERAS_BACKEND='mxnet' ipython`
     ```py
@@ -1034,8 +1073,8 @@
     # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_cos_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='cos, restarts=5, [soft, nadam, E25] [arc, nadam, E35]')
     # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_cos_4_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='cos, restarts=4, [soft, adam, E25] [arc, E35]')
 
-    epochs = [60, 4, 35]
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_emore_hist.json", epochs, names=["", "Bottleneck Arcface", "Arcface scale=64"], axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [arc + center, E35]')
+    epochs = [60, 4, 40, 20]
+    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_emore_hist.json", epochs, names=["", "Bottleneck Arcface", "Arcface scale=64", "Triplet"], axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [arc + center, E35]')
     # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_ls_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [arc ls=0.1 + center 64, E35]')
 
     # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [soft + triplet, E12]')
@@ -1043,8 +1082,23 @@
     # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_center_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [soft + triplet + center, E30]')
     axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_center_ls_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [soft ls=0.1 + triplet + center, E30]')
 
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_adamw_2_emore_hist.json", epochs, axes=axes, customs=customs+['center_embedding_loss'], fig_label='exp, [soft ls=0.1 + center, adamw 1e-5, E25] [center -> 10, adamw ->5e-5, E25] [center -> 32, E20]')
+    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_adamw_2_emore_hist.json", epochs, names=["", "", "", "Triplet"], axes=axes, customs=customs+['center_embedding_loss', 'triplet_embedding_loss'], fig_label='exp, [soft ls=0.1+center, adamw 1e-5,E25] [center->10,adamw->5e-5,E25] [center->32,E20] [center->64,E35] [triplet 0.3,E5]')
     axes, _ = plot.hist_plot_split(["checkpoints/T_keras_mobilenet_basic_adamw_2_emore_hist_E25_bottleneck.json", "checkpoints/T_keras_mobilenet_basic_adamw_E25_arcloss_emore_hist.json"], epochs, axes=axes, customs=customs, fig_label=' exp, [soft ls=0.1 + center, adamw 1e-5, E25] [arc, adamw 5e-5, E35]')
+    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_adamw_3_emore_hist.json", epochs, axes=axes, customs=customs+['center_embedding_loss'], fig_label='exp, [soft ls=0.1 + center, adamw 5e-5, E10]')
+    axes, _ = plot.hist_plot_split("checkpoints/keras_mxnet_test_sgdw_hist.json", epochs, axes=axes, customs=customs+['center_embedding_loss'], fig_label='exp, [mobilenet, soft ls=0.1 + center, adamw 5e-5, dr 0, E10]')
+    # axes, _ = plot.hist_plot_split("checkpoints/keras_mxnet_test_dr0.4_adamw_5e5_hist.json", epochs, axes=axes, customs=customs+['center_embedding_loss'], fig_label='exp, [mobilenet, soft ls=0.1 + center, adamw 5e-5, dr 0.4, E10]')
+    # axes, _ = plot.hist_plot_split("checkpoints/keras_mxnet_test_dr0.4_adamw_1e4_hist.json", epochs, axes=axes, customs=customs+['center_embedding_loss'], fig_label='exp, [mobilenet, soft ls=0.1 + center, adamw 1e-4, dr 0.4, E10]')
+    axes, _ = plot.hist_plot_split(["checkpoints/T_keras_mobilenet_basic_adamw_2_emore_hist_E70.json", "checkpoints/T_keras_mobilenet_basic_adamw_2_E70_arc_emore_hist.json"], epochs, axes=axes, customs=customs, fig_label='exp, [soft ls=0.1 + center, adamw 5e-5, E70] [arc, E35]')
+    ```
+    ```py
+    import plot
+    epochs = [10, 10, 10, 10, 10, 10, 10, 10, 10]
+    customs = ["cfp_fp", "agedb_30", 'center_embedding_loss']
+
+    axes, _ = plot.hist_plot_split("checkpoints/T_adamw_5e5_dr0.4_casia_hist.json", epochs, names=["Softmax + Center = 1", "Softmax + Center = 10", "Softmax + Center = 20", "Softmax + Center = 30", "Softmax + Center = 40", "Softmax + Center = 50", "Softmax + Center = 60", "Softmax + Center = 70"], customs=customs, fig_label='mobilenet, exp, adamw 5e-5, dr 0.4, [soft + center, E10]')
+    axes, _ = plot.hist_plot_split("checkpoints/T_adamw_5e5_dr0_casia_hist.json", epochs, axes=axes, customs=customs, fig_label='mobilenet, exp, adamw 5e-5, dr 0, [soft + center, E10]')
+    axes, _ = plot.hist_plot_split("checkpoints/T_adamw_1e4_dr0.4_casia_hist.json", epochs, axes=axes, customs=customs, fig_label='mobilenet, exp, adamw 1e-4, dr 0.4, [soft + center, E10]')
+    axes, _ = plot.hist_plot_split("checkpoints/T_adamw_1e4_dr0_casia_hist.json", epochs, axes=axes, customs=customs, fig_label='mobilenet, exp, adamw 1e-4, dr 0, [soft + center, E10]')
     ```
   - **Optimizers with weight decay test**
     ```py
