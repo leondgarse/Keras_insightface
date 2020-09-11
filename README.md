@@ -2,7 +2,9 @@
   - Keras Insightface implementation.
   - This is still under working, many things are still testing here, so there may lots of errors atm.
   - **Any advise is welcome**!
-  - **NOTE** Seems adding `TripletLoss` train will improve evaluating accuracy on `agedb_30` / `lfw`, but getting worse in real world test.
+  - **NOTE 1** Seems adding `weight_decay` to `optimizer` is essential for train `Arcloss`. My `weight_decay` value for `Adam` is `5e-5`.
+  - **NOTE 2** Seems adding `dropout` is **NOT** good.
+  - **NOTE 3** Seems combining `Arcloss` with `TripletLoss` improves accuracy performance on test datasets.
   - **Environment**
     ```py
     # $ ipython
@@ -62,8 +64,6 @@
   	- [ONNX](#onnx)
   	- [TensorRT](#tensorrt)
   	- [TFlite](#tflite)
-  	- [MXNet format](#mxnet-format)
-  	- [Pytorch and Caffe2](#pytorch-and-caffe2)
   - [Related Projects](#related-projects)
   - [Tests](#tests)
 
@@ -75,10 +75,9 @@
 
   | Model backbone   | lfw      | cfp_fp   | agedb_30 | Epochs |
   | ---------------- | -------- | -------- | -------- | ------ |
-  | Mobilefacenet    | 0.994167 | 0.944143 | 0.942500 | 50     |
+  | [Mobilenet](checkpoints/mobilenet_adamw_BS256_E80_arc_tripD_basic_agedb_30_epoch_123_0.955333.h5)        | 0.996167 | 0.948429 | 0.955333 | 120    |
+  | [se_mobilefacenet](checkpoints/keras_se_mobile_facenet_emore_triplet_basic_agedb_30_epoch_100_0.958333.h5) | 0.996333 | 0.964714 | 0.958833 | 100    |
   | ResNet101V2      | 0.997333 | 0.976714 | 0.971000 | 110    |
-  | EfficientNetB4   | 0.997167 | 0.967000 | 0.962500 | 54     |
-  | se_mobilefacenet | 0.996333 | 0.964714 | 0.958833 | 100    |
   | ResNeSt101       | 0.997667 | 0.981000 | 0.973333 | 100    |
 ***
 
@@ -140,28 +139,30 @@
   - **Training example**
     ```py
     from tensorflow import keras
-    from backbones import mobile_facenet
     import losses
     import train
+    import tensorflow_addons as tfa
 
-    # basic_model = train.buildin_models("MobileNet", dropout=0.4, emb_shape=256)
-    # basic_model = train.buildin_models("ResNet101V2", dropout=0.4, emb_shape=512)
-    # basic_model = train.buildin_models("ResNest101", dropout=0.4, emb_shape=512)
-    # basic_model = train.buildin_models('EfficientNetB0', dropout=0.4, emb_shape=256)
-    # basic_model = train.buildin_models('EfficientNetB4', dropout=0.4, emb_shape=256)
-    # basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="mobile_facenet_256")
-    basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="se_mobile_facenet_256", use_se=True)
+    basic_model = train.buildin_models("MobileNet", dropout=0, emb_shape=256)
+    # basic_model = train.buildin_models("ResNet101V2", dropout=0, emb_shape=512)
+    # basic_model = train.buildin_models("ResNest101", dropout=0, emb_shape=512)
+    # basic_model = train.buildin_models('EfficientNetB0', dropout=0, emb_shape=256)
+    # basic_model = train.buildin_models('EfficientNetB4', dropout=0, emb_shape=256)
+    # basic_model = mobile_facenet.mobile_facenet(256, dropout=0, name="mobile_facenet_256")
+    # basic_model = mobile_facenet.mobile_facenet(256, dropout=0, name="se_mobile_facenet_256", use_se=True)
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
 
-    tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, batch_size=640, random_status=3)
+    tt = train.Train(data_path, save_path='keras_mobilenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, batch_size=640, random_status=3)
+    optimizer = tfa.optimizers.AdamW(weight_decay=5e-5)
     sch = [
-      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "optimizer": "nadam", "epoch": 25},
-      # {"loss": losses.scale_softmax, "epoch": 10},
-      {"loss": losses.ArcfaceLoss(), "bottleneckOnly": True, "epoch": 4},
-      {"loss": losses.ArcfaceLoss(), "centerloss": True, "epoch": 35},
-      {"loss": losses.BatchHardTripletLoss(0.35), "epoch": 10},
-      {"loss": losses.BatchHardTripletLoss(0.33), "epoch": 10},
+      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 1, "optimizer": optimizer, "epoch": 20},
+      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 32, "epoch": 20},
+      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 64, "epoch": 20},
+      {"loss": losses.ArcfaceLoss(), "bottleneckOnly": True, "epoch": 2},
+      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.3},
+      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.25},
+      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.2},
     ]
     tt.train(sch, 0)
     ```
@@ -402,17 +403,20 @@
     | uint8        | 41.593         | 23.179         | 3.69072   |
     | MNN          | 47.583         | 27.574         | 12        |
   - **Model comparing**
-    | Model                     | threads=1 (ms) | threads=4 (ms) | Size (MB) |
-    | ------------------------- | -------------- | -------------- | --------- |
-    | mobilenet_v1 float16      | 111.696        | 50.433         | 7.74493   |
-    | mobilenet_v1 float16 xnn  | 94.774         | 37.345         | 7.74493   |
-    | mobilenet_v1 quant        | 47.551         | 22.335         | 4.31061   |
-    | EB0 float16               | 146.090        | 109.415        | 9.68934   |
-    | EB0 uint8                 | 80.863         | 64.178         | 5.99462   |
-    | mobilefacenet float16     | 188.111        | 111.990        | 2.14302   |
-    | mobilefacenet float16 xnn | 118.711        | 54.152         | 2.14302   |
-    | mobilefacenet quant       | 191.208        | 158.794        | 1.30752   |
-    | se_mobilefacenet float16  | 191.044        | 118.211        | 2.32702   |
+    | Model                      | threads=1 (ms) | threads=4 (ms) | Size (MB) |
+    | -------------------------- | -------------- | -------------- | --------- |
+    | mobilenet_v1 float16       | 111.696        | 50.433         | 7.74493   |
+    | mobilenet_v1 float16 xnn   | 94.774         | 37.345         | 7.74493   |
+    | mobilenet_v1 quant         | 47.551         | 22.335         | 4.31061   |
+    | EB0 float16                | 139.394        | 95.317         | 9.8998    |
+    | EB0 float16 xnn            | 117.684        | 69.567         | 9.8998    |
+    | EB0 uint8                  | 80.863         | 64.178         | 5.99462   |
+    | mobilefacenet float16      | 188.111        | 111.990        | 2.14302   |
+    | mobilefacenet float16 xnn  | 118.711        | 54.152         | 2.14302   |
+    | mobilefacenet quant        | 191.208        | 158.794        | 1.30752   |
+    | se_mobilefacenet float16   | 191.044        | 118.211        | 2.32702   |
+    | mobilenet_v3_small float16 | 22.955         | 15.654         | 3.07917   |
+    | mobilenet_v3_large float16 | 62.491         | 36.146         | 7.22042   |
 ***
 
 # Training Record
@@ -687,7 +691,7 @@
 
 # Model conversion
 ## ONNX
-  - Currently most frameworks support `tf1.x` only, so better convert it under `tf1.x` environment
+  - `tf2onnx` convert `saved model` to `tflite`, support `tf1.15.0`
     ```py
     tf.__version__
     # '1.15.0'
@@ -696,24 +700,20 @@
     import glob2
     mm = tf.keras.models.load_model(glob2.glob('./keras_mobilefacenet_256_basic_*.h5')[0], compile=False)
     tf.keras.experimental.export_saved_model(mm, './saved_model')
-    ```
-    `tf2onnx` convert `saved model` to `tflite`, also `tf1.15.0`
-    ```sh
-    pip install -U tf2onnx
-    python -m tf2onnx.convert --saved-model ./saved_model --output model.onnx
-    ```
-  - MXNet to onnx
-    ```py
-    #make sure to install onnx-1.2.1
-    #pip install onnx==1.2.1
-    import onnx
-    assert onnx.__version__=='1.2.1'
-    from mxnet.contrib import onnx as onnx_mxnet
+    # tf.contrib.saved_model.save_keras_model(mm, 'saved_model') # TF 1.13
 
-    prefix, epoch = "model", 0
-    sym_file = "%s-symbol.json" % prefix
-    params_file = "%s-%04d.params" % (prefix, epoch)
-    converted_model_path = onnx_mxnet.export_model(sym_file, params_file, [(1, 3, 112, 112)], np.float32, "mx_output.onnx")
+    ! pip install -U tf2onnx
+    ! python -m tf2onnx.convert --saved-model ./saved_model --output model.onnx
+    ```
+  - [keras2onnx](https://github.com/onnx/keras-onnx)
+    ```py
+    ! pip install keras2onnx
+
+    import keras2onnx
+    import glob2
+    mm = tf.keras.models.load_model(glob2.glob('./keras_mobilefacenet_256_basic_*.h5')[0], compile=False)
+    onnx_model = keras2onnx.convert_keras(mm, mm.name)
+    keras2onnx.save_model(onnx_model, 'mm.onnx')
     ```
 ## TensorRT
   - [Atom_notebook TensorRT](https://github.com/leondgarse/Atom_notebook/blob/master/public/2019/08-19_tensorrt.md)
@@ -842,6 +842,13 @@
         # keras.layers.Lambda(lambda xx: tf.cast(xx * 255, 'uint8')),
     ])
     ```
+    ```py
+    inputs = keras.layers.Input([112, 112, 3])
+    nn = (inputs - 127.5) / 128
+    nn = mm(nn)
+    nn = tf.divide(nn, tf.expand_dims(tf.sqrt(tf.reduce_sum(tf.pow(nn, 2), -1)), -1))
+    bb = keras.models.Model(inputs, nn)
+    ```
   - **Dynamic input shape**
     ```py
     mm3 = keras.Sequential([
@@ -906,131 +913,6 @@
     interpreter.invoke()
     interpreter.get_tensor(output_index)[0]
     ```
-## MXNet format
-  - Here uses `keras-mxnet` to perform conversion from `Keras h5` to `MXNet param + json` format.
-    ```sh
-    $ pip install keras-mxnet
-    $ KERAS_BACKEND='mxnet' ipython
-    ```
-  - **[Issue](https://github.com/awslabs/keras-apache-mxnet/pull/258)**
-    ```py
-    ''' Q: TypeError: tuple indices must be integers or slices, not list
-    /opt/anaconda3/lib/python3.7/site-packages/keras/layers/normalization.py in build(self, input_shape)
-         98
-         99     def build(self, input_shape):
-    --> 100         dim = input_shape[self.axis]
-        101         print(input_shape, self.axis, dim)
-        102         if dim is None
-    '''
-    ''' A: Modify normalization.py
-    $ vi /opt/anaconda3/lib/python3.7/site-packages/keras/layers/normalization.py + 97
-        else:
-    -       self.axis = axis
-    +       self.axis = axis if isinstance(axis, int) else axis[-1]
-
-    def build(self, input_shape):
-    '''
-    ```
-  - **Convert**
-    ```py
-    # tf save
-    mm = tf.keras.models.load_model("checkpoints/keras_se_mobile_facenet_emore_triplet_basic_agedb_30_epoch_100_0.958333.h5", compile=False)
-    json_config = mm.to_json()
-    with open('model/model_config.json', 'w') as json_file:
-        json_file.write(json_config)
-    mm.save_weights("model/weights_only.h5")
-
-    ''' Modify json file '''
-    # For tf15 / tf20 saved json file, delete '"ragged": false,'
-    !sed -i 's/"ragged": false, //' model/model_config.json
-    # For tf-nightly saved json file, also replace '"class_name": "Functional"' by '"class_name": "Model"'
-    !sed -i 's/"class_name": "Functional"/"class_name": "Model"/' model/model_config.json
-    # For tf23 saved json file, delete '"groups": 1, '
-    !sed -i 's/"groups": 1, //g' model/model_config.json
-    ```
-    Start a new ipython session by `KERAS_BACKEND='mxnet' ipython`
-    ```py
-    # mxnet load
-    import numpy as np
-    import keras
-    # Using MXNet backend
-    # from keras import backend as K
-    # K.common.set_image_data_format('channels_first')
-    from keras.initializers import glorot_normal, glorot_uniform
-    from keras.utils import CustomObjectScope
-
-    with open('model/model_config.json') as json_file:
-        json_config = json_file.read()
-    with CustomObjectScope({'GlorotNormal': glorot_normal(), "GlorotUniform": glorot_uniform()}):
-        new_model = keras.models.model_from_json(json_config)
-    new_model.load_weights('model/weights_only.h5')
-
-    new_model.predict(np.zeros((1, 112, 112, 3))) # MUST do a predict
-    # new_model.compile(optimizer='adam', loss=keras.losses.categorical_crossentropy)
-    new_model.compiled = True
-    keras.models.save_mxnet_model(model=new_model, prefix='mm')
-    ```
-  - **Test**
-    ```py
-    import numpy as np
-    import mxnet as mx
-
-    sym, arg_params, aux_params = mx.model.load_checkpoint(prefix='mm', epoch=0)
-    mod = mx.mod.Module(symbol=sym, data_names=['/input_11'], context=mx.cpu(), label_names=None)
-    mod.bind(for_training=False, data_shapes=[('/input_11', (1, 112, 112, 3))], label_shapes=mod._label_shapes)
-    mod.set_params(arg_params, aux_params, allow_missing=True)
-    data_iter = mx.io.NDArrayIter(np.ones((1, 112, 112, 3)), None, 1)
-    mod.predict(data_iter)
-    ```
-## Pytorch and Caffe2
-  - **Caffe2 inference ONNX**
-    ```py
-    import caffe2.python.onnx.backend as onnx_caffe2_backend
-    import onnx
-    model = onnx.load("model.onnx")
-    prepared_backend = onnx_caffe2_backend.prepare(model)
-    x = torch.randn(batch_size, 1, 224, 224, requires_grad=True)
-    W = {model.graph.input[0].name: x.data.numpy()}
-    c2_out = prepared_backend.run(W)[0]
-
-    %timeit prepared_backend.run(W)[0]
-    # 26.4 ms ± 219 µs per loop (mean ± std. dev. of 7 runs, 10 loops each)
-
-    import torch
-    torch.save(model, 'tt')
-    ```
-  - **Save caffe2 format**
-    ```py
-    init_net, predict_net = onnx_caffe2_backend.Caffe2Backend.onnx_graph_to_caffe2_net(model)
-
-    with open("onnx-init.pb", "wb") as f:
-        f.write(init_net.SerializeToString())
-    with open("onnx-predict.pb", "wb") as f:
-        f.write(predict_net.SerializeToString())
-
-    with open("onnx-init.pbtxt", "w") as f:
-        f.write(str(init_net))
-    with open("onnx-predict.pbtxt", "w") as f:
-        f.write(str(predict_net))
-    ```
-  - **Caffe2 mobile format**
-    ```py
-    # extract the workspace and the model proto from the internal representation
-    c2_workspace = prepared_backend.workspace
-    c2_model = prepared_backend.predict_net
-
-    # Now import the caffe2 mobile exporter
-    from caffe2.python.predictor import mobile_exporter
-
-    # call the Export to get the predict_net, init_net. These nets are needed for running things on mobile
-    init_net, predict_net = mobile_exporter.Export(c2_workspace, c2_model, c2_model.external_input)
-
-    # Let's also save the init_net and predict_net to a file that we will later use for running them on mobile
-    with open('init_net.pb', "wb") as fopen:
-        fopen.write(init_net.SerializeToString())
-    with open('predict_net.pb', "wb") as fopen:
-        fopen.write(predict_net.SerializeToString())
-    ```
 ***
 
 # Related Projects
@@ -1062,12 +944,13 @@
         ]
         tt.train(sch)
     ```
-  - **Mobilenet train test**
+  - **Mobilenet_V2 emore BS1024 train test**
     ```py
     import plot
     epochs = [25, 4, 35]
-    customs = ["cfp_fp", "agedb_30"]
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_cos_emore_hist.json", epochs, names=["Softmax", "Bottleneck Arcface", "Arcface scale=64"], customs=customs, fig_label='exp, [soft + center, adam, E25] [arc + center, E35]')
+    customs = ["cfp_fp", "agedb_30", "lfw", "center_embedding_loss", "triplet_embedding_loss", "arcface_loss"]
+    axes = None
+    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_cos_emore_hist.json", epochs, axes=axes, names=["Softmax", "Bottleneck Arcface", "Arcface scale=64"], customs=customs, fig_label='exp, [soft + center, adam, E25] [arc + center, E35]', eval_split=True)
     # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft, nadam, E25] [arc, nadam, E35]')
     # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft, adam, E25] [arc, E35]')
     # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_cos_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='cos, restarts=5, [soft, nadam, E25] [arc, nadam, E35]')
@@ -1080,25 +963,50 @@
     # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [soft + triplet, E12]')
     # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_ls_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [soft ls=0.1 + triplet, E12]')
     # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_center_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [soft + triplet + center, E30]')
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_center_ls_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [soft ls=0.1 + triplet + center, E30]')
+    # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_n_center_triplet_center_ls_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft + center, adam, E60] [soft ls=0.1 + triplet + center, E30]')
 
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_adamw_2_emore_hist.json", epochs, names=["", "", "", "Triplet"], axes=axes, customs=customs+['center_embedding_loss', 'triplet_embedding_loss'], fig_label='exp, [soft ls=0.1+center, adamw 1e-5,E25] [center->10,adamw->5e-5,E25] [center->32,E20] [center->64,E35] [triplet 0.3,E5]')
-    axes, _ = plot.hist_plot_split(["checkpoints/T_keras_mobilenet_basic_adamw_2_emore_hist_E25_bottleneck.json", "checkpoints/T_keras_mobilenet_basic_adamw_E25_arcloss_emore_hist.json"], epochs, axes=axes, customs=customs, fig_label=' exp, [soft ls=0.1 + center, adamw 1e-5, E25] [arc, adamw 5e-5, E35]')
-    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_adamw_3_emore_hist.json", epochs, axes=axes, customs=customs+['center_embedding_loss'], fig_label='exp, [soft ls=0.1 + center, adamw 5e-5, E10]')
-    axes, _ = plot.hist_plot_split("checkpoints/keras_mxnet_test_sgdw_hist.json", epochs, axes=axes, customs=customs+['center_embedding_loss'], fig_label='exp, [mobilenet, soft ls=0.1 + center, adamw 5e-5, dr 0, E10]')
-    # axes, _ = plot.hist_plot_split("checkpoints/keras_mxnet_test_dr0.4_adamw_5e5_hist.json", epochs, axes=axes, customs=customs+['center_embedding_loss'], fig_label='exp, [mobilenet, soft ls=0.1 + center, adamw 5e-5, dr 0.4, E10]')
-    # axes, _ = plot.hist_plot_split("checkpoints/keras_mxnet_test_dr0.4_adamw_1e4_hist.json", epochs, axes=axes, customs=customs+['center_embedding_loss'], fig_label='exp, [mobilenet, soft ls=0.1 + center, adamw 1e-4, dr 0.4, E10]')
+    # axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_adamw_2_emore_hist.json", epochs, names=["", "", "", "Triplet"], axes=axes, customs=customs+['center_embedding_loss', 'triplet_embedding_loss'], fig_label='exp, [soft,adamw 1e-5,E25] [C->10,A->5e-5,E25] [C->32,E20] [C->64,E35] [triplet 10,a0.3,E5]')
+    # axes, _ = plot.hist_plot_split(["checkpoints/T_keras_mobilenet_basic_adamw_2_emore_hist_E105.json", "checkpoints/T_keras_mobilenet_basic_adamw_2_E105_trip20_0.3_hist.json"], epochs, axes=axes, customs=customs+['center_embedding_loss', 'triplet_embedding_loss'], fig_label='exp, [soft,adamw 5e-5, E105] [triplet 20,a0.3,E5]')
+
+    # axes, _ = plot.hist_plot_split(["checkpoints/T_keras_mobilenet_basic_adamw_2_emore_hist_E105.json", "checkpoints/T_keras_mobilenet_basic_adamw_2_E105_trip32_0.3_hist.json"], epochs, axes=axes, customs=customs+['center_embedding_loss', 'triplet_embedding_loss'], fig_label='exp, [soft ls=0.1 + center, adamw 5e-5, E105] [triplet 32,a0.3,E25]')
+    # axes, _ = plot.hist_plot_split(["checkpoints/T_keras_mobilenet_basic_adamw_2_emore_hist_E105.json", "checkpoints/T_keras_mobilenet_basic_adamw_2_E105_trip64_0.2_hist.json"], epochs, axes=axes, customs=customs+['center_embedding_loss', 'triplet_embedding_loss'], fig_label='exp, [soft ls=0.1 + center, adamw 5e-5, E105] [triplet 64,a0.2,E5]')
+
+    # axes, _ = plot.hist_plot_split(["checkpoints/T_keras_mobilenet_basic_adamw_2_emore_hist_E25_bottleneck.json", "checkpoints/T_keras_mobilenet_basic_adamw_E25_arcloss_emore_hist.json"], epochs, axes=axes, customs=customs, fig_label=' exp, [soft ls=0.1 + center, adamw 1e-5, E25] [arc, adamw 5e-5, E35]')
+
     axes, _ = plot.hist_plot_split(["checkpoints/T_keras_mobilenet_basic_adamw_2_emore_hist_E70.json", "checkpoints/T_keras_mobilenet_basic_adamw_2_E70_arc_emore_hist.json"], epochs, axes=axes, customs=customs, fig_label='exp, [soft ls=0.1 + center, adamw 5e-5, E70] [arc, E35]')
+    # axes, _ = plot.hist_plot_split(["checkpoints/T_mobilenetv2_adamw_5e5_arc_E80_hist.json", "checkpoints/T_mobilenetv2_adamw_5e5_E80_arc_trip64_hist.json"], epochs, axes=axes, customs=customs, fig_label='exp, [soft ls=0.1 + center, adamw 5e-5, E80] [arc, trip64, E20]')
+    # axes, _ = plot.hist_plot_split(["checkpoints/T_mobilenetv2_adamw_5e5_arc_E80_hist.json", "checkpoints/T_mobilenetv2_adamw_5e5_E80_arc_trip32_hist.json"], epochs, axes=axes, customs=customs, fig_label='exp, [soft ls=0.1 + center, adamw 5e-5, E80] [arc, trip32, E20]')
+    axes, _ = plot.hist_plot_split(["checkpoints/T_mobilenetv2_adamw_5e5_arc_E80_hist.json", "checkpoints/T_mobilenetv2_adamw_5e5_E80_arc_trip64_A10_hist.json"], epochs, axes=axes, customs=customs, fig_label='exp, [soft ls=0.1 + center, adamw 5e-5, E80] [arc, trip32, A10]')
+
+    axes, _ = plot.hist_plot_split("checkpoints/T_keras_mobilenet_basic_adamw_3_emore_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft, adamw 5e-5, dr 0.4, E10]')
+    axes, _ = plot.hist_plot_split("checkpoints/T_mobilenetv2_adamw_5e5_hist.json", epochs, axes=axes, customs=customs, fig_label='exp, [soft, adamw 5e-5, dr 0, E60] [C->64, E20] [C->128, E20]')
+
+    # axes, _ = plot.hist_plot_split(["checkpoints/T_mobilenetv2_adamw_1e4_hist_E80.json", "checkpoints/T_mobilenetv2_adamw_1e4_E80_arc_trip64_hist.json"], epochs, axes=axes, customs=customs, fig_label='exp, [soft, adamw 1e-4, dr 0, E10] [C->64, E20], [arc, trip64, E20]')
+    # axes, _ = plot.hist_plot_split(["checkpoints/T_mobilenetv2_adamw_1e4_hist_E80.json", "checkpoints/T_mobilenetv2_adamw_1e4_E80_arc_trip64_A10_hist.json"], epochs, axes=axes, customs=customs, fig_label='exp, [soft, adamw 1e-4, dr 0, E10] [C->64, E20], [arc, trip32, A10]')
+
+    axes, _ = plot.hist_plot_split(["checkpoints/mobilenet_adamw_BS256_E80_hist.json", "checkpoints/mobilenet_adamw_BS256_E80_arc_tripD_hist.json"], epochs, axes=axes, customs=customs, fig_label='exp,mobilenet,BS256,[soft,adamw 5e-5,dr 0 E80] [arc+trip 64,alpha decay,E40]')
+
+    axes, _ = plot.hist_plot_split(["checkpoints/T_mobilenet_adamw_5e5_BS1024_hist.json", "checkpoints/T_mobilenet_adamw_5e5_arc_trip64_BS1024_hist.json"], epochs, axes=axes, customs=customs, fig_label='exp,mobilenet,BS1024,[soft,adamw 5e-5,dr 0 E80] [arc+trip 64,alpha decay,E40]')
+    axes, _ = plot.hist_plot_split(["checkpoints/T_mobilenetv3L_adamw_5e5_BS1024_hist.json", "checkpoints/T_mobilenetv3L_adamw_5e5_arc_trip64_BS1024_hist.json"], epochs, axes=axes, customs=customs, fig_label='exp,mobilenetV3L,BS1024,[soft,adamw 5e-5,dr 0 E80] [arc+trip 64,alpha decay,E40]')
     ```
+  - **mobilnet emore BS256**
     ```py
     import plot
-    epochs = [10, 10, 10, 10, 10, 10, 10, 10, 10]
-    customs = ["cfp_fp", "agedb_30", 'center_embedding_loss']
+    axes = None
+    customs = ["cfp_fp", "agedb_30", "lfw", "center_embedding_loss", "triplet_embedding_loss"]
+    epochs = [10, 10, 10, 10, 10, 10, 10, 10]
+    names = ["Softmax + Center = 1", "Softmax + Center = 10", "Softmax + Center = 20", "Softmax + Center = 30", "Softmax + Center = 40", "Softmax + Center = 50", "Softmax + Center = 60", "Softmax + Center = 70"]
+    axes, pre = plot.hist_plot_split("checkpoints/keras_mxnet_test_sgdw_hist.json", epochs, names=names, axes=axes, customs=customs, fig_label='exp, mobilenet, [soft ls=0.1 + center, adamw 5e-5, dr 0, E10]', eval_split=True)
 
-    axes, _ = plot.hist_plot_split("checkpoints/T_adamw_5e5_dr0.4_casia_hist.json", epochs, names=["Softmax + Center = 1", "Softmax + Center = 10", "Softmax + Center = 20", "Softmax + Center = 30", "Softmax + Center = 40", "Softmax + Center = 50", "Softmax + Center = 60", "Softmax + Center = 70"], customs=customs, fig_label='mobilenet, exp, adamw 5e-5, dr 0.4, [soft + center, E10]')
-    axes, _ = plot.hist_plot_split("checkpoints/T_adamw_5e5_dr0_casia_hist.json", epochs, axes=axes, customs=customs, fig_label='mobilenet, exp, adamw 5e-5, dr 0, [soft + center, E10]')
-    axes, _ = plot.hist_plot_split("checkpoints/T_adamw_1e4_dr0.4_casia_hist.json", epochs, axes=axes, customs=customs, fig_label='mobilenet, exp, adamw 1e-4, dr 0.4, [soft + center, E10]')
-    axes, _ = plot.hist_plot_split("checkpoints/T_adamw_1e4_dr0_casia_hist.json", epochs, axes=axes, customs=customs, fig_label='mobilenet, exp, adamw 1e-4, dr 0, [soft + center, E10]')
+    epochs = [2, 10, 10, 10, 10, 50]
+    names = ["Arcloss Bottleneck Only", "Arcloss + Triplet 64 alpha 0.35", "Arcloss + Triplet 64 alpha 0.3", "Arcloss + Triplet 64 alpha 0.25", "Arcloss + Triplet 64 alpha 0.2", "Arcloss + Triplet 64 alpha 0.15"]
+    axes, _ = plot.hist_plot_split("checkpoints/mobilenet_adamw_BS256_E80_arc_c64_hist.json", epochs, names=names, axes=axes, customs=customs, fig_label='exp, mobilenet, [soft, E80] [arc, E40]', pre_item=pre, init_epoch=80)
+    axes, _ = plot.hist_plot_split("checkpoints/mobilenet_adamw_BS256_E80_arc_trip_hist.json", epochs, axes=axes, customs=customs, fig_label='exp,mobilenet,[soft, E80] [arc+trip 32,E20] [arc+trip 64,alpha0.3,E40]', pre_item=pre, init_epoch=80)
+    # axes, _ = plot.hist_plot_split("checkpoints/mobilenet_adamw_BS256_E80_arc_trip128_hist.json", epochs, axes=axes, customs=customs, fig_label='exp,mobilenet,[soft, E80] [arc+trip 128,alpha0.3,E40]', pre_item=pre, init_epoch=80)
+    axes, _ = plot.hist_plot_split("checkpoints/mobilenet_adamw_BS256_E80_arc_trip64_hist.json", epochs, axes=axes, customs=customs, fig_label='exp,mobilenet,[soft, E80] [arc+trip 64,alpha0.3,E40]', pre_item=pre, init_epoch=80)
+    axes, _ = plot.hist_plot_split("checkpoints/mobilenet_adamw_BS256_E80_arc_tripD_hist.json", epochs, axes=axes, customs=customs, fig_label='exp,mobilenet,[soft, E80] [arc+trip 64,alpha decay,E40]', pre_item=pre, init_epoch=80)
+
+    axes, _ = plot.hist_plot_split("checkpoints/mobilenet_adamw_5e5_dr0_BS256_triplet_E20_arc_emore_hist.json", [20, 2, 20, 20, 20, 20], axes=axes, customs=customs, fig_label='exp,mobilenet,[soft+Triplet,E20] [arc+trip,alpha decay,E80]')
     ```
   - **Optimizers with weight decay test**
     ```py
@@ -1113,7 +1021,7 @@
     classes = train_ds.element_spec[-1].shape[-1]
 
     # Model
-    basic_model = train.buildin_models("MobileNet", dropout=0.4, emb_shape=256)
+    basic_model = train.buildin_models("MobileNet", dropout=0, emb_shape=256)
     # model_output = keras.layers.Dense(classes, activation="softmax")(basic_model.outputs[0])
     model_output = train.NormDense(classes, name="arcface")(basic_model.outputs[0])
     model = keras.models.Model(basic_model.inputs[0], model_output)
@@ -1139,26 +1047,24 @@
     opt = tfa.optimizers.AdamW(weight_decay=lambda : None)
     opt.weight_decay = lambda : 5e-1 * opt.lr
 
-    mlp.compile(
-      optimizer=opt,
-      loss=tf.keras.losses.BinaryCrossentropy())
+    mlp.compile(optimizer=opt, loss=tf.keras.losses.BinaryCrossentropy())
     ```
     ```py
-    import losses, train
-    import tensorflow_addons as tfa
-    # with tf.distribute.MirroredStrategy().scope():
-    # data_path = '/datasets/faces_emore_112x112_folders'
-    # eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    basic_model = train.buildin_models("MobileNet", dropout=0.4, emb_shape=256)
-    # tt = train.Train(data_path, save_path='temp_test.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[3, 5, 7, 16, 20, 24], batch_size=256, random_status=3)
-    tt = train.Train('faces_emore_test', save_path='keras_mxnet_test_sgdw.h5', eval_paths=['lfw.bin'], basic_model=basic_model, model=None, lr_base=0.001, batch_size=256, random_status=3)
-    # optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
-    optimizer = tfa.optimizers.AdamW(weight_decay=5e-4)
-    # optimizer.weight_decay = tf.function(lambda: optimizer.lr * 1e-2)
-    sch = [
-        {"loss": losses.ArcfaceLoss(), "optimizer": optimizer, "epoch": 2},
-        # {"loss": losses.ArcfaceLoss(), "epoch": 30},
-    ]
-    tt.train(sch, 15)
+    class Foo:
+        def __init__(self, wd):
+            self.wd = wd
+        def __call__(self):
+            return self.wd
+        def set_wd(self, wd):
+            self.wd = wd
+
+    class l2_decay_wdm(keras.regularizers.L2):
+        def __init__(self, wd_func=None, **kwargs):
+            super(l2_decay_wdm, self).__init__(**kwargs)
+            self.wd_func = wd_func
+        def __call__(self, x):
+            self.l2 = self.wd_func()
+            print("l2 =", self.l2)
+            return super(l2_decay_wdm, self).__call__(x)
     ```
 ***

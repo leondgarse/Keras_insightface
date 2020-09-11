@@ -1,26 +1,44 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import matplotlib.cm as cm
+from cycler import cycler
 
-# try:
-#     import seaborn as sns
-#     sns.set(style="darkgrid")
-# except:
-#     pass
 plt.style.use("seaborn")
 EVALS_NAME = ["lfw", "cfp_fp", "agedb_30"]
+EVALS_LINE_STYLE = ["-", "--", "-.", ":"]
+MAX_COLORS = 10
+# COLORS = cm.rainbow(np.linspace(0, 1, MAX_COLORS))
 
+try:
+    import seaborn as sns
+    sns.set(style="darkgrid")
+    COLORS = sns.color_palette('deep', n_colors=MAX_COLORS)
+except:
+    pass
+
+def set_colors(max_color, palette='deep'):
+    print("Available palette names: deep, muted, bright, pastel, dark, colorblind, rainbow")
+    global MAX_COLORS
+    global COLORS
+    MAX_COLORS = max_color
+    if palette == 'rainbow':
+        COLORS = cm.rainbow(np.linspace(0, 1, MAX_COLORS))
+    else:
+        COLORS = sns.color_palette(palette, n_colors=MAX_COLORS)
 
 def peak_scatter(ax, array, peak_method, color="r", init_epoch=0):
     start = init_epoch + 1
     for ii in array:
         pp = len(ii) - peak_method(ii[::-1]) - 1
-        ax.scatter(pp + start, ii[pp], color=color, marker="v")
-        ax.text(pp + start, ii[pp], "{:.4f}".format(ii[pp]), va="bottom", ha="right", fontsize=8, rotation=-30)
+        # Skip scatter if it's 0
+        if ii[pp] != 0:
+            ax.scatter(pp + start, ii[pp], color=color, marker="v")
+            ax.text(pp + start, ii[pp], "{:.4f}".format(ii[pp]), va="bottom", ha="right", fontsize=8, rotation=-30)
         start += len(ii)
 
 
-def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0):
+def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0, linestyle="-"):
     tt = []
     for ii in arrays:
         tt += ii
@@ -29,21 +47,36 @@ def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0):
         xx = list(range(init_epoch, init_epoch + len(tt)))
     else:
         xx = list(range(init_epoch + 1, init_epoch + len(tt) + 1))
-    ax.plot(xx, tt, label=label, color=color)
+    # Replace 0 values with their previous element
+    for id, ii in enumerate(tt):
+        if ii == 0 and id != 0:
+            tt[id] = tt[id - 1]
+    ax.plot(xx, tt, label=label, color=color, linestyle=linestyle)
     xticks = list(range(xx[-1]))[:: xx[-1] // 16 + 1]
     # print(xticks, ax.get_xticks())
-    if xticks[1] > ax.get_xticks()[1]:
+    if len(xticks) > 1 and xticks[1] > ax.get_xticks()[1]:
         # print("Update xticks")
         ax.set_xticks(xticks)
 
 
 def hist_plot(
-    loss_lists, accuracy_lists, customs_dict, loss_names=None, save=None, axes=None, init_epoch=0, pre_item={}, fig_label=None
+    loss_lists, accuracy_lists, customs_dict, loss_names=None, save=None, axes=None, init_epoch=0, pre_item={}, fig_label=None, eval_split=False
 ):
     if axes is None:
-        fig, axes = plt.subplots(1, 3, sharex=True, figsize=(24, 8))
+        if eval_split:
+            fig, axes = plt.subplots(2, 3, sharex=True, figsize=(24, 16))
+            axes = axes.flatten()
+        else:
+            fig, axes = plt.subplots(1, 3, sharex=True, figsize=(24, 8))
+        for ax in axes:
+            ax.set_prop_cycle(cycler('color', COLORS))
     else:
         fig = axes[0].figure
+        # Empty titles
+        for ax in axes:
+            ax.set_title("")
+        if len(axes) == 6:
+            eval_split = True
     axes = axes.tolist()
     if loss_names == None:
         loss_names = [""] * len(loss_lists)
@@ -61,20 +94,53 @@ def hist_plot(
     if fig_label:
         axes[1].legend(loc="lower right", fontsize=8)
 
-    for ii in customs_dict:
-        if ii not in EVALS_NAME and len(axes) == 3:
+    other_customs = [ii for ii in customs_dict if ii not in EVALS_NAME]
+    if len(other_customs) != 0:
+        if len(axes) == 3:
             axes.append(axes[0].twinx())
-            break
+        if len(axes) == 4:
+            axes[-1].set_title(axes[0].get_title())
+            axes[0].set_title("")
 
+    if eval_split:
+        # Plot two rows, 2 x 3
+        other_custom_ax = 2
+        eval_ax_start, eval_ax = 3, 3
+        eval_ax_step = 1
+    else:
+        # Plot one row, 1 x 3
+        other_custom_ax = 3
+        eval_ax_start, eval_ax = 2, 2
+        eval_ax_step = 0
+
+    # Keep the same color, but different from line styles.
+    eval_id, other_custom_id = 0, 0
     for kk, vv in customs_dict.items():
-        ax = axes[2] if kk in EVALS_NAME else axes[3]
+        if kk in EVALS_NAME:
+            ax = axes[eval_ax]
+            title = kk if len(ax.get_title()) == 0 else ax.get_title() + ", " + kk
+            ax.set_title(title)
+            linestyle = EVALS_LINE_STYLE[eval_id]
+            cur_color = ax.lines[-1].get_color() if eval_id != 0 else None
+            eval_id += 0 if eval_split else 1
+            eval_ax += eval_ax_step
+        else:
+            ax = axes[other_custom_ax]
+            title = kk if len(ax.get_title()) == 0 else ax.get_title() + ", " + kk
+            ax.set_title(title)
+            linestyle = EVALS_LINE_STYLE[other_custom_id + 0 if eval_split else 1]
+            cur_color = ax.lines[-1].get_color() if other_custom_id != 0 else None
+            other_custom_id += 1
         label = kk + " - " + fig_label if fig_label else kk
-        arrays_plot(ax, vv, label=label, init_epoch=init_epoch, pre_value=pre_item.get(kk, 0))
+        arrays_plot(ax, vv, color=cur_color, label=label, init_epoch=init_epoch, pre_value=pre_item.get(kk, 0), linestyle=linestyle)
         peak_scatter(ax, vv, np.argmax, init_epoch=init_epoch)
-    axes[2].set_title(", ".join(customs_dict))
-    axes[2].legend(loc="lower left", fontsize=8)
-    if len(axes) == 4:
-        axes[3].legend(loc="lower right", fontsize=8)
+
+    eval_ax = eval_ax if eval_split else eval_ax + 1
+    for ii in range(eval_ax_start, eval_ax):
+        axes[ii].legend(loc="lower left", fontsize=8)
+
+    if len(axes) > 3 and other_custom_id > 0:
+        axes[other_custom_ax].legend(loc="lower right", fontsize=8)
 
     for ax in axes:
         ymin, ymax = ax.get_ylim()
@@ -97,7 +163,7 @@ def hist_plot(
     return np.array(axes), last_item
 
 
-def hist_plot_split(history, epochs, names=None, customs=[], save=None, axes=None, init_epoch=0, pre_item={}, fig_label=None):
+def hist_plot_split(history, epochs, names=None, customs=[], save=None, axes=None, init_epoch=0, pre_item={}, fig_label=None, eval_split=True):
     splits = [[int(sum(epochs[:id])), int(sum(epochs[:id])) + ii] for id, ii in enumerate(epochs)]
     split_func = lambda aa: [aa[ii:jj] for ii, jj in splits if ii < len(aa)]
     if isinstance(history, str):
@@ -127,4 +193,4 @@ def hist_plot_split(history, epochs, names=None, customs=[], save=None, axes=Non
     else:
         # hh.pop("lr")
         customs_dict = {kk: split_func(vv) for kk, vv in hh.items() if kk in EVALS_NAME}
-    return hist_plot(loss_lists, accuracy_lists, customs_dict, names, save, axes, init_epoch, pre_item, fig_label)
+    return hist_plot(loss_lists, accuracy_lists, customs_dict, names, save, axes, init_epoch, pre_item, fig_label, eval_split=eval_split)

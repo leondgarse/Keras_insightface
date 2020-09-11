@@ -15,6 +15,32 @@ def margin_softmax(y_true, y_pred, power=2, scale=0.4, from_logits=False, label_
         y_true, margin_soft, from_logits=from_logits, label_smoothing=label_smoothing
     )
 
+# margin_softmax class wrapper
+class MarginSoftmax(tf.keras.losses.Loss):
+    def __init__(self, power=2, scale=0.4, from_logits=False, label_smoothing=0, **kwargs):
+        super(MarginSoftmax, self).__init__(**kwargs)
+        self.power, self.scale, self.from_logits, self.label_smoothing = power, scale, from_logits, label_smoothing
+
+    def call(self, y_true, y_pred):
+        margin_soft = tf.where(tf.cast(y_true, dtype=tf.bool), (y_pred ** self.power + y_pred * self.scale) / 2, y_pred)
+        return tf.keras.losses.categorical_crossentropy(
+            y_true, margin_soft, from_logits=self.from_logits, label_smoothing=self.label_smoothing
+        )
+    def get_config(self):
+        config = super(MarginSoftmax, self).get_config()
+        config.update(
+            {
+                "power": self.power,
+                "scale": self.scale,
+                "from_logits": self.from_logits,
+                "label_smoothing": self.label_smoothing,
+            }
+        )
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
 
 # Single function one
 def arcface_loss(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True, label_smoothing=0):

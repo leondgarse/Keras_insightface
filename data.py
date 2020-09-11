@@ -133,7 +133,11 @@ class Triplet_dataset:
         )
         # train_dataset = train_dataset.shuffle(total)
         train_dataset = train_dataset.batch(self.batch_size)
-        train_dataset = train_dataset.map(self.process_batch_path, num_parallel_calls=self.AUTOTUNE)
+        if "-dev" in tf.__version__ or int(tf.__version__.split('.')[1]) > 2:
+            # tf-nightly or tf >= 2.3.0
+            train_dataset = train_dataset.map(self.process_batch_path_2, num_parallel_calls=self.AUTOTUNE)
+        else:
+            train_dataset = train_dataset.map(self.process_batch_path_1, num_parallel_calls=self.AUTOTUNE)
         self.train_dataset = train_dataset.prefetch(buffer_size=self.AUTOTUNE)
         self.classes = classes
 
@@ -143,11 +147,12 @@ class Triplet_dataset:
         image_data = np.random.permutation(np.vstack(shuffle_dataset.values))
         return (ii for ii in image_data)
 
-    def process_batch_path(self, image_name_batch):
+    def process_batch_path_1(self, image_name_batch):
         image_names = tf.reshape(image_name_batch, [-1])
-        if "-dev" in tf.__version__:
-            images, labels = tf.map_fn(self.process_path, image_names, fn_output_signature=(tf.float32, tf.int32))
-        else:
-            images, labels = tf.map_fn(self.process_path, image_names, dtype=(tf.float32, tf.int32))
+        images, labels = tf.map_fn(self.process_path, image_names, dtype=(tf.float32, tf.int32))
+        return images, labels
 
+    def process_batch_path_2(self, image_name_batch):
+        image_names = tf.reshape(image_name_batch, [-1])
+        images, labels = tf.map_fn(self.process_path, image_names, fn_output_signature=(tf.float32, tf.int32))
         return images, labels

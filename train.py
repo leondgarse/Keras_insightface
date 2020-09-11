@@ -120,14 +120,14 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), **
 
 
 class NormDense(keras.layers.Layer):
-    def __init__(self, units=1000, **kwargs):
+    def __init__(self, units=1000, kernel_regularizer=None, **kwargs):
         super(NormDense, self).__init__(**kwargs)
         self.init = keras.initializers.glorot_normal()
-        self.units = units
+        self.units, self.kernel_regularizer = units, kernel_regularizer
 
     def build(self, input_shape):
         self.w = self.add_weight(
-            name="norm_dense_w", shape=(input_shape[-1], self.units), initializer=self.init, trainable=True
+            name="norm_dense_w", shape=(input_shape[-1], self.units), initializer=self.init, trainable=True, regularizer=self.kernel_regularizer
         )
         super(NormDense, self).build(input_shape)
 
@@ -148,6 +148,14 @@ class NormDense(keras.layers.Layer):
     def from_config(cls, config):
         return cls(**config)
 
+class L2_decay_wdm(keras.regularizers.L2):
+    def __init__(self, wd_func=None, **kwargs):
+        super(L2_decay_wdm, self).__init__(**kwargs)
+        self.wd_func = wd_func
+    def __call__(self, x):
+        self.l2 = self.wd_func()
+        # tf.print(", l2 =", self.l2)
+        return super(L2_decay_wdm, self).__call__(x)
 
 class Train:
     def __init__(
@@ -165,12 +173,14 @@ class Train:
         lr_min=0,
         eval_freq=1,
         random_status=0,
+        output_wd_multiply=1,
         custom_objects={},
     ):
         custom_objects.update(
             {
                 "NormDense": NormDense,
                 "margin_softmax": losses.margin_softmax,
+                "MarginSoftmax": losses.MarginSoftmax,
                 "arcface_loss": losses.arcface_loss,
                 "ArcfaceLoss": losses.ArcfaceLoss,
                 "CenterLoss": losses.CenterLoss,
@@ -235,6 +245,7 @@ class Train:
         self.basic_callbacks = basic_callbacks
         self.my_hist = [ii for ii in self.basic_callbacks if isinstance(ii, myCallbacks.My_history)][0]
         self.custom_callbacks = []
+        self.output_wd_multiply = output_wd_multiply
 
     def __search_embedding_layer__(self, model):
         for ii in range(1, 6):
@@ -288,7 +299,11 @@ class Train:
         elif type == self.arcface:
             if self.model == None or self.model.output_names[-1] != self.arcface:
                 print(">>>> Add arcface layer...")
-                output = NormDense(self.classes, name=self.arcface)(embedding)
+                if self.output_wd_multiply != 1:
+                    kernel_regularizer = L2_decay_wdm(lambda: self.output_wd_multiply * self.optimizer.weight_decay)
+                    output = NormDense(self.classes, name=self.arcface, kernel_regularizer=kernel_regularizer)(embedding)
+                else:
+                    output = NormDense(self.classes, name=self.arcface)(embedding)
                 self.model = keras.models.Model(inputs, output)
         elif type == self.triplet or type == self.center:
             self.model = self.basic_model
@@ -310,12 +325,15 @@ class Train:
             if self.triplet in ss:
                 return self.triplet
         else:
-            if isinstance(loss, losses.TripletLossWapper):
+            ss = loss.__class__.__name__.lower()
+            if isinstance(loss, losses.TripletLossWapper) or self.triplet in ss:
                 return self.triplet
-            if isinstance(loss, losses.CenterLoss):
+            if isinstance(loss, losses.CenterLoss) or self.center in ss:
                 return self.center
-            if isinstance(loss, losses.ArcfaceLoss):
+            if isinstance(loss, losses.ArcfaceLoss) or self.arcface in ss:
                 return self.arcface
+            if self.softmax in ss:
+                return self.softmax
         return self.softmax
 
     def __basic_train__(self, loss, epochs, initial_epoch=0, loss_weights=None):
@@ -333,6 +351,13 @@ class Train:
         )
 
     def train(self, train_schedule, initial_epoch=0):
+        if initial_epoch == -1 and os.path.exists(self.my_hist.initial_file):
+            import json
+            with open(self.my_hist.initial_file, "r") as ff:
+                aa = json.load(ff)
+            initial_epoch = len([ii for ii in aa['accuracy'] if ii != 0])
+            print(">>>> Init initial_epoch number from backup hist file as: %d..." % initial_epoch)
+
         for sch in train_schedule:
             if sch.get("loss", None) is None:
                 continue
@@ -340,7 +365,7 @@ class Train:
             type = sch.get("type", None) or self.__init_type_by_loss__(cur_loss)
             print(">>>> Train %s..." % type)
 
-            if sch.get("triplet", False) or type == self.triplet:
+            if sch.get("triplet", False) or sch.get("tripletAll", False) or type == self.triplet:
                 self.__init_dataset_triplet__()
             else:
                 self.__init_dataset_softmax__()
@@ -370,10 +395,11 @@ class Train:
                 )
                 loss_weights.update({self.model.output_names[0]: float(sch["centerloss"])})
 
-            if sch.get("triplet", False) and type != self.triplet:
-                print(">>>> Attach tripletloss...")
+            if (sch.get("triplet", False) or sch.get("tripletAll", False)) and type != self.triplet:
                 alpha = sch.get("alpha", 0.35)
-                triplet_loss = losses.BatchHardTripletLoss(alpha=alpha)
+                triplet_loss = losses.BatchHardTripletLoss(alpha=alpha) if sch.get("triplet", False) else losses.BatchAllTripletLoss(alpha=alpha)
+                print(">>>> Attach tripletloss: %s..." % (triplet_loss.__class__.__name__))
+
                 cur_loss = [triplet_loss, *cur_loss]
                 loss_weights = loss_weights if loss_weights is not None else {ii: 1.0 for ii in self.model.output_names}
                 nns = self.model.output_names
@@ -381,7 +407,7 @@ class Train:
                 self.model.output_names[0] = self.triplet + "_embedding"
                 for id, nn in enumerate(nns):
                     self.model.output_names[id + 1] = nn
-                loss_weights.update({self.model.output_names[0]: float(sch["triplet"])})
+                loss_weights.update({self.model.output_names[0]: float(sch.get('triplet', False) or sch.get('tripletAll', False))})
 
             print(">>>> loss_weights:", loss_weights)
             self.metrics = {ii: None if "embedding" in ii else "accuracy" for ii in self.model.output_names}
