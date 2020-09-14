@@ -407,13 +407,13 @@
     | -------------------------- | -------------- | -------------- | --------- |
     | mobilenet_v1 float16       | 111.696        | 50.433         | 7.74493   |
     | mobilenet_v1 float16 xnn   | 94.774         | 37.345         | 7.74493   |
-    | mobilenet_v1 quant         | 47.551         | 22.335         | 4.31061   |
+    | mobilenet_v1 uint8         | 47.551         | 22.335         | 4.31061   |
     | EB0 float16                | 139.394        | 95.317         | 9.8998    |
     | EB0 float16 xnn            | 117.684        | 69.567         | 9.8998    |
     | EB0 uint8                  | 80.863         | 64.178         | 5.99462   |
     | mobilefacenet float16      | 188.111        | 111.990        | 2.14302   |
     | mobilefacenet float16 xnn  | 118.711        | 54.152         | 2.14302   |
-    | mobilefacenet quant        | 191.208        | 158.794        | 1.30752   |
+    | mobilefacenet uint8        | 191.208        | 158.794        | 1.30752   |
     | se_mobilefacenet float16   | 191.044        | 118.211        | 2.32702   |
     | mobilenet_v3_small float16 | 22.955         | 15.654         | 3.07917   |
     | mobilenet_v3_large float16 | 62.491         | 36.146         | 7.22042   |

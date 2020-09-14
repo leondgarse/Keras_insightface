@@ -24,7 +24,7 @@ def print_buildin_models():
         """
     >>>> buildin_models
     mobilenet, mobilenetv2, mobilenetv3_small, mobilenetv3_large, mobilefacenet, se_mobilefacenet, nasnetmobile
-    resnet50v2, resnet101v2, se_resnext, resnest50, resnest101,
+    resnet50, resnet50v2, resnet101, resnet101v2, se_resnext, resnest50, resnest101,
     efficientnetb0, efficientnetb1, efficientnetb2, efficientnetb3, efficientnetb4, efficientnetb5, efficientnetb6, efficientnetb7,
     """,
         end="",
@@ -38,8 +38,12 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), **
         xx = keras.applications.MobileNet(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name == "mobilenetv2":
         xx = keras.applications.MobileNetV2(input_shape=input_shape, include_top=False, weights=None, **kwargs)
+    elif name == "resnet50":
+        xx = keras.applications.ResNet50(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name == "resnet50v2":
         xx = keras.applications.ResNet50V2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
+    elif name == "resnet101":
+        xx = keras.applications.ResNet101(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name == "resnet101v2":
         xx = keras.applications.ResNet101V2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name == "nasnetmobile":
@@ -154,8 +158,12 @@ class L2_decay_wdm(keras.regularizers.L2):
         self.wd_func = wd_func
     def __call__(self, x):
         self.l2 = self.wd_func()
-        # tf.print(", l2 =", self.l2)
+        # tf.print(", l2 =", self.l2, end='')
         return super(L2_decay_wdm, self).__call__(x)
+    def get_config(self):
+        self.l2 = 0  # Just a fake value for saving
+        config = super(L2_decay_wdm, self).get_config()
+        return config
 
 class Train:
     def __init__(
@@ -291,19 +299,21 @@ class Train:
             output_layer = min(len(self.basic_model.layers), len(self.model.layers) - 1)
             self.model = keras.models.Model(inputs, self.model.layers[output_layer].output)
 
+        if self.output_wd_multiply != 1:
+            print(">>>> Output weight decay multiplier:", self.output_wd_multiply)
+            kernel_regularizer = L2_decay_wdm(lambda: self.output_wd_multiply * self.optimizer.weight_decay)
+        else:
+            kernel_regularizer = None
+
         if type == self.softmax:
             if self.model == None or self.model.output_names[-1] != self.softmax:
                 print(">>>> Add softmax layer...")
-                output = keras.layers.Dense(self.classes, name=self.softmax, activation="softmax")(embedding)
+                output = keras.layers.Dense(self.classes, name=self.softmax, activation="softmax", kernel_regularizer=kernel_regularizer)(embedding)
                 self.model = keras.models.Model(inputs, output)
         elif type == self.arcface:
             if self.model == None or self.model.output_names[-1] != self.arcface:
                 print(">>>> Add arcface layer...")
-                if self.output_wd_multiply != 1:
-                    kernel_regularizer = L2_decay_wdm(lambda: self.output_wd_multiply * self.optimizer.weight_decay)
-                    output = NormDense(self.classes, name=self.arcface, kernel_regularizer=kernel_regularizer)(embedding)
-                else:
-                    output = NormDense(self.classes, name=self.arcface)(embedding)
+                output = NormDense(self.classes, name=self.arcface, kernel_regularizer=kernel_regularizer)(embedding)
                 self.model = keras.models.Model(inputs, output)
         elif type == self.triplet or type == self.center:
             self.model = self.basic_model
