@@ -126,14 +126,14 @@
     - Original MXNet r34 max accuracy and its epoch: `lfw, cfp_fp, agedb_30 = 0.9940, 0.9496, 0.9477, epoch 35`
     - Original Tensorflow Resnet50 max accuracy and its epoch: `lfw, cfp_fp, agedb_30 = 0.9898, 0.8756, 0.9038, epoch 34`
 
-    | Optimizer | weight_decay | lr_base | output_layer | output_wd_multiply | random_status | lfw, cfp_fp, agedb_30, epoch |
-    | --------- | ------------ | ------- | ------------ | ------------------ | ------------- | ---------------------------- |
-    | SGDW      | 5e-4         | 0.1     | E            | 10                 | 0             | 0.9945, 0.9627, 0.9423, E37  |
-    | SGDW      | 5e-4         | 0.1     | GDC          | 10                 | 0             | 0.9923, 0.9523, 0.9363, E30  |
-    | SGDW      | 5e-4         | 0.1     | E            | 10                 | 3             | 0.9940, 0.9654, 0.9423, E40  |
-    | SGDW      | 5e-4         | 0.1     | E            | 1                  | 3             | 0.9940, 0.9637, 0.9383, E38  |
-    | AdamW     | 5e-5         | 0.001   | E            | 10                 | 3             | 0.9928, 0.9619, 0.9328, E40  |
-    | AdamW     | 5e-5         | 0.001   | E            | 1                  | 3             | 0.9922, 0.9544, 0.9300, E20  |
+    | Optimizer | weight decay | lr_base | output layer | output wd multiply | random status | lfw,cfp_fp,agedb_30,epoch   |
+    | --------- | ------------ | ------- | ------------ | ------------------ | ------------- | --------------------------- |
+    | SGDW      | 5e-4         | 0.1     | E            | 10                 | 0             | 0.9945, 0.9627, 0.9423, E37 |
+    | SGDW      | 5e-4         | 0.1     | GDC          | 10                 | 0             | 0.9923, 0.9523, 0.9363, E30 |
+    | SGDW      | 5e-4         | 0.1     | E            | 10                 | 3             | 0.9940, 0.9654, 0.9423, E40 |
+    | SGDW      | 5e-4         | 0.1     | E            | 1                  | 3             | 0.9940, 0.9637, 0.9383, E38 |
+    | AdamW     | 5e-5         | 0.001   | E            | 10                 | 3             | 0.9928, 0.9619, 0.9328, E40 |
+    | AdamW     | 5e-5         | 0.001   | E            | 1                  | 3             | 0.9922, 0.9544, 0.9300, E20 |
 
     - limit the max loss value as `80` when plot.
 

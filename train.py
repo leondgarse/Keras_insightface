@@ -24,7 +24,7 @@ def print_buildin_models():
         """
     >>>> buildin_models
     mobilenet, mobilenetv2, mobilenetv3_small, mobilenetv3_large, mobilefacenet, se_mobilefacenet, nasnetmobile
-    resnet50, resnet50v2, resnet101, resnet101v2, se_resnext, resnest50, resnest101,
+    resnet34, resnet50, resnet50v2, resnet101, resnet101v2, se_resnext, resnest50, resnest101,
     efficientnetb0, efficientnetb1, efficientnetb2, efficientnetb3, efficientnetb4, efficientnetb5, efficientnetb6, efficientnetb7,
     """,
         end="",
