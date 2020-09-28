@@ -15,6 +15,7 @@ def margin_softmax(y_true, y_pred, power=2, scale=0.4, from_logits=False, label_
         y_true, margin_soft, from_logits=from_logits, label_smoothing=label_smoothing
     )
 
+
 # margin_softmax class wrapper
 class MarginSoftmax(tf.keras.losses.Loss):
     def __init__(self, power=2, scale=0.4, from_logits=False, label_smoothing=0, **kwargs):
@@ -26,6 +27,7 @@ class MarginSoftmax(tf.keras.losses.Loss):
         return tf.keras.losses.categorical_crossentropy(
             y_true, margin_soft, from_logits=self.from_logits, label_smoothing=self.label_smoothing
         )
+
     def get_config(self):
         config = super(MarginSoftmax, self).get_config()
         config.update(
@@ -41,6 +43,7 @@ class MarginSoftmax(tf.keras.losses.Loss):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
 
 # Single function one
 def arcface_loss(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True, label_smoothing=0):
@@ -83,17 +86,22 @@ class ArcfaceLoss(tf.keras.losses.Loss):
         #     from_logits=from_logits, label_smoothing=label_smoothing, reduction=reduction
         # )
 
-    def call(self, y_true, y_pred):
-        norm_logits = y_pred
-        y_pred_vals = norm_logits[tf.cast(y_true, dtype=tf.bool)]
+    def call(self, y_true, norm_logits):
+        # norm_logits = y_pred
+        pick_cond = tf.cast(y_true, dtype=tf.bool)
+        y_pred_vals = norm_logits[pick_cond]
         if self.margin1 == 1.0 and self.margin3 == 0.0:
             theta = tf.cos(tf.acos(y_pred_vals) + self.margin2)
         else:
             theta = tf.cos(tf.acos(y_pred_vals) * self.margin1 + self.margin2) - self.margin3
         theta_valid = tf.where(y_pred_vals > self.threshold, theta, self.theta_min - theta)
-        theta_one_hot = tf.expand_dims(theta_valid - y_pred_vals, 1) * tf.cast(y_true, dtype=tf.float32)
-        arcface_logits = (theta_one_hot + norm_logits) * self.scale
-        return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
+        # theta_one_hot = tf.expand_dims(theta_valid - y_pred_vals, 1) * tf.cast(y_true, dtype=tf.float32)
+        # arcface_logits = (theta_one_hot + norm_logits) * self.scale
+        theta_one_hot = tf.expand_dims(theta_valid, 1) * tf.cast(y_true, dtype=tf.float32)
+        arcface_logits = tf.where(pick_cond, theta_one_hot, norm_logits) * self.scale
+        return tf.keras.losses.categorical_crossentropy(
+            y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
+        )
         # return self.reduction_func(y_true, arcface_logits)
 
     def get_config(self):
@@ -120,6 +128,21 @@ def arcface_loss_2(y_true, y_pred, margin1=1.0, margin2=0.5, margin3=0.0, scale=
     theta = tf.cos(tf.acos(y_pred) * margin1 + margin2) - margin3
     cond = tf.logical_and(tf.cast(y_true, dtype=tf.bool), theta < y_pred)
     arcface_logits = tf.where(cond, theta, y_pred) * scale
+    return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=from_logits)
+
+
+# Mxnet insightface loss_type == 4, just same effect as `arcface_loss` [margin1=1.0, margin2=0.5, margin3=0.0]
+def arcface_loss_type_4(y_true, norm_logits, margin=0.5, scale=64.0, from_logits=True):
+    threshold = tf.cos(np.pi - margin)
+    low_pred_punish = tf.sin(np.pi - margin) * margin
+    pick_cond = tf.cast(y_true, dtype=tf.bool)
+
+    y_pred_vals = norm_logits[pick_cond]
+    theta = y_pred_vals * tf.cos(margin) - tf.sqrt(1 - tf.pow(y_pred_vals, 2)) * tf.sin(margin)
+    theta_valid = tf.where(y_pred_vals > threshold, theta, y_pred_vals - low_pred_punish)
+    theta_one_hot = tf.expand_dims(theta_valid, 1) * tf.cast(y_true, dtype=tf.float32)
+    arcface_logits = tf.where(pick_cond, theta_one_hot, norm_logits) * scale
+    # tf.assert_equal(tf.math.is_nan(tf.reduce_mean(arcface_logits)), False)
     return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=from_logits)
 
 

@@ -31,19 +31,27 @@ def print_buildin_models():
     )
 
 
-def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), **kwargs):
+# MXNET: bn_momentum=0.9, bn_epsilon=2e-5, TF default: bn_momentum=0.99, bn_epsilon=0.001
+def buildin_models(
+    name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), output_layer="GDC", bn_momentum=0.99, bn_epsilon=0.001, **kwargs
+):
     name = name.lower()
     """ Basic model """
     if name == "mobilenet":
         xx = keras.applications.MobileNet(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name == "mobilenetv2":
         xx = keras.applications.MobileNetV2(input_shape=input_shape, include_top=False, weights=None, **kwargs)
+    elif name == "resnet34":
+        from backbones import resnet
+
+        xx = resnet.ResNet34(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name == "resnet50":
         xx = keras.applications.ResNet50(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name == "resnet50v2":
         xx = keras.applications.ResNet50V2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name == "resnet101":
-        xx = keras.applications.ResNet101(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
+        # xx = keras.applications.ResNet101(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
+        xx = ResNet101(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name == "resnet101v2":
         xx = keras.applications.ResNet101V2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name == "nasnetmobile":
@@ -106,19 +114,26 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), **
     nn = xx.outputs[0]
     # nn = keras.layers.Conv2D(emb_shape, xx.output_shape[1], use_bias=False)(nn)
 
-    """ GDC """
-    nn = keras.layers.Conv2D(512, 1, use_bias=False)(nn)
-    nn = keras.layers.BatchNormalization()(nn)
-    nn = keras.layers.PReLU(shared_axes=[1, 2])(nn)
-    nn = keras.layers.DepthwiseConv2D(int(nn.shape[1]), depth_multiplier=1, use_bias=False)(nn)
-    nn = keras.layers.BatchNormalization()(nn)
-    nn = keras.layers.Conv2D(emb_shape, 1, use_bias=False, activation=None)(nn)
-    if dropout > 0 and dropout < 1:
-        nn = keras.layers.Dropout(dropout)(nn)
-    nn = keras.layers.Flatten()(nn)
-    # nn = keras.layers.Dense(emb_shape, activation=None, use_bias=False, kernel_initializer="glorot_normal")(nn)
-    embedding = keras.layers.BatchNormalization(name="embedding")(nn)
-    # norm_emb = layers.Lambda(tf.nn.l2_normalize, name='norm_embedding', arguments={'axis': 1})(embedding)
+    if output_layer == "E":
+        """ Fully Connected """
+        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
+        if dropout > 0 and dropout < 1:
+            nn = keras.layers.Dropout(dropout)(nn)
+        nn = keras.layers.Flatten()(nn)
+        nn = keras.layers.Dense(emb_shape, activation=None, use_bias=True, kernel_initializer="glorot_normal")(nn)
+    else:
+        """ GDC """
+        # nn = keras.layers.Conv2D(512, 1, use_bias=False)(nn)
+        # nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
+        # nn = keras.layers.PReLU(shared_axes=[1, 2])(nn)
+        nn = keras.layers.DepthwiseConv2D(int(nn.shape[1]), depth_multiplier=1, use_bias=False)(nn)
+        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
+        if dropout > 0 and dropout < 1:
+            nn = keras.layers.Dropout(dropout)(nn)
+        nn = keras.layers.Conv2D(emb_shape, 1, use_bias=False, activation=None, kernel_initializer="glorot_normal")(nn)
+        nn = keras.layers.Flatten()(nn)
+        # nn = keras.layers.Dense(emb_shape, activation=None, use_bias=True, kernel_initializer="glorot_normal")(nn)
+    embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="embedding")(nn)
     basic_model = keras.models.Model(inputs, embedding, name=xx.name)
     return basic_model
 
@@ -131,7 +146,11 @@ class NormDense(keras.layers.Layer):
 
     def build(self, input_shape):
         self.w = self.add_weight(
-            name="norm_dense_w", shape=(input_shape[-1], self.units), initializer=self.init, trainable=True, regularizer=self.kernel_regularizer
+            name="norm_dense_w",
+            shape=(input_shape[-1], self.units),
+            initializer=self.init,
+            trainable=True,
+            regularizer=self.kernel_regularizer,
         )
         super(NormDense, self).build(input_shape)
 
@@ -152,18 +171,22 @@ class NormDense(keras.layers.Layer):
     def from_config(cls, config):
         return cls(**config)
 
+
 class L2_decay_wdm(keras.regularizers.L2):
     def __init__(self, wd_func=None, **kwargs):
         super(L2_decay_wdm, self).__init__(**kwargs)
         self.wd_func = wd_func
+
     def __call__(self, x):
         self.l2 = self.wd_func()
         # tf.print(", l2 =", self.l2, end='')
         return super(L2_decay_wdm, self).__call__(x)
+
     def get_config(self):
         self.l2 = 0  # Just a fake value for saving
         config = super(L2_decay_wdm, self).get_config()
         return config
+
 
 class Train:
     def __init__(
@@ -187,9 +210,11 @@ class Train:
         custom_objects.update(
             {
                 "NormDense": NormDense,
+                "L2_decay_wdm": L2_decay_wdm,
                 "margin_softmax": losses.margin_softmax,
                 "MarginSoftmax": losses.MarginSoftmax,
                 "arcface_loss": losses.arcface_loss,
+                "arcface_loss_type_4": losses.arcface_loss_type_4,
                 "ArcfaceLoss": losses.ArcfaceLoss,
                 "CenterLoss": losses.CenterLoss,
                 "batch_hard_triplet_loss": losses.batch_hard_triplet_loss,
@@ -308,12 +333,25 @@ class Train:
         if type == self.softmax:
             if self.model == None or self.model.output_names[-1] != self.softmax:
                 print(">>>> Add softmax layer...")
-                output = keras.layers.Dense(self.classes, name=self.softmax, activation="softmax", kernel_regularizer=kernel_regularizer)(embedding)
+                # output = keras.layers.Dense(self.classes, name=self.softmax, activation="softmax", kernel_regularizer=kernel_regularizer)(embedding)
+                output_layer = keras.layers.Dense(
+                    self.classes, use_bias=False, name=self.softmax, activation="softmax", kernel_regularizer=kernel_regularizer
+                )
+                if self.model != None and self.model.output_names[-1] == self.arcface:
+                    print(">>>> Reload arcface weight...")
+                    output_layer.build(embedding.shape)
+                    output_layer.set_weights(self.model.layers[-1].get_weights())
+                output = output_layer(embedding)
                 self.model = keras.models.Model(inputs, output)
         elif type == self.arcface:
             if self.model == None or self.model.output_names[-1] != self.arcface:
                 print(">>>> Add arcface layer...")
-                output = NormDense(self.classes, name=self.arcface, kernel_regularizer=kernel_regularizer)(embedding)
+                output_layer = NormDense(self.classes, name=self.arcface, kernel_regularizer=kernel_regularizer)
+                if self.model != None and self.model.output_names[-1] == self.softmax:
+                    print(">>>> Reload softmax weight...")
+                    output_layer.build(embedding.shape)
+                    output_layer.set_weights(self.model.layers[-1].get_weights())
+                output = output_layer(embedding)
                 self.model = keras.models.Model(inputs, output)
         elif type == self.triplet or type == self.center:
             self.model = self.basic_model
@@ -361,13 +399,6 @@ class Train:
         )
 
     def train(self, train_schedule, initial_epoch=0):
-        if initial_epoch == -1 and os.path.exists(self.my_hist.initial_file):
-            import json
-            with open(self.my_hist.initial_file, "r") as ff:
-                aa = json.load(ff)
-            initial_epoch = len([ii for ii in aa['accuracy'] if ii != 0])
-            print(">>>> Init initial_epoch number from backup hist file as: %d..." % initial_epoch)
-
         for sch in train_schedule:
             if sch.get("loss", None) is None:
                 continue
@@ -408,7 +439,7 @@ class Train:
             if (sch.get("triplet", False) or sch.get("tripletAll", False)) and type != self.triplet:
                 alpha = sch.get("alpha", 0.35)
                 triplet_loss = losses.BatchHardTripletLoss(alpha=alpha) if sch.get("triplet", False) else losses.BatchAllTripletLoss(alpha=alpha)
-                print(">>>> Attach tripletloss: %s..." % (triplet_loss.__class__.__name__))
+                print(">>>> Attach tripletloss: %s, alpha = %f..." % (triplet_loss.__class__.__name__, alpha))
 
                 cur_loss = [triplet_loss, *cur_loss]
                 loss_weights = loss_weights if loss_weights is not None else {ii: 1.0 for ii in self.model.output_names}
@@ -417,7 +448,9 @@ class Train:
                 self.model.output_names[0] = self.triplet + "_embedding"
                 for id, nn in enumerate(nns):
                     self.model.output_names[id + 1] = nn
-                loss_weights.update({self.model.output_names[0]: float(sch.get('triplet', False) or sch.get('tripletAll', False))})
+                loss_weights.update(
+                    {self.model.output_names[0]: float(sch.get("triplet", False) or sch.get("tripletAll", False))}
+                )
 
             print(">>>> loss_weights:", loss_weights)
             self.metrics = {ii: None if "embedding" in ii else "accuracy" for ii in self.model.output_names}
@@ -431,7 +464,7 @@ class Train:
                     print(">>>> Insert weight decay callback...")
                     lr_base, wd_base = self.optimizer.lr.numpy(), self.optimizer.weight_decay.numpy()
                     wd_callback = myCallbacks.OptimizerWeightDecay(lr_base, wd_base)
-                    self.callbacks.insert(-2, wd_callback) # should be after lr_scheduler
+                    self.callbacks.insert(-2, wd_callback)  # should be after lr_scheduler
 
             if sch.get("bottleneckOnly", False):
                 print(">>>> Train bottleneckOnly...")

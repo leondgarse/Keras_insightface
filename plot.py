@@ -12,20 +12,23 @@ MAX_COLORS = 10
 
 try:
     import seaborn as sns
+
     sns.set(style="darkgrid")
-    COLORS = sns.color_palette('deep', n_colors=MAX_COLORS)
+    COLORS = sns.color_palette("deep", n_colors=MAX_COLORS)
 except:
     pass
 
-def set_colors(max_color, palette='deep'):
+
+def set_colors(max_color, palette="deep"):
     print("Available palette names: deep, muted, bright, pastel, dark, colorblind, rainbow")
     global MAX_COLORS
     global COLORS
     MAX_COLORS = max_color
-    if palette == 'rainbow':
+    if palette == "rainbow":
         COLORS = cm.rainbow(np.linspace(0, 1, MAX_COLORS))
     else:
         COLORS = sns.color_palette(palette, n_colors=MAX_COLORS)
+
 
 def peak_scatter(ax, array, peak_method, color="r", init_epoch=0):
     start = init_epoch + 1
@@ -38,7 +41,7 @@ def peak_scatter(ax, array, peak_method, color="r", init_epoch=0):
         start += len(ii)
 
 
-def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0, linestyle="-"):
+def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0, linestyle="-", limit_max=1e9):
     tt = []
     for ii in arrays:
         tt += ii
@@ -51,6 +54,8 @@ def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0, l
     for id, ii in enumerate(tt):
         if ii == 0 and id != 0:
             tt[id] = tt[id - 1]
+        if ii > limit_max:
+            tt[id] = limit_max
     ax.plot(xx, tt, label=label, color=color, linestyle=linestyle)
     xticks = list(range(xx[-1]))[:: xx[-1] // 16 + 1]
     # print(xticks, ax.get_xticks())
@@ -60,16 +65,26 @@ def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0, l
 
 
 def hist_plot(
-    loss_lists, accuracy_lists, customs_dict, loss_names=None, save=None, axes=None, init_epoch=0, pre_item={}, fig_label=None, eval_split=False
+    loss_lists,
+    accuracy_lists,
+    customs_dict,
+    loss_names=None,
+    save=None,
+    axes=None,
+    init_epoch=0,
+    pre_item={},
+    fig_label=None,
+    eval_split=False,
+    limit_loss_max=1e9,
 ):
     if axes is None:
         if eval_split:
-            fig, axes = plt.subplots(2, 3, sharex=True, figsize=(24, 16))
+            fig, axes = plt.subplots(2, 3, sharex=False, figsize=(24, 16))
             axes = axes.flatten()
         else:
-            fig, axes = plt.subplots(1, 3, sharex=True, figsize=(24, 8))
+            fig, axes = plt.subplots(1, 3, sharex=False, figsize=(24, 8))
         for ax in axes:
-            ax.set_prop_cycle(cycler('color', COLORS))
+            ax.set_prop_cycle(cycler("color", COLORS))
     else:
         fig = axes[0].figure
         # Empty titles
@@ -81,8 +96,9 @@ def hist_plot(
     if loss_names == None:
         loss_names = [""] * len(loss_lists)
 
-    arrays_plot(axes[0], loss_lists, label=fig_label, init_epoch=init_epoch, pre_value=pre_item.get("loss", 0))
-    peak_scatter(axes[0], loss_lists, np.argmin, init_epoch=init_epoch)
+    if len(loss_lists) != 0:
+        arrays_plot(axes[0], loss_lists, label=fig_label, init_epoch=init_epoch, pre_value=pre_item.get("loss", 0), limit_max=limit_loss_max)
+        peak_scatter(axes[0], loss_lists, np.argmin, init_epoch=init_epoch)
     axes[0].set_title("loss")
     if fig_label:
         axes[0].legend(loc="upper right", fontsize=8)
@@ -132,7 +148,9 @@ def hist_plot(
             cur_color = ax.lines[-1].get_color() if other_custom_id != 0 else None
             other_custom_id += 1
         label = kk + " - " + fig_label if fig_label else kk
-        arrays_plot(ax, vv, color=cur_color, label=label, init_epoch=init_epoch, pre_value=pre_item.get(kk, 0), linestyle=linestyle)
+        arrays_plot(
+            ax, vv, color=cur_color, label=label, init_epoch=init_epoch, pre_value=pre_item.get(kk, 0), linestyle=linestyle
+        )
         peak_scatter(ax, vv, np.argmax, init_epoch=init_epoch)
 
     eval_ax = eval_ax if eval_split else eval_ax + 1
@@ -157,13 +175,16 @@ def hist_plot(
         fig.savefig(save)
 
     last_item = {kk: vv[-1][-1] for kk, vv in customs_dict.items()}
-    last_item["loss"] = loss_lists[-1][-1]
+    if len(loss_lists) != 0:
+        last_item["loss"] = loss_lists[-1][-1]
     if len(accuracy_lists) != 0:
         last_item["accuracy"] = accuracy_lists[-1][-1]
     return np.array(axes), last_item
 
 
-def hist_plot_split(history, epochs, names=None, customs=[], save=None, axes=None, init_epoch=0, pre_item={}, fig_label=None, eval_split=True):
+def hist_plot_split(
+    history, epochs, names=None, customs=[], save=None, axes=None, init_epoch=0, pre_item={}, fig_label=None, eval_split=True, limit_loss_max=1e9
+):
     splits = [[int(sum(epochs[:id])), int(sum(epochs[:id])) + ii] for id, ii in enumerate(epochs)]
     split_func = lambda aa: [aa[ii:jj] for ii, jj in splits if ii < len(aa)]
     if isinstance(history, str):
@@ -193,4 +214,10 @@ def hist_plot_split(history, epochs, names=None, customs=[], save=None, axes=Non
     else:
         # hh.pop("lr")
         customs_dict = {kk: split_func(vv) for kk, vv in hh.items() if kk in EVALS_NAME}
-    return hist_plot(loss_lists, accuracy_lists, customs_dict, names, save, axes, init_epoch, pre_item, fig_label, eval_split=eval_split)
+
+    if fig_label is None and isinstance(history[-1], str):
+        fig_label = os.path.splitext(os.path.basename(history[-1]))[0]
+
+    return hist_plot(
+        loss_lists, accuracy_lists, customs_dict, names, save, axes, init_epoch, pre_item, fig_label, eval_split=eval_split, limit_loss_max=limit_loss_max
+    )

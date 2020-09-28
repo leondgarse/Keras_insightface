@@ -48,10 +48,10 @@ def random_process_image(img, label, img_shape=(112, 112), random_status=2, rand
     if random_status >= 2:
         img = tf.image.random_contrast(img, 1 - 0.1 * random_status, 1 + 0.1 * random_status)
         img = tf.image.random_saturation(img, 1 - 0.1 * random_status, 1 + 0.1 * random_status)
-    if random_crop is not None:
+    if random_status >= 3 and random_crop is not None:
         img = tf.image.random_crop(img, random_crop)
         img = tf.image.resize(img, img_shape)
-    img = (tf.clip_by_value(img, 0.0, 1.0) - 0.5) * 2
+    img = (tf.clip_by_value(img, 0.0, 1.0) * 2) - 1
     return img, label
 
 
@@ -133,7 +133,7 @@ class Triplet_dataset:
         )
         # train_dataset = train_dataset.shuffle(total)
         train_dataset = train_dataset.batch(self.batch_size)
-        if "-dev" in tf.__version__ or int(tf.__version__.split('.')[1]) > 2:
+        if "-dev" in tf.__version__ or int(tf.__version__.split(".")[1]) > 2:
             # tf-nightly or tf >= 2.3.0
             train_dataset = train_dataset.map(self.process_batch_path_2, num_parallel_calls=self.AUTOTUNE)
         else:

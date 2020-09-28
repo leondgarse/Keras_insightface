@@ -2,9 +2,6 @@
   - Keras Insightface implementation.
   - This is still under working, many things are still testing here, so there may lots of errors atm.
   - **Any advise is welcome**!
-  - **NOTE 1** Seems adding `weight_decay` to `optimizer` is essential for train `Arcloss`. My `weight_decay` value for `Adam` is `5e-5`.
-  - **NOTE 2** Seems adding `dropout` is **NOT** good.
-  - **NOTE 3** Seems combining `Arcloss` with `TripletLoss` improves accuracy performance on test datasets.
   - **Environment**
     ```py
     # $ ipython
@@ -45,12 +42,17 @@
   - [___Keras insightface___](#keras-insightface)
   - [Table of Contents](#table-of-contents)
   - [Current accuracy](#current-accuracy)
+  - [Comparing Resnet34 with original MXNet version](#comparing-resnet34-with-original-mxnet-version)
   - [Usage](#usage)
   	- [Beforehand Data Prepare](#beforehand-data-prepare)
   	- [Training scripts](#training-scripts)
+  	- [Learning rate](#learning-rate)
+  	- [Other backbones](#other-backbones)
   	- [Optimizer with weight decay](#optimizer-with-weight-decay)
   	- [Multi GPU train](#multi-gpu-train)
   	- [TFLite model inference time test on ARM32](#tflite-model-inference-time-test-on-arm32)
+  - [Related Projects](#related-projects)
+  - [___Personal items not related with usage___](#personal-items-not-related-with-usage)
   - [Training Record](#training-record)
   	- [Loss function test on Mobilenet](#loss-function-test-on-mobilenet)
   	- [Mobilefacenet](#mobilefacenet)
@@ -64,21 +66,78 @@
   	- [ONNX](#onnx)
   	- [TensorRT](#tensorrt)
   	- [TFlite](#tflite)
-  - [Related Projects](#related-projects)
   - [Tests](#tests)
 
   <!-- /TOC -->
 ***
 
 # Current accuracy
-  - Rerunning all with `label smoothing`.
 
   | Model backbone   | lfw      | cfp_fp   | agedb_30 | Epochs |
   | ---------------- | -------- | -------- | -------- | ------ |
   | [Mobilenet](checkpoints/mobilenet_adamw_BS256_E80_arc_tripD_basic_agedb_30_epoch_123_0.955333.h5)        | 0.996167 | 0.948429 | 0.955333 | 120    |
   | [se_mobilefacenet](checkpoints/keras_se_mobile_facenet_emore_triplet_basic_agedb_30_epoch_100_0.958333.h5) | 0.996333 | 0.964714 | 0.958833 | 100    |
+  | [Resnet34 on CASIA](https://drive.google.com/file/d/1EoYQytka3w7EeTh1v9WioBNxolGnPWp6/view?usp=sharing) | 0.994000 | 0.965429 | 0.942333 | 40     |
   | ResNet101V2      | 0.997333 | 0.976714 | 0.971000 | 110    |
   | ResNeSt101       | 0.997667 | 0.981000 | 0.973333 | 100    |
+***
+
+# Comparing Resnet34 with original MXNet version
+  - The [original MXNet version](https://github.com/deepinsight/insightface) has a self defined [resnet](https://github.com/deepinsight/insightface/blob/master/src/symbols/fresnet.py) which is different with the typical one.
+    - Basic block is different, containing less layers.
+    - In `Resnet50` case , blocks number changes from `[3, 4, 6, 3]` to `[3, 4, 14, 3]`.
+    - Remove `bias` from `Conv2D` layers.
+    - Use `PReLU` instead of `relu`.
+  - **Original MXNet version** Train `Resnet34` on `CASIA` dataset.
+    - `CASIA` dataset contains `490623` images belongs to `10572` classes, for `batch_size = 512`, means `959 steps` per epoch.
+    - Learning rate decay on `epochs = [20, 30]`, means `--lr-steps '19180,28770'`.
+    ```sh
+    CUDA_VISIBLE_DEVICES='0' python -u train_softmax.py --data-dir /datasets/faces_casia --network "r34" \
+        --loss-type 4 --prefix "./model/mxnet_r34_casia" --per-batch-size 512 --lr-steps '19180,28770' \
+        --margin-s 64.0 --margin-m 0.5 --ckpt 1 --emb-size 512 --fc7-wd-mult 10.0 --wd 0.0005 \
+        --verbose 959 --end-epoch 38400 --ce-loss
+    ```
+  - **Keras version**
+    - Use a self defined `Resnet34` based on [keras application resnet](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/keras/applications/resnet.py), which is similar with the MXNet version. Other parameters is almost a mimic of the MXNet version.
+    - `batch_size` is `480` here, for `batch_size=512`, it will run into OOM every 6 epochs in my envs...
+    - I have to train 1 epoch of `softmax` first...
+    - Sometimes the `SGDW` loss value will go very high, seems `lr_base=0.1` is too large for `SGDW`.
+    ```py
+    import tensorflow_addons as tfa
+    import train, losses
+
+    data_basic_path = '/datasets/'
+    data_path = data_basic_path + 'faces_casia_112x112_folders'
+    eval_paths = [data_basic_path + ii for ii in ['faces_casia/lfw.bin', 'faces_casia/cfp_fp.bin', 'faces_casia/agedb_30.bin']]
+
+    basic_model = train.buildin_models("resnet34", dropout=0.4, emb_shape=512, output_layer='E', bn_momentum=0.9, bn_epsilon=2e-5)
+    tt = train.Train(data_path, save_path='NNNN_resnet34_MXNET_E_sgdw_5e4_dr0.4_wdm10_soft_E1_arc_BS480_casia.h5', eval_paths=eval_paths,
+        basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
+        batch_size=480, random_status=0, output_wd_multiply=10)
+
+    optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
+    sch = [
+        {"loss": keras.losses.CategoricalCrossentropy(), "epoch": 1, "optimizer": optimizer},
+        {"loss": losses.arcface_loss_type_4, "epoch": 40},
+    ]
+    tt.train(sch, 0)
+    ```
+  - **Other tests and plot** Keep other parameters fixed, like `lr_decay_steps=[20, 30]` `"epoch": 40`.
+    - Original MXNet r34 max accuracy and its epoch: `lfw, cfp_fp, agedb_30 = 0.9940, 0.9496, 0.9477, epoch 35`
+    - Original Tensorflow Resnet50 max accuracy and its epoch: `lfw, cfp_fp, agedb_30 = 0.9898, 0.8756, 0.9038, epoch 34`
+
+    | Optimizer | weight_decay | lr_base | output_layer | output_wd_multiply | random_status | lfw, cfp_fp, agedb_30, epoch |
+    | --------- | ------------ | ------- | ------------ | ------------------ | ------------- | ---------------------------- |
+    | SGDW      | 5e-4         | 0.1     | E            | 10                 | 0             | 0.9945, 0.9627, 0.9423, E37  |
+    | SGDW      | 5e-4         | 0.1     | GDC          | 10                 | 0             | 0.9923, 0.9523, 0.9363, E30  |
+    | SGDW      | 5e-4         | 0.1     | E            | 10                 | 3             | 0.9940, 0.9654, 0.9423, E40  |
+    | SGDW      | 5e-4         | 0.1     | E            | 1                  | 3             | 0.9940, 0.9637, 0.9383, E38  |
+    | AdamW     | 5e-5         | 0.001   | E            | 10                 | 3             | 0.9928, 0.9619, 0.9328, E40  |
+    | AdamW     | 5e-5         | 0.001   | E            | 1                  | 3             | 0.9922, 0.9544, 0.9300, E20  |
+
+    - limit the max loss value as `80` when plot.
+
+    ![](checkpoints/resnet34.svg)
 ***
 
 # Usage
@@ -159,7 +218,6 @@
       {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 1, "optimizer": optimizer, "epoch": 20},
       {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 32, "epoch": 20},
       {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 64, "epoch": 20},
-      {"loss": losses.ArcfaceLoss(), "bottleneckOnly": True, "epoch": 2},
       {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.3},
       {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.25},
       {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.2},
@@ -180,7 +238,7 @@
     train_ds = data.prepare_dataset(data_path, batch_size=512, random_status=3, random_crop=(100, 100, 3))
     classes = train_ds.element_spec[-1].shape[-1]
     # Model
-    basic_model = mobile_facenet.mobile_facenet(256, dropout=0.4, name="mobile_facenet_256")
+    basic_model = mobile_facenet.mobile_facenet(256, dropout=0, name="mobile_facenet_256")
     model_output = keras.layers.Dense(classes, activation="softmax")(basic_model.outputs[0])
     model = keras.models.Model(basic_model.inputs[0], model_output)
     # Evals and basic callbacks
@@ -214,8 +272,7 @@
     sch = [
         {"loss": losses.scale_softmax, "optimizer": "adam", "epoch": 2},
         {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 10, "epoch": 2},
-        {"loss": losses.ArcfaceLoss(), "bottleneckOnly": True, "epoch": 2},
-        {"loss": losses.ArcfaceLoss(scale=32.0, label_smoothing=0.1), "optimizer": keras.optimizers.SGD(0.001, momentum=0.9), "epoch": 2},
+        {"loss": losses.ArcfaceLoss(scale=32.0, label_smoothing=0.1), "optimizer": keras.optimizers.SGD(0.1, momentum=0.9), "epoch": 2},
         {"loss": losses.BatchAllTripletLoss(0.3), "epoch": 2},
         {"loss": losses.BatchHardTripletLoss(0.25), "epoch": 2},
         {"loss": losses.CenterLoss(num_classes=85742, emb_shape=256), "epoch": 2},
@@ -246,7 +303,6 @@
       # {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "optimizer": "nadam", "epoch": 25},
       {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "optimizer": "nadam", "epoch": 6},
       # {"loss": losses.scale_softmax, "epoch": 10},
-      {"loss": losses.ArcfaceLoss(), "bottleneckOnly": True, "epoch": 4},
       {"loss": losses.ArcfaceLoss(), "centerloss": True, "epoch": 35},
       {"loss": losses.BatchHardTripletLoss(0.35), "epoch": 10},
       {"loss": losses.BatchHardTripletLoss(0.33), "epoch": 10},
@@ -259,52 +315,6 @@
     - This is a callback collecting training `loss`, `accuracy` and `evaluating accuracy`.
     - On every epoch end, backup to the path `save_path` defined in `train.Train` with suffix `_hist.json`.
     - Reload when initializing, if the backup `<save_path>_hist.json` file exists.
-  - **Learning rate**
-    - `train.Train` parameters `lr_base` / `lr_decay` / `lr_decay_steps` set different decay strategies and their parameters.
-    - `Exponential decay`, default one, `lr_base` and `lr_decay` in `train.Train` set it. Default is `lr_base=0.001, lr_decay=0.05`.
-    - `Cosine decay with restart`
-      - Set `lr_decay` with a value `> 1` will use `cosine lr decay`, in this case `lr_decay` means `total decay steps`.
-      - Set `lr_decay_steps` with a value `> 1` will set decay on every `NUM` batches, default `lr_decay_steps=0` means decay on every epoch.
-      - Other default values `restarts=4, t_mul=2.0, m_mul=0.5` are set in `myCallbacks.py`. See `keras.experimental.CosineDecayRestarts` for detail.
-    - `Constant decay`
-      - Set `lr_decay_steps` a list will use `Constant lr decay`, in this case `lr_decay_steps` means the decay epochs.
-      - `lr_base` and `lr_decay` set the lr base and decay rate on each decay epoch.
-    ```py
-    # Exponential
-    tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, lr_decay=0.05, batch_size=640, random_status=3)
-    # Cosine with restarts on epoch
-    tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, lr_decay=105, lr_decay_steps=0, lr_min=1e-7, batch_size=640, random_status=3)
-    # Cosine with restarts on batch
-    tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, lr_decay=105 * 1000, lr_decay_steps=1000, lr_min=1e-7, batch_size=640, random_status=3)
-    # Constant
-    tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[3, 5, 7, 16, 20, 24], batch_size=640, random_status=3)
-    ```
-    ```py
-    import myCallbacks
-    epochs = np.arange(120)
-    plt.figure(figsize=(14, 6))
-    plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.1) for ii in epochs], label="lr=0.001, decay=0.1")
-    plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.05) for ii in epochs], label="lr=0.001, decay=0.05")
-    plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.02) for ii in epochs], label="lr=0.001, decay=0.02")
-    aa = myCallbacks.CosineLrScheduler(0.001, 100, 1e-6, 0, restarts=1)
-    plt.plot(epochs, [aa.on_epoch_begin(ii) for ii in epochs], label="Cosine, lr=0.001, decay_steps=100, min=1e-6")
-
-    bb = myCallbacks.CosineLrScheduler(0.001, 105 * 1000, lr_min=1e-7, warmup_iters=4 * 1000, lr_on_batch=1000, restarts=4)
-    plt.plot([bb.on_train_batch_begin(ii * 1000) for ii in range(120)], label="Cosine restart, lr=0.001, decay_steps=105000, on batch, min=1e-7, warmup=5000, restarts=4")
-    bb_25 = bb.on_train_batch_begin(25 * 1000).numpy()
-    plt.plot((25, 25), (1e-6, bb_25), 'k:')
-    plt.text(25, bb_25, (25, bb_25))
-
-    cc = myCallbacks.CosineLrScheduler(0.001, 120, 1e-7, warmup_iters=1, restarts=4, m_mul=0.5)
-    plt.plot(epochs, [cc.on_epoch_begin(ii) for ii in epochs], label="Cosine restart, lr=0.001, decay_steps=120, min=1e-7, warmup=1, restarts=4")
-
-    dd = myCallbacks.ConstantDecayScheduler(sch=[10, 20, 30, 40], lr_base=0.001, decay_rate=0.1)
-    plt.plot(epochs, [dd.on_epoch_begin(ii) for ii in epochs], label="Constant, lr=0.001, decay_steps=[10, 20, 30, 40], decay_rate=0.1")
-
-    plt.legend()
-    plt.tight_layout()
-    ```
-    ![](learning_rate_decay.png)
   - **Evaluation**
     ```py
     import evals
@@ -319,6 +329,53 @@
     # Change evaluating strategy to `on_epoch_end`, as long as `on_batch_end` for every `1000` batch.
     tt = train.Train(data_path, 'keras_mobilefacenet_256.h5', eval_paths, basic_model=basic_model, eval_freq=1000)
     ```
+## Learning rate
+  - `train.Train` parameters `lr_base` / `lr_decay` / `lr_decay_steps` set different decay strategies and their parameters.
+  - `Exponential decay`, default one, `lr_base` and `lr_decay` in `train.Train` set it. Default is `lr_base=0.001, lr_decay=0.05`.
+  - `Cosine decay with restart`
+    - Set `lr_decay` with a value `> 1` will use `cosine lr decay`, in this case `lr_decay` means `total decay steps`.
+    - Set `lr_decay_steps` with a value `> 1` will set decay on every `NUM` batches, default `lr_decay_steps=0` means decay on every epoch.
+    - Other default values `restarts=4, t_mul=2.0, m_mul=0.5` are set in `myCallbacks.py`. See `keras.experimental.CosineDecayRestarts` for detail.
+  - `Constant decay`
+    - Set `lr_decay_steps` a list will use `Constant lr decay`, in this case `lr_decay_steps` means the decay epochs.
+    - `lr_base` and `lr_decay` set the lr base and decay rate on each decay epoch.
+  ```py
+  # Exponential
+  tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, lr_decay=0.05, batch_size=640, random_status=3)
+  # Cosine with restarts on epoch
+  tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, lr_decay=105, lr_decay_steps=0, lr_min=1e-7, batch_size=640, random_status=3)
+  # Cosine with restarts on batch
+  tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, lr_decay=105 * 1000, lr_decay_steps=1000, lr_min=1e-7, batch_size=640, random_status=3)
+  # Constant
+  tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[3, 5, 7, 16, 20, 24], batch_size=640, random_status=3)
+  ```
+  ```py
+  import myCallbacks
+  epochs = np.arange(120)
+  plt.figure(figsize=(14, 6))
+  plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.1) for ii in epochs], label="lr=0.001, decay=0.1")
+  plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.05) for ii in epochs], label="lr=0.001, decay=0.05")
+  plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.02) for ii in epochs], label="lr=0.001, decay=0.02")
+  aa = myCallbacks.CosineLrScheduler(0.001, 100, 1e-6, 0, restarts=1)
+  plt.plot(epochs, [aa.on_epoch_begin(ii) for ii in epochs], label="Cosine, lr=0.001, decay_steps=100, min=1e-6")
+
+  bb = myCallbacks.CosineLrScheduler(0.001, 105 * 1000, lr_min=1e-7, warmup_iters=4 * 1000, lr_on_batch=1000, restarts=4)
+  plt.plot([bb.on_train_batch_begin(ii * 1000) for ii in range(120)], label="Cosine restart, lr=0.001, decay_steps=105000, on batch, min=1e-7, warmup=5000, restarts=4")
+  bb_25 = bb.on_train_batch_begin(25 * 1000).numpy()
+  plt.plot((25, 25), (1e-6, bb_25), 'k:')
+  plt.text(25, bb_25, (25, bb_25))
+
+  cc = myCallbacks.CosineLrScheduler(0.001, 120, 1e-7, warmup_iters=1, restarts=4, m_mul=0.5)
+  plt.plot(epochs, [cc.on_epoch_begin(ii) for ii in epochs], label="Cosine restart, lr=0.001, decay_steps=120, min=1e-7, warmup=1, restarts=4")
+
+  dd = myCallbacks.ConstantDecayScheduler(sch=[10, 20, 30, 40], lr_base=0.001, decay_rate=0.1)
+  plt.plot(epochs, [dd.on_epoch_begin(ii) for ii in epochs], label="Constant, lr=0.001, decay_steps=[10, 20, 30, 40], decay_rate=0.1")
+
+  plt.legend()
+  plt.tight_layout()
+  ```
+  ![](learning_rate_decay.png)
+## Other backbones
   - **EfficientNet** `tf-nightly` / `tf 2.3.0` now includes all `EfficientNet` backbone in `tensorflow.keras.applications`, but it has a `Rescaling` and `Normalization` layer on the head.
     ```py
     tf.__version__
@@ -361,11 +418,11 @@
 
     import tensorflow_addons as tfa
     optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
-    optimizer = tfa.optimizers.AdamW(learning_rate=0.001, weight_decay=5e-4)
+    optimizer = tfa.optimizers.AdamW(learning_rate=0.001, weight_decay=5e-5)
     ```
     `weight_decay` and `learning_rate` should share the same decay strategy. A callback `OptimizerWeightDecay` will set `weight_decay` according to `learning_rate`.
     ```py
-    opt = tfa.optimizers.AdamW(weight_decay=1e-5)
+    opt = tfa.optimizers.AdamW(weight_decay=5e-5)
     sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "epoch": 60, "optimizer": opt}]
     ```
   - [Train test on cifar10](https://colab.research.google.com/drive/1tD2OrnrYtFPC7q_i62b8al1o3qelU-Vi?usp=sharing)
@@ -419,6 +476,16 @@
     | mobilenet_v3_large float16 | 62.491         | 36.146         | 7.22042   |
 ***
 
+# Related Projects
+  - [TensorFlow Addons Losses: TripletSemiHardLoss](https://www.tensorflow.org/addons/tutorials/losses_triplet)
+  - [TensorFlow Addons Layers: WeightNormalization](https://www.tensorflow.org/addons/tutorials/layers_weightnormalization)
+  - [deepinsight/insightface](https://github.com/deepinsight/insightface)
+  - [Github titu1994/keras-squeeze-excite-network](https://github.com/titu1994/keras-squeeze-excite-network)
+  - [Github qubvel/EfficientNet](https://github.com/qubvel/efficientnet)
+  - [Github QiaoranC/tf_ResNeSt_RegNet_model](https://github.com/QiaoranC/tf_ResNeSt_RegNet_model)
+***
+# ___Personal items not related with usage___
+***
 # Training Record
 ## Loss function test on Mobilenet
   - This tests loss functions on `Mobilenet` for their efficiency, but only one epoch training may not be very valuable.
@@ -915,15 +982,6 @@
     ```
 ***
 
-# Related Projects
-  - [TensorFlow Addons Losses: TripletSemiHardLoss](https://www.tensorflow.org/addons/tutorials/losses_triplet)
-  - [TensorFlow Addons Layers: WeightNormalization](https://www.tensorflow.org/addons/tutorials/layers_weightnormalization)
-  - [deepinsight/insightface](https://github.com/deepinsight/insightface)
-  - [Github titu1994/keras-squeeze-excite-network](https://github.com/titu1994/keras-squeeze-excite-network)
-  - [Github qubvel/EfficientNet](https://github.com/qubvel/efficientnet)
-  - [Github QiaoranC/tf_ResNeSt_RegNet_model](https://github.com/QiaoranC/tf_ResNeSt_RegNet_model)
-***
-
 # Tests
   - **Multi GPU losses test**
     ```py
@@ -988,6 +1046,9 @@
 
     axes, _ = plot.hist_plot_split(["checkpoints/T_mobilenet_adamw_5e5_BS1024_hist.json", "checkpoints/T_mobilenet_adamw_5e5_arc_trip64_BS1024_hist.json"], epochs, axes=axes, customs=customs, fig_label='exp,mobilenet,BS1024,[soft,adamw 5e-5,dr 0 E80] [arc+trip 64,alpha decay,E40]')
     axes, _ = plot.hist_plot_split(["checkpoints/T_mobilenetv3L_adamw_5e5_BS1024_hist.json", "checkpoints/T_mobilenetv3L_adamw_5e5_arc_trip64_BS1024_hist.json"], epochs, axes=axes, customs=customs, fig_label='exp,mobilenetV3L,BS1024,[soft,adamw 5e-5,dr 0 E80] [arc+trip 64,alpha decay,E40]')
+
+    axes, _ = plot.hist_plot_split(["checkpoints/T_mobilenet_adamw_5e5_BS1024_hist.json", "checkpoints/T_mobilenet_adamw_5e5_arc_trip32_BS1024_hist.json"], epochs, axes=axes, customs=customs, fig_label='exp,mobilenet,BS1024,[soft,adamw 5e-5,dr 0 E80] [arc+trip 32,alpha decay,E40]')
+    axes, _ = plot.hist_plot_split(["checkpoints/T_mobilenetv3L_adamw_5e5_BS1024_hist.json", "checkpoints/T_mobilenetv3L_adamw_5e5_arc_trip32_BS1024_hist.json"], epochs, axes=axes, customs=customs, fig_label='exp,mobilenetV3L,BS1024,[soft,adamw 5e-5,dr 0 E80] [arc+trip 32,alpha decay,E40]')
     ```
   - **mobilnet emore BS256**
     ```py
@@ -1007,6 +1068,29 @@
     axes, _ = plot.hist_plot_split("checkpoints/mobilenet_adamw_BS256_E80_arc_tripD_hist.json", epochs, axes=axes, customs=customs, fig_label='exp,mobilenet,[soft, E80] [arc+trip 64,alpha decay,E40]', pre_item=pre, init_epoch=80)
 
     axes, _ = plot.hist_plot_split("checkpoints/mobilenet_adamw_5e5_dr0_BS256_triplet_E20_arc_emore_hist.json", [20, 2, 20, 20, 20, 20], axes=axes, customs=customs, fig_label='exp,mobilenet,[soft+Triplet,E20] [arc+trip,alpha decay,E80]')
+    ```
+  - **ResNet34**
+    ```py
+    import plot
+    axes = None
+    customs = ["cfp_fp", "agedb_30", "lfw", "lr"]
+    epochs = [1, 19, 10, 50]
+    limit_loss_max = 80
+    names = ["Softmax", "Arcfacelose learning rate 0.1", "Arcfacelose learning rate 0.01", "Arcfacelose learning rate 0.001"]
+    axes, pre = plot.hist_plot_split("checkpoints/MXNET_r34_casia.json", epochs, axes=axes, customs=customs, limit_loss_max=limit_loss_max, fig_label='Orignal MXNet Resnet34')
+
+    axes, pre = plot.hist_plot_split("checkpoints/NNNN_resnet34_MXNET_E_sgdw_5e4_dr0.4_wdm10_soft_E1_arc_BS480_casia_hist.json", epochs, axes=axes, customs=customs, limit_loss_max=limit_loss_max, fig_label='Resnet34, SGDW, E, weight_decay_mul 10, random 0')
+    axes, pre = plot.hist_plot_split("checkpoints/NNNN_resnet34_MXNET_GDC_sgdw_5e4_dr0.4_wdm10_soft_E1_arc_BS480_casia_hist.json", epochs, axes=axes, customs=customs, limit_loss_max=limit_loss_max, fig_label='Resnet34, SGDW, GDC, weight_decay_mul 10, random 0')
+
+    axes, pre = plot.hist_plot_split("checkpoints/NNNN_resnet34_MXNET_E_rand3_sgdw_5e4_dr0.4_wdm10_soft_E1_arc_BS480_casia_hist.json", epochs, axes=axes, customs=customs, limit_loss_max=limit_loss_max, fig_label='Resnet34, SGDW, weight_decay_mul 10, E, random 3')
+    axes, pre = plot.hist_plot_split("checkpoints/NNNN_resnet34_MXNET_E_rand3_sgdw_5e4_dr0.4_wdm10_soft_E1_arc_BS480_casia_2_hist.json", epochs, axes=axes, customs=customs, limit_loss_max=limit_loss_max, fig_label='Resnet34, SGDW, weight_decay_mul 10, E, random 3, 2')
+    axes, pre = plot.hist_plot_split("checkpoints/NNNN_resnet34_MXNET_E_rand3_sgdw_5e4_dr0.4_wdm10_soft_E1_arc_BS480_casia_3_hist.json", epochs, axes=axes, customs=customs, limit_loss_max=limit_loss_max, fig_label='Resnet34, SGDW, weight_decay_mul 10, E, random 3, 3')
+    axes, pre = plot.hist_plot_split("checkpoints/NNNN_resnet34_MXNET_E_rand3_sgdw_5e4_dr0.4_soft_E1_arc_BS480_casia_hist.json", epochs, axes=axes, customs=customs, names=names, limit_loss_max=limit_loss_max, fig_label='Resnet34, SGDW, weight_decay_mul 1, E, random 3')
+
+    axes, pre = plot.hist_plot_split("checkpoints/NNNN_resnet34_MXNET_E_rand3_ADAMW_5e4_dr0.4_soft_E1_arc_BS480_casia_hist.json", epochs, axes=axes, customs=customs, limit_loss_max=limit_loss_max, fig_label='Resnet34, ADAMW, E, weight_decay_mul 10, random 3')
+    axes, pre = plot.hist_plot_split("checkpoints/NNNN_resnet34_MXNET_E_rand3_ADAMW_5e4_dr0.4_wdm10_soft_E1_arc_BS480_casia_hist.json", epochs, axes=axes, customs=customs, limit_loss_max=limit_loss_max, fig_label='Resnet34, ADAMW, E, weight_decay_mul 1, random 3')
+
+    axes, pre = plot.hist_plot_split("checkpoints/TF_resnet50_MXNET_E_sgdw_5e4_dr0.4_wdm10_soft_E10_arc_casia_hist.json", epochs, axes=axes, customs=customs, limit_loss_max=limit_loss_max, fig_label='Orignal TF Resnet50, SGDW, E, weight_decay_mul 10, random 0')
     ```
   - **Optimizers with weight decay test**
     ```py
