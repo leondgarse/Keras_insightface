@@ -45,11 +45,11 @@ class eval_callback(tf.keras.callbacks.Callback):
     def __do_predict__(self):
         embs = []
         for img_batch in tqdm(self.ds, "Evaluating " + self.test_names, total=self.steps):
-            emb = self.basic_model.predict(img_batch)
+            emb = self.basic_model(img_batch)
             if self.flip:
-                emb_f = self.basic_model.predict(tf.image.flip_left_right(img_batch))
+                emb_f = self.basic_model(tf.image.flip_left_right(img_batch))
                 emb = (emb + emb_f) / 2
-            embs.extend(emb)
+            embs.extend(emb.numpy())
         return np.array(embs)
 
     def __do_predict_distribute__(self):

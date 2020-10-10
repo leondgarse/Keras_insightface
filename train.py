@@ -10,7 +10,8 @@ import os
 
 import multiprocessing as mp
 
-mp.set_start_method("forkserver")
+if mp.get_start_method() != "forkserver":
+    mp.set_start_method("forkserver", force=True)
 
 gpus = tf.config.experimental.list_physical_devices("GPU")
 for gpu in gpus:
@@ -32,15 +33,13 @@ def print_buildin_models():
 
 
 # MXNET: bn_momentum=0.9, bn_epsilon=2e-5, TF default: bn_momentum=0.99, bn_epsilon=0.001
-def buildin_models(
-    name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), output_layer="GDC", bn_momentum=0.99, bn_epsilon=0.001, **kwargs
-):
+def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), output_layer="GDC", bn_momentum=0.99, bn_epsilon=0.001, **kwargs):
     name = name.lower()
     """ Basic model """
     if name == "mobilenet":
-        xx = keras.applications.MobileNet(input_shape=input_shape, include_top=False, weights=None, **kwargs)
+        xx = keras.applications.MobileNet(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name == "mobilenetv2":
-        xx = keras.applications.MobileNetV2(input_shape=input_shape, include_top=False, weights=None, **kwargs)
+        xx = keras.applications.MobileNetV2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name == "resnet34":
         from backbones import resnet
 
@@ -79,7 +78,7 @@ def buildin_models(
             model = models[compound_scale]
         else:
             model = efficientnet.EfficientNetL2
-        xx = model(weights="noisy-student", include_top=False, input_shape=input_shape)  # or weights='imagenet'
+        xx = model(weights="imagenet", include_top=False, input_shape=input_shape)  # or weights='imagenet'
     elif name.startswith("se_resnext"):
         from keras_squeeze_excite_network import se_resnext
 
@@ -96,10 +95,14 @@ def buildin_models(
         else:
             xx = resnest.ResNest101(input_shape=input_shape)
     elif name.startswith("mobilenetv3"):
-        from backbones import mobilenetv3
+        from backbones import mobilenet_v3
 
-        size = "small" if "small" in name else "large"
-        xx = mobilenetv3.MobilenetV3(input_shape=input_shape, include_top=False, size=size)
+        # size = "small" if "small" in name else "large"
+        # xx = mobilenetv3.MobilenetV3(input_shape=input_shape, include_top=False, size=size)
+        if "small" in name:
+            xx = mobilenet_v3.MobileNetV3Small(input_shape=input_shape, include_top=False, weights="imagenet")
+        else:
+            xx = mobilenet_v3.MobileNetV3Large(input_shape=input_shape, include_top=False, weights="imagenet")
     elif "mobilefacenet" in name or "mobile_facenet" in name:
         from backbones import mobile_facenet
 
@@ -139,15 +142,15 @@ def buildin_models(
 
 
 class NormDense(keras.layers.Layer):
-    def __init__(self, units=1000, kernel_regularizer=None, **kwargs):
+    def __init__(self, units=1000, kernel_regularizer=None, loss_top_k=1, **kwargs):
         super(NormDense, self).__init__(**kwargs)
         self.init = keras.initializers.glorot_normal()
-        self.units, self.kernel_regularizer = units, kernel_regularizer
+        self.units, self.kernel_regularizer, self.loss_top_k = units, kernel_regularizer, loss_top_k
 
     def build(self, input_shape):
         self.w = self.add_weight(
             name="norm_dense_w",
-            shape=(input_shape[-1], self.units),
+            shape=(input_shape[-1], self.units * self.loss_top_k),
             initializer=self.init,
             trainable=True,
             regularizer=self.kernel_regularizer,
@@ -157,14 +160,18 @@ class NormDense(keras.layers.Layer):
     def call(self, inputs, **kwargs):
         norm_w = K.l2_normalize(self.w, axis=0)
         inputs = K.l2_normalize(inputs, axis=1)
-        return K.dot(inputs, norm_w)
+        output = K.dot(inputs, norm_w)
+        if self.loss_top_k > 1:
+            output = K.reshape(output, (-1, self.units, self.loss_top_k))
+            output = K.max(output, axis=2)
+        return output
 
     def compute_output_shape(self, input_shape):
         return (input_shape[0], self.units)
 
     def get_config(self):
         config = super(NormDense, self).get_config()
-        config.update({"units": self.units})
+        config.update({"units": self.units, "loss_top_k": self.loss_top_k})
         return config
 
     @classmethod
@@ -172,7 +179,7 @@ class NormDense(keras.layers.Layer):
         return cls(**config)
 
 
-class L2_decay_wdm(keras.regularizers.L2):
+class L2_decay_wdm(keras.regularizers.L1L2):
     def __init__(self, wd_func=None, **kwargs):
         super(L2_decay_wdm, self).__init__(**kwargs)
         self.wd_func = wd_func
@@ -197,6 +204,8 @@ class Train:
         basic_model=None,
         model=None,
         compile=True,
+        output_wd_multiply=1,
+        custom_objects={},
         batch_size=128,
         lr_base=0.001,
         lr_decay=0.05,  # lr_decay < 1 for exponential, or it's cosine decay_steps
@@ -204,8 +213,7 @@ class Train:
         lr_min=0,
         eval_freq=1,
         random_status=0,
-        output_wd_multiply=1,
-        custom_objects={},
+        dataset_cache=False,
     ):
         custom_objects.update(
             {
@@ -279,6 +287,7 @@ class Train:
         self.my_hist = [ii for ii in self.basic_callbacks if isinstance(ii, myCallbacks.My_history)][0]
         self.custom_callbacks = []
         self.output_wd_multiply = output_wd_multiply
+        self.dataset_cache = dataset_cache
 
     def __search_embedding_layer__(self, model):
         for ii in range(1, 6):
@@ -301,7 +310,7 @@ class Train:
         if self.train_ds == None or self.is_triplet_dataset == True:
             print(">>>> Init softmax dataset...")
             self.train_ds = data.prepare_dataset(
-                self.data_path, batch_size=self.batch_size, random_status=self.random_status, random_crop=(100, 100, 3)
+                self.data_path, batch_size=self.batch_size, random_status=self.random_status, random_crop=(100, 100, 3), cache=self.dataset_cache
             )
             self.classes = self.train_ds.element_spec[-1].shape[-1]
             self.is_triplet_dataset = False
@@ -316,7 +325,7 @@ class Train:
         else:
             self.optimizer = optimizer
 
-    def __init_model__(self, type):
+    def __init_model__(self, type, loss_top_k=1):
         inputs = self.basic_model.inputs[0]
         embedding = self.basic_model.outputs[0]
         is_multi_output = lambda mm: len(mm.outputs) != 1 or isinstance(mm.layers[-1], keras.layers.Concatenate)
@@ -331,28 +340,32 @@ class Train:
             kernel_regularizer = None
 
         if type == self.softmax:
-            if self.model == None or self.model.output_names[-1] != self.softmax:
-                print(">>>> Add softmax layer...")
-                # output = keras.layers.Dense(self.classes, name=self.softmax, activation="softmax", kernel_regularizer=kernel_regularizer)(embedding)
-                output_layer = keras.layers.Dense(
-                    self.classes, use_bias=False, name=self.softmax, activation="softmax", kernel_regularizer=kernel_regularizer
-                )
-                if self.model != None and self.model.output_names[-1] == self.arcface:
-                    print(">>>> Reload arcface weight...")
-                    output_layer.build(embedding.shape)
+            print(">>>> Add softmax layer...")
+            # output = keras.layers.Dense(self.classes, name=self.softmax, activation="softmax", kernel_regularizer=kernel_regularizer)(embedding)
+            output_layer = keras.layers.Dense(
+                self.classes, use_bias=False, name=self.softmax, activation="softmax", kernel_regularizer=kernel_regularizer
+            )
+            if self.model != None and "_embedding" not in self.model.output_names[-1]:
+                output_layer.build(embedding.shape)
+                weight_cur = output_layer.get_weights()
+                weight_pre = self.model.layers[-1].get_weights()
+                if len(weight_cur) == len(weight_pre) and weight_cur[0].shape == weight_pre[0].shape:
+                    print(">>>> Reload previous %s weight..." % (self.model.output_names[-1]))
                     output_layer.set_weights(self.model.layers[-1].get_weights())
-                output = output_layer(embedding)
-                self.model = keras.models.Model(inputs, output)
+            output = output_layer(embedding)
+            self.model = keras.models.Model(inputs, output)
         elif type == self.arcface:
-            if self.model == None or self.model.output_names[-1] != self.arcface:
-                print(">>>> Add arcface layer...")
-                output_layer = NormDense(self.classes, name=self.arcface, kernel_regularizer=kernel_regularizer)
-                if self.model != None and self.model.output_names[-1] == self.softmax:
-                    print(">>>> Reload softmax weight...")
-                    output_layer.build(embedding.shape)
+            print(">>>> Add arcface layer, loss_top_k=%d..." % (loss_top_k))
+            output_layer = NormDense(self.classes, name=self.arcface, loss_top_k=loss_top_k, kernel_regularizer=kernel_regularizer)
+            if self.model != None and "_embedding" not in self.model.output_names[-1]:
+                output_layer.build(embedding.shape)
+                weight_cur = output_layer.get_weights()
+                weight_pre = self.model.layers[-1].get_weights()
+                if len(weight_cur) == len(weight_pre) and weight_cur[0].shape == weight_pre[0].shape:
+                    print(">>>> Reload previous %s weight..." % (self.model.output_names[-1]))
                     output_layer.set_weights(self.model.layers[-1].get_weights())
-                output = output_layer(embedding)
-                self.model = keras.models.Model(inputs, output)
+            output = output_layer(embedding)
+            self.model = keras.models.Model(inputs, output)
         elif type == self.triplet or type == self.center:
             self.model = self.basic_model
             self.model.output_names[0] = type + "_embedding"
@@ -413,7 +426,7 @@ class Train:
 
             self.basic_model.trainable = True
             self.__init_optimizer__(sch.get("optimizer", None))
-            self.__init_model__(type)
+            self.__init_model__(type, sch.get("loss_top_k", 1))
 
             # loss_weights
             cur_loss = [cur_loss]
