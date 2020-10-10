@@ -486,11 +486,11 @@
     import tensorflow_addons as tfa
     import train, losses
 
-    """ First, Train with loss_top_k = 3 """
     data_basic_path = '/datasets/faces_casia'
     data_path = data_basic_path + '_112x112_folders'
     eval_paths = [os.path.join(data_basic_path, ii) for ii in ['lfw.bin', 'cfp_fp.bin', 'agedb_30.bin']]
 
+    """ First, Train with `loss_top_k = 3` """
     basic_model = train.buildin_models("mobilenet", dropout=0, emb_shape=256, output_layer='E')
     tt = train.Train(data_path, save_path='TT_mobilenet_topk_bs256.h5', eval_paths=eval_paths,
         basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
@@ -504,14 +504,13 @@
     ]
     tt.train(sch, 0)
 
-    """ Then drop non-dominant subcenters and high-confident noisy data (>75 degrees) """
+    """ Then drop non-dominant subcenters and high-confident noisy data, which is `>75 degrees` """
     import data_drop_top_k
     # data_drop_top_k.data_drop_top_k('./checkpoints/TT_mobilenet_topk_bs256.h5', '/datasets/faces_casia_112x112_folders/', limit=20)
-    new_dataset = data_drop_top_k.data_drop_top_k(tt.model, tt.data_path)
+    new_data_path = data_drop_top_k.data_drop_top_k(tt.model, tt.data_path)
 
-    """ Train with the new dataset again, this time loss_top_k = 1 """
-    tt.train_ds = None
-    tt.data_path = new_dataset
+    """ Train with the new dataset again, this time `loss_top_k = 1` """
+    tt.reset_dataset(new_data_path)
     optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
     sch = [
         {"loss": losses.ArcfaceLoss(scale=16), "epoch": 5, "optimizer": optimizer},

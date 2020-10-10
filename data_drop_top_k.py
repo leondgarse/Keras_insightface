@@ -3,7 +3,6 @@ import os
 import pickle
 import numpy as np
 import tensorflow as tf
-from train import NormDense
 from tqdm import tqdm
 from sklearn.preprocessing import normalize
 from data import pre_process_folder
@@ -22,6 +21,7 @@ def data_drop_top_k(model, data_path, dataset_pickle_file_dest=None, deg_thresh=
     image_names, image_classes = np.array(image_names)[sorted_idx], np.array(image_classes)[sorted_idx]
 
     if isinstance(model, str):
+        from train import NormDense
         mm = tf.keras.models.load_model(model, custom_objects={'NormDense': NormDense}, compile=False)
     else:
         mm = model

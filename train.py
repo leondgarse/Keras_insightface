@@ -179,7 +179,7 @@ class NormDense(keras.layers.Layer):
         return cls(**config)
 
 
-class L2_decay_wdm(keras.regularizers.L1L2):
+class L2_decay_wdm(keras.regularizers.L2):
     def __init__(self, wd_func=None, **kwargs):
         super(L2_decay_wdm, self).__init__(**kwargs)
         self.wd_func = wd_func
@@ -410,6 +410,11 @@ class Train:
             use_multiprocessing=True,
             workers=4,
         )
+
+    def reset_dataset(self, data_path=None):
+        self.train_ds = None
+        if data_path != None:
+            self.data_path = data_path
 
     def train(self, train_schedule, initial_epoch=0):
         for sch in train_schedule:
