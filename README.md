@@ -176,7 +176,6 @@
     - [data.py](data.py) loads image data as `tf.dataset` for training. `Triplet` dataset is different from others.
     - [data_drop_top_k.py](data_drop_top_k.py) create dataset after trained with [Sub Center ArcFace](#sub-center-arcface) method.
     - [data_distiller.py](data_distiller.py) create dataset for [Knowledge distillation](#knowledge-distillation).
-    - [data_gen.py](data_gen.py) NOT working, accuracy wont increase. Using `ImageDataGenerator` and `AutoAugment` to load images.
     - [evals.py](evals.py) contains evaluating callback using `bin` files.
     - [losses.py](losses.py) contains `softmax` / `arcface` / `centerloss` / `triplet` loss functions.
     - [myCallbacks.py](myCallbacks.py) contains my other callbacks, like saving model / learning rate adjusting / save history.
@@ -475,7 +474,7 @@
   - **This is still under test, Multi GPU is NOT tested**
   - As far as I can see
     - `Sub Center ArcFace` works like cleaning the dataset.
-    - In `lossTopK=3` case, it will train `3 sub classes` in each label, and each `sub classes` is a `center`.
+    - In `lossTopK=3` case, it will train `3 sub classes` in each label, and each `sub class` is a `center`.
     - Then choose a `domain center`, and remove those are too far away from this `center`.
     - So it's better train a `large model` to clean the `dataset`, and then train other models on the `cleaned dataset`.
   - **Train Original MXNet version**
@@ -597,7 +596,8 @@
     # >>>> Output: faces_casia_112x112_folders_shuffle_label_embs_normed_512.npz
     ```
   - Then this dataset can be used to train a new model.
-    - A new loss `distiller_loss` will added to match this `embedding` data, `loss_weights = [1, 7]`
+    - Just specify `data_path` as the new dataset path. If key `embeddings` is in, then it will be a `distiller train`.
+    - A new loss `distiller_loss` will be added to match this `embeddings` data, `loss_weights = [1, 7]`
     - The `emb_shape` should be same with the saved one.
     ```py
     import train, losses
