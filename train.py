@@ -288,6 +288,7 @@ class Train:
         self.custom_callbacks = []
         self.output_wd_multiply = output_wd_multiply
         self.dataset_cache = dataset_cache
+        self.is_distiller = False
 
     def __search_embedding_layer__(self, model):
         for ii in range(1, 6):
@@ -299,9 +300,7 @@ class Train:
             print(">>>> Init triplet dataset...")
             # batch_size = int(self.batch_size / 4 * 1.5)
             batch_size = self.batch_size // 4
-            tt = data.Triplet_dataset(
-                self.data_path, batch_size=batch_size, random_status=self.random_status, random_crop=(100, 100, 3)
-            )
+            tt = data.Triplet_dataset(self.data_path, batch_size=batch_size, random_status=self.random_status, random_crop=(100, 100, 3))
             self.train_ds = tt.train_dataset
             self.classes = self.train_ds.element_spec[-1].shape[-1]
             self.is_triplet_dataset = True
@@ -312,7 +311,14 @@ class Train:
             self.train_ds = data.prepare_dataset(
                 self.data_path, batch_size=self.batch_size, random_status=self.random_status, random_crop=(100, 100, 3), cache=self.dataset_cache
             )
-            self.classes = self.train_ds.element_spec[-1].shape[-1]
+            label_spec = self.train_ds.element_spec[-1]
+            if isinstance(label_spec, tuple):
+                # dataset with embedding values
+                self.is_distiller = True
+                self.classes = label_spec[0].shape[-1]
+            else:
+                self.is_distiller = False
+                self.classes = label_spec.shape[-1]
             self.is_triplet_dataset = False
 
     def __init_optimizer__(self, optimizer):
@@ -342,9 +348,7 @@ class Train:
         if type == self.softmax:
             print(">>>> Add softmax layer...")
             # output = keras.layers.Dense(self.classes, name=self.softmax, activation="softmax", kernel_regularizer=kernel_regularizer)(embedding)
-            output_layer = keras.layers.Dense(
-                self.classes, use_bias=False, name=self.softmax, activation="softmax", kernel_regularizer=kernel_regularizer
-            )
+            output_layer = keras.layers.Dense(self.classes, use_bias=False, name=self.softmax, activation="softmax", kernel_regularizer=kernel_regularizer)
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
                 output_layer.build(embedding.shape)
                 weight_cur = output_layer.get_weights()
@@ -449,9 +453,7 @@ class Train:
                 self.model.output_names[0] = self.center + "_embedding"
                 for id, nn in enumerate(nns):
                     self.model.output_names[id + 1] = nn
-                self.callbacks = (
-                    self.my_evals + self.custom_callbacks + [center_loss.save_centers_callback] + self.basic_callbacks
-                )
+                self.callbacks = self.my_evals + self.custom_callbacks + [center_loss.save_centers_callback] + self.basic_callbacks
                 loss_weights.update({self.model.output_names[0]: float(sch["centerloss"])})
 
             if (sch.get("triplet", False) or sch.get("tripletAll", False)) and type != self.triplet:
@@ -466,9 +468,13 @@ class Train:
                 self.model.output_names[0] = self.triplet + "_embedding"
                 for id, nn in enumerate(nns):
                     self.model.output_names[id + 1] = nn
-                loss_weights.update(
-                    {self.model.output_names[0]: float(sch.get("triplet", False) or sch.get("tripletAll", False))}
-                )
+                loss_weights.update({self.model.output_names[0]: float(sch.get("triplet", False) or sch.get("tripletAll", False))})
+
+            if self.is_distiller:
+                loss_weights = [1, 7]
+                print(">>>> Train distiller model, loss_weights:", loss_weights)
+                self.model = keras.models.Model(self.model.inputs[0], [self.model.outputs[-1], self.basic_model.outputs[0]])
+                cur_loss = [cur_loss[-1], losses.distiller_loss]
 
             print(">>>> loss_weights:", loss_weights)
             self.metrics = {ii: None if "embedding" in ii else "accuracy" for ii in self.model.output_names}
@@ -491,15 +497,10 @@ class Train:
                 self.__basic_train__(cur_loss, sch["epoch"], initial_epoch=0, loss_weights=loss_weights)
                 self.basic_model.trainable = True
             else:
-                self.__basic_train__(
-                    cur_loss, initial_epoch + sch["epoch"], initial_epoch=initial_epoch, loss_weights=loss_weights
-                )
+                self.__basic_train__(cur_loss, initial_epoch + sch["epoch"], initial_epoch=initial_epoch, loss_weights=loss_weights)
                 initial_epoch += sch["epoch"]
 
-            print(
-                ">>>> Train %s DONE!!! epochs = %s, model.stop_training = %s"
-                % (type, self.model.history.epoch, self.model.stop_training)
-            )
+            print(">>>> Train %s DONE!!! epochs = %s, model.stop_training = %s" % (type, self.model.history.epoch, self.model.stop_training))
             print(">>>> My history:")
             self.my_hist.print_hist()
             if self.model.stop_training == True:

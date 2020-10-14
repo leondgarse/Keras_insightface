@@ -299,3 +299,9 @@ class BatchHardTripletLoss(TripletLossWapper):
 class BatchAllTripletLoss(TripletLossWapper):
     def __init__(self, alpha, **kwargs):
         super(BatchAllTripletLoss, self).__init__(batch_hard_triplet_loss, alpha, **kwargs)
+
+
+def distiller_loss(true_emb_normed, pred_emb):
+    pred_emb_normed = tf.nn.l2_normalize(pred_emb, axis=-1)
+    loss = tf.reduce_sum(tf.square(true_emb_normed - pred_emb_normed), axis=-1)
+    return loss

@@ -54,6 +54,7 @@
   - [Sub Center ArcFace](#sub-center-arcface)
   	- [Loss TopK Usage](#loss-topk-usage)
   	- [Mobilenet test on CASIA dataset](#mobilenet-test-on-casia-dataset)
+  - [Knowledge distillation](#knowledge-distillation)
   - [Related Projects](#related-projects)
 
   <!-- /TOC -->
@@ -173,7 +174,8 @@
   - **Scripts**
     - [backbones](backbones) basic model implementation of `mobilefacenet` / `mobilenetv3` / `resnest` / `efficientnet`. Most of them are copied from `keras.applications` source code and modified. Other backbones like `ResNet101V2` is loaded from `keras.applications` in `train.buildin_models`.
     - [data.py](data.py) loads image data as `tf.dataset` for training. `Triplet` dataset is different from others.
-    - [data_drop_top_k.py](data_drop_top_k.py) drop `top K` images after trained with `Sub-center ArcFace` method.
+    - [data_drop_top_k.py](data_drop_top_k.py) create dataset after trained with [Sub Center ArcFace](#sub-center-arcface) method.
+    - [data_distiller.py](data_distiller.py) create dataset for [Knowledge distillation](#knowledge-distillation).
     - [data_gen.py](data_gen.py) NOT working, accuracy wont increase. Using `ImageDataGenerator` and `AutoAugment` to load images.
     - [evals.py](evals.py) contains evaluating callback using `bin` files.
     - [losses.py](losses.py) contains `softmax` / `arcface` / `centerloss` / `triplet` loss functions.
@@ -469,16 +471,23 @@
 # Sub Center ArcFace
 ## Loss TopK Usage
   - [Original MXNet Subcenter ArcFace](https://github.com/deepinsight/insightface/tree/master/recognition/SubCenter-ArcFace)
-  - [eccv_1445 Sub-center ArcFace: Boosting Face Recognition by Large-scale Noisy Web Faces.pdf](https://ibug.doc.ic.ac.uk/media/uploads/documents/eccv_1445.pdf)
+  - [PDF Sub-center ArcFace: Boosting Face Recognition by Large-scale Noisy Web Faces](https://ibug.doc.ic.ac.uk/media/uploads/documents/eccv_1445.pdf)
   - **This is still under test, Multi GPU is NOT tested**
+  - As far as I can see
+    - `Sub Center ArcFace` works like cleaning the dataset.
+    - In `lossTopK=3` case, it will train `3 sub classes` in each label, and each `sub classes` is a `center`.
+    - Then choose a `domain center`, and remove those are too far away from this `center`.
+    - So it's better train a `large model` to clean the `dataset`, and then train other models on the `cleaned dataset`.
   - **Train Original MXNet version**
     ```sh
     cd ~/workspace/insightface/recognition/SubCenter-ArcFace
     cp sample_config.py config.py
     sed -i 's/config.ckpt_embedding = True/config.ckpt_embedding = False/' config.py
     CUDA_VISIBLE_DEVICES='1' python train_parall.py --network r50 --per-batch-size 512
+    # Iter 20, accuracy 0.80078125, loss 1.311261, lfw 0.99817, cfp_fp 0.97557, agedb_30 0.98167
 
-    python drop.py --data <ms1mv0-path> --model <step-1-pretrained-model> --threshold 75 --k 3 --output <ms1mv0-drop75-path>
+    CUDA_VISIBLE_DEVICES='1' python drop.py --data /datasets/faces_emore --model models/r50-arcface-emore/model,1 --threshold 75 --k 3 --output /datasets/faces_emore_topk3_1
+
     sed -i 's/config.ckpt_embedding = False/config.ckpt_embedding = True/' config.py
     sed -i 's/config.loss_K = 3/config.loss_K = 1/' config.py
     CUDA_VISIBLE_DEVICES='1' python train_parall.py --network r50 --per-batch-size 512
@@ -524,24 +533,23 @@
   - `data_drop_top_k.py` can also be used as a script. `-M` and `-D` are required.
     ```sh
     $ CUDA_VISIBLE_DEVICES='-1' ./data_drop_top_k.py -h
-    usage: data_drop_top_k.py [-h] -M MODEL_FILE -D DATA_PATH
-                              [-d DATASET_PICKLE_FILE_DEST] [-t DEG_THRESH]
-                              [-L LIMIT]
-
-    optional arguments:
-      -h, --help            show this help message and exit
-      -M MODEL_FILE, --model_file MODEL_FILE
-                            Saved model file path, NOT basic_model (default: None)
-      -D DATA_PATH, --data_path DATA_PATH
-                            Original dataset path (default: None)
-      -d DATASET_PICKLE_FILE_DEST, --dataset_pickle_file_dest DATASET_PICKLE_FILE_DEST
-                            Dest file path to save the processed dataset pickle
-                            (default: None)
-      -t DEG_THRESH, --deg_thresh DEG_THRESH
-                            Thresh value in degree, [0, 180] (default: 75)
-      -L LIMIT, --limit LIMIT
-                            Test parameter, limit converting only the first [NUM]
-                            ones (default: 0)
+    # usage: data_drop_top_k.py [-h] -M MODEL_FILE -D DATA_PATH [-d DEST_FILE]
+    #                           [-t DEG_THRESH] [-L LIMIT]
+    #
+    # optional arguments:
+    #   -h, --help            show this help message and exit
+    #   -M MODEL_FILE, --model_file MODEL_FILE
+    #                         Saved model file path, NOT basic_model (default: None)
+    #   -D DATA_PATH, --data_path DATA_PATH
+    #                         Original dataset path (default: None)
+    #   -d DEST_FILE, --dest_file DEST_FILE
+    #                         Dest file path to save the processed dataset npz
+    #                         (default: None)
+    #   -t DEG_THRESH, --deg_thresh DEG_THRESH
+    #                         Thresh value in degree, [0, 180] (default: 75)
+    #   -L LIMIT, --limit LIMIT
+    #                         Test parameter, limit converting only the first [NUM]
+    #                         ones (default: 0)
     ```
     ```sh
     $ CUDA_VISIBLE_DEVICES='-1' ./data_drop_top_k.py -M checkpoints/TT_mobilenet_topk_bs256.h5 -D /datasets/faces_casia_112x112_folders/ -L 20
@@ -559,6 +567,61 @@
   | TopK 3->1, bottleneckOnly, initial_epoch=40 | 0.9835     | **0.9030** | 0.8763       |
 ***
 
+# Knowledge distillation
+  - [PDF Improving Face Recognition from Hard Samples via Distribution Distillation Loss](https://arxiv.org/pdf/2002.03662.pdf)
+  - [PDF VarGFaceNet: An Efficient Variable Group Convolutional Neural Network for Lightweight Face Recognition](https://arxiv.org/pdf/1910.04985.pdf)
+  - `data_distiller.py` works to extract `embedding` data from images and save locally.
+    ```sh
+    $ CUDA_VISIBLE_DEVICES='-1' ./data_distiller.py -h
+    # usage: data_distiller.py [-h] -M MODEL_FILE -D DATA_PATH [-d DEST_FILE]
+    #                          [-b BATCH_SIZE] [-L LIMIT]
+    #
+    # optional arguments:
+    #   -h, --help            show this help message and exit
+    #   -M MODEL_FILE, --model_file MODEL_FILE
+    #                         Saved basic_model file path, NOT model, could be keras
+    #                         / mxnet one (default: None)
+    #   -D DATA_PATH, --data_path DATA_PATH
+    #                         Original dataset path (default: None)
+    #   -d DEST_FILE, --dest_file DEST_FILE
+    #                         Dest file path to save the processed dataset npz
+    #                         (default: None)
+    #   -b BATCH_SIZE, --batch_size BATCH_SIZE
+    #                         Batch size (default: 256)
+    #   -L LIMIT, --limit LIMIT
+    #                         Test parameter, limit converting only the first [NUM]
+    #                         ones (default: 0)
+    ```
+    ```sh
+    $ CUDA_VISIBLE_DEVICES='-1' ./data_distiller.py -M subcenter-arcface-logs/r100-arcface-msfdrop75/model,0 -D /datasets/faces_casia_112x112_folders/ -L 20
+    # >>>> Output: faces_casia_112x112_folders_shuffle_label_embs_normed_512.npz
+    ```
+  - Then this dataset can be used to train a new model.
+    - A new loss `distiller_loss` will added to match this `embedding` data, `loss_weights = [1, 7]`
+    - The `emb_shape` should be same with the saved one.
+    ```py
+    import train, losses
+    import tensorflow_addons as tfa
+
+    data_basic_path = '/datasets/'
+    data_path = 'faces_casia_112x112_folders_shuffle_label_embs_normed_512.npz'
+    eval_paths = [data_basic_path + ii for ii in ['faces_casia/lfw.bin', 'faces_casia/cfp_fp.bin', 'faces_casia/agedb_30.bin']]
+
+    basic_model = train.buildin_models("mobilenet", dropout=0, emb_shape=512, output_layer='E')
+    tt = train.Train(data_path, save_path='TT_mobilenet_distill_bs400.h5', eval_paths=eval_paths,
+        basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
+        batch_size=400, random_status=0, output_wd_multiply=1)
+
+    optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
+    sch = [
+        {"loss": losses.ArcfaceLoss(scale=16), "epoch": 5, "optimizer": optimizer},
+        {"loss": losses.ArcfaceLoss(scale=32), "epoch": 5},
+        {"loss": losses.ArcfaceLoss(scale=64), "epoch": 40},
+    ]
+    tt.train(sch, 0)
+    ```
+***
+
 # Related Projects
   - [TensorFlow Addons Losses: TripletSemiHardLoss](https://www.tensorflow.org/addons/tutorials/losses_triplet)
   - [TensorFlow Addons Layers: WeightNormalization](https://www.tensorflow.org/addons/tutorials/layers_weightnormalization)
@@ -566,4 +629,5 @@
   - [Github titu1994/keras-squeeze-excite-network](https://github.com/titu1994/keras-squeeze-excite-network)
   - [Github qubvel/EfficientNet](https://github.com/qubvel/efficientnet)
   - [Github QiaoranC/tf_ResNeSt_RegNet_model](https://github.com/QiaoranC/tf_ResNeSt_RegNet_model)
+  - [Partial FC: Training 10 Million Identities on a Single Machine](https://arxiv.org/pdf/2010.05222.pdf)
 ***
