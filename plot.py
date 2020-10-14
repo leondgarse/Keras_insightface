@@ -45,7 +45,10 @@ def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0, l
     tt = []
     for ii in arrays:
         tt += ii
-    if pre_value != 0:
+    if pre_value != 0 and init_epoch == 0:
+        tt[0] = pre_value
+        xx = list(range(init_epoch + 1, init_epoch + len(tt) + 1))
+    if pre_value != 0 and init_epoch != 0:
         tt = [pre_value] + tt
         xx = list(range(init_epoch, init_epoch + len(tt)))
     else:

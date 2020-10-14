@@ -34,7 +34,7 @@ def data_drop_top_k(model, data_path, dataset_pickle_file_dest=None, deg_thresh=
     top_k = centers.shape[-1] // class_num
 
     print(">>>> [Before] emb_num = %d, class_num = %d, top_k = %d, images = %d" % (emb_num, class_num, top_k, len(image_classes)))
-    # emb_num = 256, class_num = 10572
+    # >>>> [Before] emb_num = 256, class_num = 10572, top_k = 3, images = 490623
 
     cur_idx = 0 # The new index to save.
     new_image_classes, new_image_names = [], []
@@ -77,6 +77,7 @@ def data_drop_top_k(model, data_path, dataset_pickle_file_dest=None, deg_thresh=
         pickle.dump({"image_names": new_image_names, "image_classes": new_image_classes}, ff)
 
     print(">>>> [After] Total classes: %d, total images: %d" % (np.max(new_image_classes) + 1, len(new_image_names)))
+    # >>>> [After] Total classes: 10572, total images: 466276
     return dataset_pickle_file_dest
 
 if __name__ == "__main__":

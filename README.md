@@ -52,6 +52,8 @@
   	- [Multi GPU train](#multi-gpu-train)
   	- [TFLite model inference time test on ARM32](#tflite-model-inference-time-test-on-arm32)
   - [Sub Center ArcFace](#sub-center-arcface)
+  	- [Loss TopK Usage](#loss-topk-usage)
+  	- [Mobilenet test on CASIA dataset](#mobilenet-test-on-casia-dataset)
   - [Related Projects](#related-projects)
 
   <!-- /TOC -->
@@ -85,9 +87,7 @@
     ```
   - **Keras version**
     - Use a self defined `Resnet34` based on [keras application resnet](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/keras/applications/resnet.py), which is similar with the MXNet version. Other parameters is almost a mimic of the MXNet version.
-    - `batch_size` is `480` here, for `batch_size=512`, it will run into OOM every 6 epochs in my envs...
-    - I have to train 1 epoch of `softmax` first...
-    - Sometimes the `SGDW` loss value will go very high, seems `lr_base=0.1` is too large for `SGDW`.
+    - I have to train 1 epoch to warmup first, but still, sometimes the `SGDW` loss value will go very high...
     ```py
     import tensorflow_addons as tfa
     import train, losses
@@ -97,14 +97,15 @@
     eval_paths = [data_basic_path + ii for ii in ['faces_casia/lfw.bin', 'faces_casia/cfp_fp.bin', 'faces_casia/agedb_30.bin']]
 
     basic_model = train.buildin_models("resnet34", dropout=0.4, emb_shape=512, output_layer='E', bn_momentum=0.9, bn_epsilon=2e-5)
-    tt = train.Train(data_path, save_path='NNNN_resnet34_MXNET_E_sgdw_5e4_dr0.4_wdm10_soft_E1_arc_BS480_casia.h5', eval_paths=eval_paths,
-        basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
-        batch_size=480, random_status=0, output_wd_multiply=10)
+    tt = train.Train(data_path, save_path='NNNN_resnet34_MXNET_E_sgdw_5e4_dr4_lr1e1_wd10_random0_arc32_E1_arcT4_BS512_casia.h5',
+        eval_paths=eval_paths, basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
+        batch_size=512, random_status=0, output_wd_multiply=10)
 
     optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
     sch = [
-        {"loss": keras.losses.CategoricalCrossentropy(), "epoch": 1, "optimizer": optimizer},
-        {"loss": losses.arcface_loss_type_4, "epoch": 40},
+        # {"loss": keras.losses.CategoricalCrossentropy(), "epoch": 1, "optimizer": optimizer},
+        {"loss": losses.ArcfaceLossT4(scale=32), "epoch": 1, "optimizer": optimizer},
+        {"loss": losses.ArcfaceLossT4(scale=64), "epoch": 40},
     ]
     tt.train(sch, 0)
     ```
@@ -247,7 +248,7 @@
     | None for 'embedding' layer or layer index of basic model output | model structure | Continue training from a modified model    |
   - **Scheduler** is a list of dicts, each contains a training plan
     - **loss** indicates the loss function. **Required**.
-    - **loss_top_k** indicates the `top K` value for [Sub Center ArcFace](#sub-center-arcface) method.
+    - **lossTopK** indicates the `top K` value for [Sub Center ArcFace](#sub-center-arcface) method.
     - **optimizer** is the optimizer used in this plan, `None` indicates using the last one.
     - **epoch** indicates how many epochs will be trained. **Required**.
     - **bottleneckOnly** True / False, `True` will set `basic_model.trainable = False`, train the bottleneck layer only.
@@ -466,6 +467,7 @@
 ***
 
 # Sub Center ArcFace
+## Loss TopK Usage
   - [Original MXNet Subcenter ArcFace](https://github.com/deepinsight/insightface/tree/master/recognition/SubCenter-ArcFace)
   - [eccv_1445 Sub-center ArcFace: Boosting Face Recognition by Large-scale Noisy Web Faces.pdf](https://ibug.doc.ic.ac.uk/media/uploads/documents/eccv_1445.pdf)
   - **This is still under test, Multi GPU is NOT tested**
@@ -490,7 +492,7 @@
     data_path = data_basic_path + '_112x112_folders'
     eval_paths = [os.path.join(data_basic_path, ii) for ii in ['lfw.bin', 'cfp_fp.bin', 'agedb_30.bin']]
 
-    """ First, Train with `loss_top_k = 3` """
+    """ First, Train with `lossTopK = 3` """
     basic_model = train.buildin_models("mobilenet", dropout=0, emb_shape=256, output_layer='E')
     tt = train.Train(data_path, save_path='TT_mobilenet_topk_bs256.h5', eval_paths=eval_paths,
         basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
@@ -498,9 +500,9 @@
 
     optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
     sch = [
-        {"loss": losses.ArcfaceLoss(scale=16), "epoch": 5, "optimizer": optimizer, "loss_top_k": 3},
-        {"loss": losses.ArcfaceLoss(scale=32), "epoch": 5, "loss_top_k": 3},
-        {"loss": losses.ArcfaceLoss(scale=64), "epoch": 40, "loss_top_k": 3},
+        {"loss": losses.ArcfaceLoss(scale=16), "epoch": 5, "optimizer": optimizer, "lossTopK": 3},
+        {"loss": losses.ArcfaceLoss(scale=32), "epoch": 5, "lossTopK": 3},
+        {"loss": losses.ArcfaceLoss(scale=64), "epoch": 40, "lossTopK": 3},
     ]
     tt.train(sch, 0)
 
@@ -509,7 +511,7 @@
     # data_drop_top_k.data_drop_top_k('./checkpoints/TT_mobilenet_topk_bs256.h5', '/datasets/faces_casia_112x112_folders/', limit=20)
     new_data_path = data_drop_top_k.data_drop_top_k(tt.model, tt.data_path)
 
-    """ Train with the new dataset again, this time `loss_top_k = 1` """
+    """ Train with the new dataset again, this time `lossTopK = 1` """
     tt.reset_dataset(new_data_path)
     optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
     sch = [
@@ -544,6 +546,17 @@
     ```sh
     $ CUDA_VISIBLE_DEVICES='-1' ./data_drop_top_k.py -M checkpoints/TT_mobilenet_topk_bs256.h5 -D /datasets/faces_casia_112x112_folders/ -L 20
     ```
+## Mobilenet test on CASIA dataset
+  - [SubCenter training Mobilenet on CASIA.ipynb](https://colab.research.google.com/drive/1h9363f6m43WRtlJ7qSXBpOzca8e6eVU4?usp=sharing)
+  - **Result**
+
+  | Scenario                                    | Max lfw    | Max cfp_fp | Max agedb_30 |
+  | ------------------------------------------- | ---------- | ---------- | ------------ |
+  | Baseline, topk 1                            | 0.9822     | 0.8694     | 0.8695       |
+  | TopK 3                                      | 0.9838     | **0.9044** | 0.8743       |
+  | TopK 3->1                                   | 0.9838     | 0.8960     | 0.8768       |
+  | TopK 3->1, bottleneckOnly, initial_epoch=0  | **0.9878** | 0.8920     | **0.8857**   |
+  | TopK 3->1, bottleneckOnly, initial_epoch=40 | 0.9835     | **0.9030** | 0.8763       |
 ***
 
 # Related Projects

@@ -222,7 +222,7 @@ class Train:
                 "margin_softmax": losses.margin_softmax,
                 "MarginSoftmax": losses.MarginSoftmax,
                 "arcface_loss": losses.arcface_loss,
-                "arcface_loss_type_4": losses.arcface_loss_type_4,
+                "ArcfaceLossT4": losses.ArcfaceLossT4,
                 "ArcfaceLoss": losses.ArcfaceLoss,
                 "CenterLoss": losses.CenterLoss,
                 "batch_hard_triplet_loss": losses.batch_hard_triplet_loss,
@@ -431,7 +431,7 @@ class Train:
 
             self.basic_model.trainable = True
             self.__init_optimizer__(sch.get("optimizer", None))
-            self.__init_model__(type, sch.get("loss_top_k", 1))
+            self.__init_model__(type, sch.get("lossTopK", 1))
 
             # loss_weights
             cur_loss = [cur_loss]
