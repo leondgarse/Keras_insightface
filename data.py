@@ -97,9 +97,8 @@ def prepare_dataset(
     ds = ds.map(process_func, num_parallel_calls=AUTOTUNE)
 
     if is_train and random_status >= 0:
-        ds = ds.map(
-            lambda xx, yy: (random_process_image(xx, img_shape, random_status, random_crop), yy), num_parallel_calls=AUTOTUNE
-        )
+        random_process_func = lambda xx, yy: (random_process_image(xx, img_shape, random_status, random_crop), yy)
+        ds = ds.map(random_process_func , num_parallel_calls=AUTOTUNE)
 
     ds = ds.batch(batch_size)  # Use batch --> map has slightly effect on dataset reading time, but harm the randomness
     ds = ds.map(lambda xx, yy: ((xx * 2) - 1, yy))
