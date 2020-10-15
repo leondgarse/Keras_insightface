@@ -6,6 +6,10 @@ from tqdm import tqdm
 from sklearn.preprocessing import normalize
 from data import pre_process_folder, tf_imread
 
+gpus = tf.config.experimental.list_physical_devices("GPU")
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
+
 try:
     import mxnet as mx
 except:
@@ -31,6 +35,7 @@ def get_mxnet_model(model, layer="fc1", image_size=(112, 112)):
 
 
 def mxnet_model_infer(model, imgs):
+    # print(imgs.shape, imgs[0])
     imgs = imgs.transpose(0, 3, 1, 2)
     data = mx.nd.array(imgs)
     db = mx.io.DataBatch(data=(data,))
@@ -41,8 +46,9 @@ def mxnet_model_infer(model, imgs):
 
 def data_distiller(data_path, model, dest_file=None, batch_size=256, limit=-1):
     """ Init dataset """
-    image_names, image_classes, _, _, dataset_pickle_file_src = pre_process_folder(data_path)
-    if limit != -1:
+    image_names, image_classes, _, classes, dataset_pickle_file_src = pre_process_folder(data_path)
+    print(">>>> Image length: %d, Image class length: %d, classes: %d" % (len(image_names), len(image_classes), classes))
+    if limit > 0:
         image_names, image_classes = image_names[:limit], image_classes[:limit]
 
     AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -59,7 +65,7 @@ def data_distiller(data_path, model, dest_file=None, batch_size=256, limit=-1):
         else:
             # MXNet model file, like models/r50-arcface-emore/model,1
             basic_model = get_mxnet_model(model)
-            infer = lambda imgs: mxnet_model_infer(basic_model, imgs.numpy() * 255)
+            infer = lambda imgs: mxnet_model_infer(basic_model, (imgs.numpy() * 255).astype('uint8'))
     else:
         # TF model
         infer = lambda imgs: model((imgs * 2) - 1).numpy()
@@ -76,12 +82,15 @@ def data_distiller(data_path, model, dest_file=None, batch_size=256, limit=-1):
     # imms, labels, embeddings = np.array(imms), np.array(labels), np.array(embeddings)
 
     """ Save to npz """
+    print(">>>> Saving locally...")
     if dest_file is None:
         src_name = os.path.splitext(os.path.basename(dataset_pickle_file_src))[0]
         dest_file = src_name + "_label_embs_normed_{}.npz".format(embeddings[0].shape[0])
+    dest_file = dest_file if dest_file.endswith('.npz') else dest_file + '.npz'
     np.savez_compressed(dest_file, image_names=new_image_names, image_classes=new_image_classes, embeddings=embeddings)
     # with open(dest_file, "wb") as ff:
     #     pickle.dump({"image_names": new_image_names, "image_classes": new_image_classes, "embeddings": embeddings}, ff)
+    print(">>>> Output:", dest_file)
 
     return dest_file
 
@@ -97,10 +106,10 @@ if __name__ == "__main__":
     parser.add_argument("-D", "--data_path", type=str, required=True, help="Original dataset path")
     parser.add_argument("-d", "--dest_file", type=str, default=None, help="Dest file path to save the processed dataset npz")
     parser.add_argument("-b", "--batch_size", type=int, default=256, help="Batch size")
-    parser.add_argument("-L", "--limit", type=int, default=0, help="Test parameter, limit converting only the first [NUM] ones")
+    parser.add_argument("-L", "--limit", type=int, default=-1, help="Test parameter, limit converting only the first [NUM] ones")
     args = parser.parse_known_args(sys.argv[1:])[0]
 
-    print(">>>> Output:", data_distiller(args.data_path, args.model_file, args.dest_file, args.batch_size, args.limit))
+    data_distiller(args.data_path, args.model_file, args.dest_file, args.batch_size, args.limit)
 
 elif __name__ == "__test__":
     batch_size = 256

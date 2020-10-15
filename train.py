@@ -49,8 +49,8 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), ou
     elif name == "resnet50v2":
         xx = keras.applications.ResNet50V2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name == "resnet101":
-        # xx = keras.applications.ResNet101(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
-        xx = ResNet101(input_shape=input_shape, include_top=False, weights=None, **kwargs)
+        # xx = ResNet101(input_shape=input_shape, include_top=False, weights=None, **kwargs)
+        xx = keras.applications.ResNet101(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name == "resnet101v2":
         xx = keras.applications.ResNet101V2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name == "nasnetmobile":
@@ -471,8 +471,8 @@ class Train:
                 loss_weights.update({self.model.output_names[0]: float(sch.get("triplet", False) or sch.get("tripletAll", False))})
 
             if self.is_distiller:
-                loss_weights = [1, 7]
-                print(">>>> Train distiller model, loss_weights:", loss_weights)
+                loss_weights = [1, sch.get("distill", 7)]
+                print(">>>> Train distiller model...")
                 self.model = keras.models.Model(self.model.inputs[0], [self.model.outputs[-1], self.basic_model.outputs[0]])
                 cur_loss = [cur_loss[-1], losses.distiller_loss]
 

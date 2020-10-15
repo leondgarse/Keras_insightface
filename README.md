@@ -110,18 +110,14 @@
     ]
     tt.train(sch, 0)
     ```
-  - **Other tests and plot** Keep other parameters fixed, like `lr_decay_steps=[20, 30]` `"epoch": 40`.
-    - Original MXNet r34 max accuracy and its epoch: `lfw, cfp_fp, agedb_30 = 0.9940, 0.9496, 0.9477, epoch 35`
-    - Original Tensorflow Resnet50 max accuracy and its epoch: `lfw, cfp_fp, agedb_30 = 0.9898, 0.8756, 0.9038, epoch 34`
+  - **Result**
 
-    | Optimizer | weight decay | lr_base | output layer | output wd multiply | random status | lfw,cfp_fp,agedb_30,epoch   |
-    | --------- | ------------ | ------- | ------------ | ------------------ | ------------- | --------------------------- |
-    | SGDW      | 5e-4         | 0.1     | E            | 10                 | 0             | 0.9945, 0.9627, 0.9423, E37 |
-    | SGDW      | 5e-4         | 0.1     | GDC          | 10                 | 0             | 0.9923, 0.9523, 0.9363, E30 |
-    | SGDW      | 5e-4         | 0.1     | E            | 10                 | 3             | 0.9940, 0.9654, 0.9423, E40 |
-    | SGDW      | 5e-4         | 0.1     | E            | 1                  | 3             | 0.9940, 0.9637, 0.9383, E38 |
-    | AdamW     | 5e-5         | 0.001   | E            | 10                 | 3             | 0.9928, 0.9619, 0.9328, E40 |
-    | AdamW     | 5e-5         | 0.001   | E            | 1                  | 3             | 0.9922, 0.9544, 0.9300, E20 |
+    | Backbone             | Optimizer | warmup     | random status | lfw,cfp_fp,agedb_30,epoch   |
+    | -------------------- | --------- | ---------- | ------------- | --------------------------- |
+    | MXNet r34            | SGDW      | None       | 0             | 0.9940, 0.9496, 0.9477, E35 |
+    | TF resnet34          | SGDW      | ArcFace 32 | 0             | 0.9932, 0.9483, 0.9467, E36 |
+    | TF resnet34          | SGDW      | Softmax    | 3             | 0.9940, 0.9654, 0.9423, E40 |
+    | Original TF Resnet50 | SGDW      | Softmax    | 0             | 0.9898, 0.8756, 0.9038, E34 |
 
     - limit the max loss value as `80` when plot.
 
@@ -249,13 +245,14 @@
     | None for 'embedding' layer or layer index of basic model output | model structure | Continue training from a modified model    |
   - **Scheduler** is a list of dicts, each contains a training plan
     - **loss** indicates the loss function. **Required**.
-    - **lossTopK** indicates the `top K` value for [Sub Center ArcFace](#sub-center-arcface) method.
     - **optimizer** is the optimizer used in this plan, `None` indicates using the last one.
     - **epoch** indicates how many epochs will be trained. **Required**.
     - **bottleneckOnly** True / False, `True` will set `basic_model.trainable = False`, train the bottleneck layer only.
     - **centerloss** float value, if set a non zero value, attach a `CenterLoss` to `logits_loss`, and the value means `loss_weight`.
     - **triplet** float value, if set a non zero value, attach a `BatchHardTripletLoss` to `logits_loss`, and the value means `loss_weight`.
     - **alpha** float value, default to `0.35`. Alpha value for `BatchHardTripletLoss` if attached.
+    - **lossTopK** indicates the `top K` value for [Sub Center ArcFace](#sub-center-arcface) method.
+    - **distill** indicates the `loss_weight` for `distiller_loss` using [Knowledge distillation](#knowledge-distillation), default `7`.
     - **type** `softmax` / `arcface` / `triplet` / `center`, but mostly this could be guessed from `loss`.
     ```py
     # Scheduler examples
@@ -486,9 +483,13 @@
     # Iter 20, accuracy 0.80078125, loss 1.311261, lfw 0.99817, cfp_fp 0.97557, agedb_30 0.98167
 
     CUDA_VISIBLE_DEVICES='1' python drop.py --data /datasets/faces_emore --model models/r50-arcface-emore/model,1 --threshold 75 --k 3 --output /datasets/faces_emore_topk3_1
+    # header0 label [5822654. 5908396.] (5822653, 4)
+    # total: 5800493
 
     sed -i 's/config.ckpt_embedding = False/config.ckpt_embedding = True/' config.py
     sed -i 's/config.loss_K = 3/config.loss_K = 1/' config.py
+    sed -i 's#/datasets/faces_emore#/datasets/faces_emore_topk3_1#' config.py
+    ls -1 /datasets/faces_emore/*.bin | xargs -I '{}' ln -s {} /datasets/faces_emore_topk3_1/
     CUDA_VISIBLE_DEVICES='1' python train_parall.py --network r50 --per-batch-size 512
     ```
   - **Keras version train mobilenet on CASIA test**
@@ -554,7 +555,7 @@
     $ CUDA_VISIBLE_DEVICES='-1' ./data_drop_top_k.py -M checkpoints/TT_mobilenet_topk_bs256.h5 -D /datasets/faces_casia_112x112_folders/ -L 20
     ```
 ## Mobilenet test on CASIA dataset
-  - [SubCenter training Mobilenet on CASIA.ipynb](https://colab.research.google.com/drive/1h9363f6m43WRtlJ7qSXBpOzca8e6eVU4?usp=sharing)
+  - [SubCenter training Mobilenet on CASIA.ipynb](checkpoints/SubCenter_training_Mobilenet_on_CASIA.ipynb)
   - **Result**
 
   | Scenario                                    | Max lfw    | Max cfp_fp | Max agedb_30 |
@@ -569,7 +570,7 @@
 # Knowledge distillation
   - [PDF Improving Face Recognition from Hard Samples via Distribution Distillation Loss](https://arxiv.org/pdf/2002.03662.pdf)
   - [PDF VarGFaceNet: An Efficient Variable Group Convolutional Neural Network for Lightweight Face Recognition](https://arxiv.org/pdf/1910.04985.pdf)
-  - `data_distiller.py` works to extract `embedding` data from images and save locally.
+  - `data_distiller.py` works to extract `embedding` data from images and save locally. `MODEL_FILE` can be ether `Keras h5` / `MXNet model`.
     ```sh
     $ CUDA_VISIBLE_DEVICES='-1' ./data_distiller.py -h
     # usage: data_distiller.py [-h] -M MODEL_FILE -D DATA_PATH [-d DEST_FILE]
@@ -592,12 +593,12 @@
     #                         ones (default: 0)
     ```
     ```sh
-    $ CUDA_VISIBLE_DEVICES='-1' ./data_distiller.py -M subcenter-arcface-logs/r100-arcface-msfdrop75/model,0 -D /datasets/faces_casia_112x112_folders/ -L 20
+    $ CUDA_VISIBLE_DEVICES='0' ./data_distiller.py -M subcenter-arcface-logs/r100-arcface-msfdrop75/model,0 -D /datasets/faces_casia_112x112_folders/ -b 32
     # >>>> Output: faces_casia_112x112_folders_shuffle_label_embs_normed_512.npz
     ```
   - Then this dataset can be used to train a new model.
     - Just specify `data_path` as the new dataset path. If key `embeddings` is in, then it will be a `distiller train`.
-    - A new loss `distiller_loss` will be added to match this `embeddings` data, `loss_weights = [1, 7]`
+    - A new loss `distiller_loss` will be added to match this `embeddings` data, default `loss_weights = [1, 7]`
     - The `emb_shape` should be same with the saved one.
     ```py
     import train, losses
@@ -620,6 +621,15 @@
     ]
     tt.train(sch, 0)
     ```
+  - **[Knowledge distillation training Mobilenet on CASIA](checkpoints/Knowledge_distillation_training_Mobilenet_on_CASIA.ipynb)**
+
+    | Scenario                  | Max lfw    | Max cfp_fp | Max agedb_30 |
+    | ------------------------- | ---------- | ---------- | ------------ |
+    | Baseline, dropout 0       | 0.9838     | 0.8730     | 0.8697       |
+    | Baseline, dropout 0.4     | 0.9837     | 0.8491     | 0.8745       |
+    | Teacher r34, dropout 0    | 0.9890     | 0.9099     | 0.9058       |
+    | Teacher r100, dropout 0   | 0.9900     | 0.9111     | 0.9068       |
+    | Teacher r100, dropout 0.4 | **0.9905** | **0.9170** | **0.9112**   |
 ***
 
 # Related Projects
