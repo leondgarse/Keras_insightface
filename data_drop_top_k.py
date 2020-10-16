@@ -6,6 +6,9 @@ from tqdm import tqdm
 from sklearn.preprocessing import normalize
 from data import pre_process_folder, tf_imread
 
+gpus = tf.config.experimental.list_physical_devices("GPU")
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
 
 def data_drop_top_k(model, data_path, dest_file=None, deg_thresh=75, limit=0):
     cos_thresh = np.cos(np.pi * deg_thresh / 180)  # 0.25881904510252074

@@ -491,6 +491,7 @@
     sed -i 's#/datasets/faces_emore#/datasets/faces_emore_topk3_1#' config.py
     ls -1 /datasets/faces_emore/*.bin | xargs -I '{}' ln -s {} /datasets/faces_emore_topk3_1/
     CUDA_VISIBLE_DEVICES='1' python train_parall.py --network r50 --per-batch-size 512
+    # 5800493
     ```
   - **Keras version train mobilenet on CASIA test**
     ```py
@@ -598,8 +599,8 @@
     ```
   - Then this dataset can be used to train a new model.
     - Just specify `data_path` as the new dataset path. If key `embeddings` is in, then it will be a `distiller train`.
-    - A new loss `distiller_loss` will be added to match this `embeddings` data, default `loss_weights = [1, 7]`
-    - The `emb_shape` should be same with the saved one.
+    - A new loss `distiller_loss` will be added to match this `embeddings` data, default `loss_weights = [1, 7]`. Parameter `distill` in `scheduler` set this loss weight.
+    - The `emb_shape` should be same with `teacher`.
     ```py
     import train, losses
     import tensorflow_addons as tfa
@@ -608,16 +609,16 @@
     data_path = 'faces_casia_112x112_folders_shuffle_label_embs_normed_512.npz'
     eval_paths = [data_basic_path + ii for ii in ['faces_casia/lfw.bin', 'faces_casia/cfp_fp.bin', 'faces_casia/agedb_30.bin']]
 
-    basic_model = train.buildin_models("mobilenet", dropout=0, emb_shape=512, output_layer='E')
+    basic_model = train.buildin_models("mobilenet", dropout=0.4, emb_shape=512, output_layer='E')
     tt = train.Train(data_path, save_path='TT_mobilenet_distill_bs400.h5', eval_paths=eval_paths,
         basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
         batch_size=400, random_status=0, output_wd_multiply=1)
 
     optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
     sch = [
-        {"loss": losses.ArcfaceLoss(scale=16), "epoch": 5, "optimizer": optimizer},
-        {"loss": losses.ArcfaceLoss(scale=32), "epoch": 5},
-        {"loss": losses.ArcfaceLoss(scale=64), "epoch": 40},
+        {"loss": losses.ArcfaceLoss(scale=16), "epoch": 5, "optimizer": optimizer, "distill": 64},
+        {"loss": losses.ArcfaceLoss(scale=32), "epoch": 5, "distill": 64},
+        {"loss": losses.ArcfaceLoss(scale=64), "epoch": 40, "distill": 64},
     ]
     tt.train(sch, 0)
     ```
