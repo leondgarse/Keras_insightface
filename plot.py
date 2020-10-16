@@ -8,6 +8,7 @@ plt.style.use("seaborn")
 EVALS_NAME = ["lfw", "cfp_fp", "agedb_30"]
 EVALS_LINE_STYLE = ["-", "--", "-.", ":"]
 MAX_COLORS = 10
+Scale = 1
 # COLORS = cm.rainbow(np.linspace(0, 1, MAX_COLORS))
 
 try:
@@ -30,6 +31,25 @@ def set_colors(max_color, palette="deep"):
         COLORS = sns.color_palette(palette, n_colors=MAX_COLORS)
 
 
+def set_scale(scale):
+    global Scale
+    if Scale != scale:
+        import matplotlib as mpl
+        Scale = scale
+        mpl.rcParams['axes.titlesize'] *= Scale
+        mpl.rcParams['legend.fontsize'] *= Scale
+        mpl.rcParams['font.size'] *= Scale
+
+        mpl.rcParams['axes.linewidth'] *= Scale
+        mpl.rcParams['lines.linewidth'] *= Scale
+        mpl.rcParams['grid.linewidth'] *= Scale
+
+        mpl.rcParams['xtick.labelsize'] *= Scale
+        mpl.rcParams['ytick.labelsize'] *= Scale
+        mpl.rcParams['ytick.major.pad'] *= Scale
+        mpl.rcParams['xtick.major.pad'] *= Scale
+
+
 def peak_scatter(ax, array, peak_method, color="r", init_epoch=0):
     start = init_epoch + 1
     for ii in array:
@@ -37,7 +57,7 @@ def peak_scatter(ax, array, peak_method, color="r", init_epoch=0):
         # Skip scatter if it's 0
         if ii[pp] != 0:
             ax.scatter(pp + start, ii[pp], color=color, marker="v")
-            ax.text(pp + start, ii[pp], "{:.4f}".format(ii[pp]), va="bottom", ha="right", fontsize=8, rotation=-30)
+            ax.text(pp + start, ii[pp], "{:.4f}".format(ii[pp]), va="bottom", ha="right", fontsize=8 * Scale, rotation=-30)
         start += len(ii)
 
 
@@ -82,10 +102,10 @@ def hist_plot(
 ):
     if axes is None:
         if eval_split:
-            fig, axes = plt.subplots(2, 3, sharex=False, figsize=(24, 16))
+            fig, axes = plt.subplots(2, 3, sharex=False, figsize=(24 * Scale, 16 * Scale))
             axes = axes.flatten()
         else:
-            fig, axes = plt.subplots(1, 3, sharex=False, figsize=(24, 8))
+            fig, axes = plt.subplots(1, 3, sharex=False, figsize=(24 * Scale, 8 * Scale))
         for ax in axes:
             ax.set_prop_cycle(cycler("color", COLORS))
     else:
@@ -104,14 +124,14 @@ def hist_plot(
         peak_scatter(axes[0], loss_lists, np.argmin, init_epoch=init_epoch)
     axes[0].set_title("loss")
     if fig_label:
-        axes[0].legend(loc="upper right", fontsize=8)
+        axes[0].legend(loc="upper right", fontsize=8 * Scale)
 
     if len(accuracy_lists) != 0:
         arrays_plot(axes[1], accuracy_lists, label=fig_label, init_epoch=init_epoch, pre_value=pre_item.get("accuracy", 0))
         peak_scatter(axes[1], accuracy_lists, np.argmax, init_epoch=init_epoch)
     axes[1].set_title("accuracy")
     if fig_label:
-        axes[1].legend(loc="lower right", fontsize=8)
+        axes[1].legend(loc="lower right", fontsize=8 * Scale)
 
     other_customs = [ii for ii in customs_dict if ii not in EVALS_NAME]
     if len(other_customs) != 0:
@@ -158,10 +178,10 @@ def hist_plot(
 
     eval_ax = eval_ax if eval_split else eval_ax + 1
     for ii in range(eval_ax_start, eval_ax):
-        axes[ii].legend(loc="lower left", fontsize=8)
+        axes[ii].legend(loc="lower left", fontsize=8 * Scale)
 
     if len(axes) > 3 and other_custom_id > 0:
-        axes[other_custom_ax].legend(loc="lower right", fontsize=8)
+        axes[other_custom_ax].legend(loc="lower right", fontsize=8 * Scale)
 
     for ax in axes:
         ymin, ymax = ax.get_ylim()

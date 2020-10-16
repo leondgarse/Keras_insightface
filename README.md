@@ -555,7 +555,7 @@
     $ CUDA_VISIBLE_DEVICES='-1' ./data_drop_top_k.py -M checkpoints/TT_mobilenet_topk_bs256.h5 -D /datasets/faces_casia_112x112_folders/ -L 20
     ```
 ## Mobilenet test on CASIA dataset
-  - [SubCenter training Mobilenet on CASIA.ipynb](checkpoints/SubCenter_training_Mobilenet_on_CASIA.ipynb)
+  - [SubCenter_training_Mobilenet_on_CASIA.ipynb](checkpoints/SubCenter_training_Mobilenet_on_CASIA.ipynb)
   - **Result**
 
   | Scenario                                    | Max lfw    | Max cfp_fp | Max agedb_30 |
@@ -621,15 +621,17 @@
     ]
     tt.train(sch, 0)
     ```
-  - **[Knowledge distillation training Mobilenet on CASIA](checkpoints/Knowledge_distillation_training_Mobilenet_on_CASIA.ipynb)**
+  - **[Knowledge_distillation_training_Mobilenet_on_CASIA.ipynb](checkpoints/Knowledge_distillation_training_Mobilenet_on_CASIA.ipynb)**
 
-    | Scenario                  | Max lfw    | Max cfp_fp | Max agedb_30 |
-    | ------------------------- | ---------- | ---------- | ------------ |
-    | Baseline, dropout 0       | 0.9838     | 0.8730     | 0.8697       |
-    | Baseline, dropout 0.4     | 0.9837     | 0.8491     | 0.8745       |
-    | Teacher r34, dropout 0    | 0.9890     | 0.9099     | 0.9058       |
-    | Teacher r100, dropout 0   | 0.9900     | 0.9111     | 0.9068       |
-    | Teacher r100, dropout 0.4 | **0.9905** | **0.9170** | **0.9112**   |
+    | Teacher | Dropout | Optimizer | Distill | Max lfw    | Max cfp_fp | Max agedb_30 |
+    | ------- | ------- | --------- | ------- | ---------- | ---------- | ------------ |
+    | None    | 0       | SGDW      | 7       | 0.9838     | 0.8730     | 0.8697       |
+    | None    | 0.4     | SGDW      | 7       | 0.9837     | 0.8491     | 0.8745       |
+    | r34     | 0       | SGDW      | 7       | 0.9890     | 0.9099     | 0.9058       |
+    | r100    | 0       | SGDW      | 7       | 0.9900     | 0.9111     | 0.9068       |
+    | r100    | 0.4     | SGDW      | 7       | 0.9905     | 0.9170     | 0.9112       |
+    | r100    | 0.4     | SGDW      | 64      | **0.9938** | 0.9333     | **0.9435**   |
+    | r100    | 0.4     | AdamW     | 64      | 0.9920     | **0.9346** | 0.9387       |
 ***
 
 # Related Projects

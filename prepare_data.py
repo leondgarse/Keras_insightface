@@ -25,7 +25,8 @@ def MXnet_record_to_folder(dataset_dir):
     for ii in tqdm(range(1, int(rec_header.label[0]))):
         img_info = imgrec.read_idx(ii)
         header, img = mx.recordio.unpack(img_info)
-        img_idx = str(int(np.sum(header.label)))
+        # img_idx = str(int(np.sum(header.label)))
+        img_idx = str(int(header.label if isinstance(header.label, float) else header.label[0]))
         img_save_dir = os.path.join(save_dir, img_idx)
         if not os.path.exists(img_save_dir):
             os.makedirs(img_save_dir)
