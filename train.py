@@ -44,6 +44,10 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), ou
         from backbones import resnet
 
         xx = resnet.ResNet34(input_shape=input_shape, include_top=False, weights=None, **kwargs)
+    elif name == "r50":
+        from backbones import resnet
+
+        xx = resnet.ResNet50(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name == "resnet50":
         xx = keras.applications.ResNet50(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name == "resnet50v2":
@@ -186,7 +190,7 @@ class L2_decay_wdm(keras.regularizers.L2):
 
     def __call__(self, x):
         self.l2 = self.wd_func()
-        # tf.print(", l2 =", self.l2, end='')
+        tf.print(", l2 =", self.l2, end='')
         return super(L2_decay_wdm, self).__call__(x)
 
     def get_config(self):
@@ -204,7 +208,7 @@ class Train:
         basic_model=None,
         model=None,
         compile=True,
-        output_wd_multiply=1,
+        output_wd_multiply=1,   # works ONLY for SGDW
         custom_objects={},
         batch_size=128,
         lr_base=0.001,
@@ -340,8 +344,12 @@ class Train:
             self.model = keras.models.Model(inputs, self.model.layers[output_layer].output)
 
         if self.output_wd_multiply != 1:
-            print(">>>> Output weight decay multiplier:", self.output_wd_multiply)
-            kernel_regularizer = L2_decay_wdm(lambda: self.output_wd_multiply * self.optimizer.weight_decay)
+            l2 = self.optimizer.weight_decay.numpy() / self.optimizer.lr.numpy() * (self.output_wd_multiply - 1) / 2
+            # kernel_regularizer = L2_decay_wdm(lambda: self.output_wd_multiply * self.optimizer.weight_decay)
+            # kernel_regularizer = L2_decay_wdm(lambda: (self.output_wd_multiply - 1) / 2 * self.optimizer.weight_decay)
+            kernel_regularizer = keras.regularizers.L2(l2)
+            print(">>>> Output weight decay multiplier: %f, l2: %f" % (self.output_wd_multiply, l2))
+
         else:
             kernel_regularizer = None
 

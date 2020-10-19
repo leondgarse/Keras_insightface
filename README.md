@@ -1,5 +1,5 @@
 # ___Keras insightface___
-  - Keras Insightface implementation.
+  - Keras implementation of [deepinsight/insightface](https://github.com/deepinsight/insightface).
   - This is still under working, many things are still testing here, so there may lots of errors atm.
   - **Any advise is welcome**!
   - **Environment**
@@ -400,6 +400,7 @@
     ```
     It's TOO slow training a `se_resnext 101`，takes almost 4 times longer than `ResNet101V2`.
 ## Optimizer with weight decay
+  - [PDF DECOUPLED WEIGHT DECAY REGULARIZATION](https://arxiv.org/pdf/1711.05101.pdf)
   - [tensorflow_addons](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/AdamW) provides `SGDW` / `AdamW`.
     ```py
     !pip install tensorflow-addons

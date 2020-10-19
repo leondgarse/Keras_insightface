@@ -9,6 +9,9 @@ EVALS_NAME = ["lfw", "cfp_fp", "agedb_30"]
 EVALS_LINE_STYLE = ["-", "--", "-.", ":"]
 MAX_COLORS = 10
 Scale = 1
+Default_legend_font_size = 8
+Default_text_font_size = 9
+Default_figure_base_size = 8
 # COLORS = cm.rainbow(np.linspace(0, 1, MAX_COLORS))
 
 try:
@@ -32,22 +35,27 @@ def set_colors(max_color, palette="deep"):
 
 
 def set_scale(scale):
-    global Scale
+    global Scale, Default_text_font_size, Default_legend_font_size, Default_figure_base_size
     if Scale != scale:
         import matplotlib as mpl
-        Scale = scale
-        mpl.rcParams['axes.titlesize'] *= Scale
-        mpl.rcParams['legend.fontsize'] *= Scale
-        mpl.rcParams['font.size'] *= Scale
+        Scale, scale = scale, scale / Scale
+        mpl.rcParams['axes.titlesize'] *= scale
+        mpl.rcParams['legend.fontsize'] *= scale
+        mpl.rcParams['font.size'] *= scale
 
-        mpl.rcParams['axes.linewidth'] *= Scale
-        mpl.rcParams['lines.linewidth'] *= Scale
-        mpl.rcParams['grid.linewidth'] *= Scale
+        mpl.rcParams['axes.linewidth'] *= scale
+        mpl.rcParams['lines.linewidth'] *= scale
+        mpl.rcParams['grid.linewidth'] *= scale
+        mpl.rcParams['lines.markersize'] *= scale
 
-        mpl.rcParams['xtick.labelsize'] *= Scale
-        mpl.rcParams['ytick.labelsize'] *= Scale
-        mpl.rcParams['ytick.major.pad'] *= Scale
-        mpl.rcParams['xtick.major.pad'] *= Scale
+        mpl.rcParams['xtick.labelsize'] *= scale
+        mpl.rcParams['ytick.labelsize'] *= scale
+        mpl.rcParams['ytick.major.pad'] *= scale
+        mpl.rcParams['xtick.major.pad'] *= scale
+
+        Default_text_font_size *= scale
+        Default_legend_font_size *= scale
+        Default_figure_base_size *= scale
 
 
 def peak_scatter(ax, array, peak_method, color="r", init_epoch=0):
@@ -57,7 +65,7 @@ def peak_scatter(ax, array, peak_method, color="r", init_epoch=0):
         # Skip scatter if it's 0
         if ii[pp] != 0:
             ax.scatter(pp + start, ii[pp], color=color, marker="v")
-            ax.text(pp + start, ii[pp], "{:.4f}".format(ii[pp]), va="bottom", ha="right", fontsize=8 * Scale, rotation=-30)
+            ax.text(pp + start, ii[pp], "{:.4f}".format(ii[pp]), va="bottom", ha="right", fontsize=Default_text_font_size, rotation=-30)
         start += len(ii)
 
 
@@ -102,10 +110,10 @@ def hist_plot(
 ):
     if axes is None:
         if eval_split:
-            fig, axes = plt.subplots(2, 3, sharex=False, figsize=(24 * Scale, 16 * Scale))
+            fig, axes = plt.subplots(2, 3, sharex=False, figsize=(3 * Default_figure_base_size, 2 * Default_figure_base_size))
             axes = axes.flatten()
         else:
-            fig, axes = plt.subplots(1, 3, sharex=False, figsize=(24 * Scale, 8 * Scale))
+            fig, axes = plt.subplots(1, 3, sharex=False, figsize=(3 * Default_figure_base_size, 1 * Default_figure_base_size))
         for ax in axes:
             ax.set_prop_cycle(cycler("color", COLORS))
     else:
@@ -124,14 +132,14 @@ def hist_plot(
         peak_scatter(axes[0], loss_lists, np.argmin, init_epoch=init_epoch)
     axes[0].set_title("loss")
     if fig_label:
-        axes[0].legend(loc="upper right", fontsize=8 * Scale)
+        axes[0].legend(loc="upper right", fontsize=Default_legend_font_size)
 
     if len(accuracy_lists) != 0:
         arrays_plot(axes[1], accuracy_lists, label=fig_label, init_epoch=init_epoch, pre_value=pre_item.get("accuracy", 0))
         peak_scatter(axes[1], accuracy_lists, np.argmax, init_epoch=init_epoch)
     axes[1].set_title("accuracy")
     if fig_label:
-        axes[1].legend(loc="lower right", fontsize=8 * Scale)
+        axes[1].legend(loc="lower right", fontsize=Default_legend_font_size)
 
     other_customs = [ii for ii in customs_dict if ii not in EVALS_NAME]
     if len(other_customs) != 0:
@@ -178,10 +186,10 @@ def hist_plot(
 
     eval_ax = eval_ax if eval_split else eval_ax + 1
     for ii in range(eval_ax_start, eval_ax):
-        axes[ii].legend(loc="lower left", fontsize=8 * Scale)
+        axes[ii].legend(loc="lower left", fontsize=Default_legend_font_size)
 
     if len(axes) > 3 and other_custom_id > 0:
-        axes[other_custom_ax].legend(loc="lower right", fontsize=8 * Scale)
+        axes[other_custom_ax].legend(loc="lower right", fontsize=Default_legend_font_size)
 
     for ax in axes:
         ymin, ymax = ax.get_ylim()
@@ -190,7 +198,7 @@ def hist_plot(
         for nn, loss in zip(loss_names, loss_lists):
             ax.plot([start, start], [ymin + mm, ymax - mm], color="k", linestyle="--")
             # ax.text(xx[ss[0]], np.mean(ax.get_ylim()), nn)
-            ax.text(start + len(loss) * 0.05, ymin + mm * 4, nn, va="bottom", rotation=-90)
+            ax.text(start + len(loss) * 0.05, ymin + mm * 4, nn, va="bottom", rotation=-90, fontweight="roman")
             start += len(loss)
 
     fig.tight_layout()

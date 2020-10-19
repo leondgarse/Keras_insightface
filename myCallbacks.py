@@ -61,11 +61,13 @@ class OptimizerWeightDecay(keras.callbacks.Callback):
     def __init__(self, lr_base, wd_base):
         super(OptimizerWeightDecay, self).__init__()
         self.wd_m = wd_base / lr_base
+        self.lr_base, self.wd_base = lr_base, wd_base
         # self.model.optimizer.weight_decay = lambda: wd_m * self.model.optimizer.lr
 
     def on_epoch_begin(self, step, log=None):
         if self.model is not None:
             wd = self.wd_m * K.get_value(self.model.optimizer.lr)
+            # wd = self.wd_base * K.get_value(self.model.optimizer.lr)
             K.set_value(self.model.optimizer.weight_decay, wd)
         # wd = self.model.optimizer.weight_decay
         print("Weight decay for iter {} is {}".format(step + 1, wd))
