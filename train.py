@@ -140,7 +140,8 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), ou
         nn = keras.layers.Conv2D(emb_shape, 1, use_bias=False, activation=None, kernel_initializer="glorot_normal")(nn)
         nn = keras.layers.Flatten()(nn)
         # nn = keras.layers.Dense(emb_shape, activation=None, use_bias=True, kernel_initializer="glorot_normal")(nn)
-    embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="embedding")(nn)
+    # `fix_gamma=True` in MXNet means `scale=False` in Keras
+    embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="embedding", scale=False)(nn)
     basic_model = keras.models.Model(inputs, embedding, name=xx.name)
     return basic_model
 
@@ -190,7 +191,7 @@ class L2_decay_wdm(keras.regularizers.L2):
 
     def __call__(self, x):
         self.l2 = self.wd_func()
-        tf.print(", l2 =", self.l2, end='')
+        # tf.print(", l2 =", self.l2, end='')
         return super(L2_decay_wdm, self).__call__(x)
 
     def get_config(self):
@@ -344,9 +345,10 @@ class Train:
             self.model = keras.models.Model(inputs, self.model.layers[output_layer].output)
 
         if self.output_wd_multiply != 1:
-            l2 = self.optimizer.weight_decay.numpy() / self.optimizer.lr.numpy() * (self.output_wd_multiply - 1) / 2
             # kernel_regularizer = L2_decay_wdm(lambda: self.output_wd_multiply * self.optimizer.weight_decay)
             # kernel_regularizer = L2_decay_wdm(lambda: (self.output_wd_multiply - 1) / 2 * self.optimizer.weight_decay)
+            # print(">>>> Output weight decay multiplier: %f" % (self.output_wd_multiply))
+            l2 = self.optimizer.weight_decay.numpy() / self.optimizer.lr.numpy() * (self.output_wd_multiply - 1) / 2
             kernel_regularizer = keras.regularizers.L2(l2)
             print(">>>> Output weight decay multiplier: %f, l2: %f" % (self.output_wd_multiply, l2))
 
@@ -411,7 +413,6 @@ class Train:
 
     def __basic_train__(self, loss, epochs, initial_epoch=0, loss_weights=None):
         self.model.compile(optimizer=self.optimizer, loss=loss, metrics=self.metrics, loss_weights=loss_weights)
-        # self.model.compile(optimizer=self.optimizer, loss=loss, metrics=self.metrics)
         self.model.fit(
             self.train_ds,
             epochs=epochs,
@@ -429,6 +430,7 @@ class Train:
             self.data_path = data_path
 
     def train(self, train_schedule, initial_epoch=0):
+        train_schedule = [train_schedule] if isinstance(train_schedule, dict) else train_schedule
         for sch in train_schedule:
             if sch.get("loss", None) is None:
                 continue

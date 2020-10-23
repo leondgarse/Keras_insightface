@@ -104,13 +104,12 @@ def ResNet(stack_fn,
 
   bn_axis = 3 if backend.image_data_format() == 'channels_last' else 1
 
-  # x = layers.ZeroPadding2D(
-  #     padding=((3, 3), (3, 3)), name='conv1_pad')(img_input)
-  x = layers.Conv2D(64, 3, strides=1, padding='SAME', use_bias=use_bias, kernel_initializer='glorot_normal', name='conv1_conv')(img_input)
+  x = layers.ZeroPadding2D(padding=1, name='conv1_pad')(img_input)
+  x = layers.Conv2D(64, 3, strides=1, use_bias=use_bias, kernel_initializer='glorot_normal', name='conv1_conv')(x)
 
   if not preact:
-    x = layers.BatchNormalization(axis=bn_axis, epsilon=2.001e-5, momentum=0.9, name='conv1_bn')(x)
-    x = layers.PReLU(shared_axes=[1, 2], alpha_initializer='glorot_normal', name='conv1_prelu')(x)
+    x = layers.BatchNormalization(axis=bn_axis, epsilon=2e-5, momentum=0.9, name='conv1_bn')(x)
+    x = layers.PReLU(shared_axes=[1, 2], name='conv1_prelu')(x)
 
   # x = layers.ZeroPadding2D(padding=((1, 1), (1, 1)), name='pool1_pad')(x)
   # x = layers.MaxPooling2D(3, strides=2, name='pool1_pool')(x)
@@ -118,8 +117,8 @@ def ResNet(stack_fn,
   x = stack_fn(x)
 
   if preact:
-    x = layers.BatchNormalization(axis=bn_axis, epsilon=2.001e-5, momentum=0.9, name='post_bn')(x)
-    x = layers.PReLU(shared_axes=[1, 2], alpha_initializer='glorot_normal', name='post_prelu')(x)
+    x = layers.BatchNormalization(axis=bn_axis, epsilon=2e-5, momentum=0.9, name='post_bn')(x)
+    x = layers.PReLU(shared_axes=[1, 2], name='post_prelu')(x)
 
   if include_top:
     x = layers.GlobalAveragePooling2D(name='avg_pool')(x)
@@ -166,17 +165,19 @@ def block1(x, filters, kernel_size=3, stride=1, conv_shortcut=True, name=None):
 
   if conv_shortcut:
     shortcut = layers.Conv2D(filters, 1, strides=stride, use_bias=False, kernel_initializer='glorot_normal', name=name + '_0_conv')(x)
-    shortcut = layers.BatchNormalization(axis=bn_axis, epsilon=2.001e-5, momentum=0.9, name=name + '_0_bn')(shortcut)
+    shortcut = layers.BatchNormalization(axis=bn_axis, epsilon=2e-5, momentum=0.9, name=name + '_0_bn')(shortcut)
   else:
     shortcut = x
 
-  x = layers.BatchNormalization(axis=bn_axis, epsilon=2.001e-5, momentum=0.9, name=name + '_1_bn')(x)
-  x = layers.Conv2D(filters, 3, strides=1, padding='SAME', kernel_initializer='glorot_normal', use_bias=False, name=name + '_1_conv')(x)
-  x = layers.BatchNormalization(axis=bn_axis, epsilon=2.001e-5, momentum=0.9, name=name + '_2_bn')(x)
-  x = layers.PReLU(shared_axes=[1, 2], alpha_initializer='glorot_normal', name=name + '_1_prelu')(x)
+  x = layers.BatchNormalization(axis=bn_axis, epsilon=2e-5, momentum=0.9, name=name + '_1_bn')(x)
+  x = layers.ZeroPadding2D(padding=1, name=name + '_1_pad')(x)
+  x = layers.Conv2D(filters, 3, strides=1, kernel_initializer='glorot_normal', use_bias=False, name=name + '_1_conv')(x)
+  x = layers.BatchNormalization(axis=bn_axis, epsilon=2e-5, momentum=0.9, name=name + '_2_bn')(x)
+  x = layers.PReLU(shared_axes=[1, 2], name=name + '_1_prelu')(x)
 
-  x = layers.Conv2D(filters, kernel_size, strides=stride, padding='SAME', kernel_initializer='glorot_normal', use_bias=False, name=name + '_2_conv')(x)
-  x = layers.BatchNormalization(axis=bn_axis, epsilon=2.001e-5, momentum=0.9, name=name + '_3_bn')(x)
+  x = layers.ZeroPadding2D(padding=1, name=name + '_2_pad')(x)
+  x = layers.Conv2D(filters, kernel_size, strides=stride, kernel_initializer='glorot_normal', use_bias=False, name=name + '_2_conv')(x)
+  x = layers.BatchNormalization(axis=bn_axis, epsilon=2e-5, momentum=0.9, name=name + '_3_bn')(x)
 
   x = layers.Add(name=name + '_add')([shortcut, x])
   return x

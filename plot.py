@@ -58,14 +58,15 @@ def set_scale(scale):
         Default_figure_base_size *= scale
 
 
-def peak_scatter(ax, array, peak_method, color="r", init_epoch=0):
+def peak_scatter(ax, array, peak_method, color="r", init_epoch=0, limit_max=1e9):
     start = init_epoch + 1
     for ii in array:
         pp = len(ii) - peak_method(ii[::-1]) - 1
         # Skip scatter if it's 0
         if ii[pp] != 0:
-            ax.scatter(pp + start, ii[pp], color=color, marker="v")
-            ax.text(pp + start, ii[pp], "{:.4f}".format(ii[pp]), va="bottom", ha="right", fontsize=Default_text_font_size, rotation=-30)
+            y_pos = ii[pp] if ii[pp] < limit_max else limit_max
+            ax.scatter(pp + start, y_pos, color=color, marker="v")
+            ax.text(pp + start, y_pos, "{:.4f}".format(ii[pp]), va="bottom", ha="right", fontsize=Default_text_font_size, rotation=-30)
         start += len(ii)
 
 
@@ -129,7 +130,7 @@ def hist_plot(
 
     if len(loss_lists) != 0:
         arrays_plot(axes[0], loss_lists, label=fig_label, init_epoch=init_epoch, pre_value=pre_item.get("loss", 0), limit_max=limit_loss_max)
-        peak_scatter(axes[0], loss_lists, np.argmin, init_epoch=init_epoch)
+        peak_scatter(axes[0], loss_lists, np.argmin, init_epoch=init_epoch, limit_max=limit_loss_max)
     axes[0].set_title("loss")
     if fig_label:
         axes[0].legend(loc="upper right", fontsize=Default_legend_font_size)

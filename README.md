@@ -414,6 +414,7 @@
     opt = tfa.optimizers.AdamW(weight_decay=5e-5)
     sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "epoch": 60, "optimizer": opt}]
     ```
+    The behavior of `weight_decay` in `mx.optimizer.SGD` and `tfa.optimizers.SGDW` is different as explained [here](https://github.com/leondgarse/Keras_insightface/issues/5#issuecomment-711854877).
   - [Train test on cifar10](https://colab.research.google.com/drive/1tD2OrnrYtFPC7q_i62b8al1o3qelU-Vi?usp=sharing)
 ## Multi GPU train
   - Add an overall `tf.distribute.MirroredStrategy().scope()` `with` block. This is just working in my case... The `batch_size` will be multiplied by `GPU numbers`.
@@ -481,7 +482,7 @@
     cp sample_config.py config.py
     sed -i 's/config.ckpt_embedding = True/config.ckpt_embedding = False/' config.py
     CUDA_VISIBLE_DEVICES='1' python train_parall.py --network r50 --per-batch-size 512
-    # Iter 20, accuracy 0.80078125, loss 1.311261, lfw 0.99817, cfp_fp 0.97557, agedb_30 0.98167
+    # Iter[20] Batch [8540], accuracy 0.80078125, loss 1.311261, lfw 0.99817, cfp_fp 0.97557, agedb_30 0.98167
 
     CUDA_VISIBLE_DEVICES='1' python drop.py --data /datasets/faces_emore --model models/r50-arcface-emore/model,1 --threshold 75 --k 3 --output /datasets/faces_emore_topk3_1
     # header0 label [5822654. 5908396.] (5822653, 4)
@@ -493,6 +494,7 @@
     ls -1 /datasets/faces_emore/*.bin | xargs -I '{}' ln -s {} /datasets/faces_emore_topk3_1/
     CUDA_VISIBLE_DEVICES='1' python train_parall.py --network r50 --per-batch-size 512
     # 5800493
+    # Iter[20] Batch [5400], accuracy 0.8222656, loss 1.469272, lfw 0.99833, cfp_fp 0.97986, agedb_30 0.98050
     ```
   - **Keras version train mobilenet on CASIA test**
     ```py
