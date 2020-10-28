@@ -137,8 +137,10 @@ class ArcfaceLossT4(tf.keras.losses.Loss):
         y_pred_vals = norm_logits[pick_cond]
         theta = y_pred_vals * self.margin_cos - tf.sqrt(1 - tf.pow(y_pred_vals, 2)) * self.margin_sin
         theta_valid = tf.where(y_pred_vals > self.threshold, theta, y_pred_vals - self.low_pred_punish)
-        theta_one_hot = tf.expand_dims(theta_valid, 1) * tf.cast(y_true, dtype=tf.float32)
-        arcface_logits = tf.where(pick_cond, theta_one_hot, norm_logits) * self.scale
+        # theta_one_hot = tf.expand_dims(theta_valid, 1) * tf.cast(y_true, dtype=tf.float32)
+        # arcface_logits = tf.where(pick_cond, theta_one_hot, norm_logits) * self.scale
+        theta_one_hot = tf.expand_dims(theta_valid - y_pred_vals, 1) * tf.cast(y_true, dtype=tf.float32)
+        arcface_logits = (theta_one_hot + norm_logits) * self.scale
         return tf.keras.losses.categorical_crossentropy(
             y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
         )

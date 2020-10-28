@@ -45,7 +45,8 @@ def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None)
 def tf_imread(file_path):
     img = tf.io.read_file(file_path)
     img = tf.image.decode_jpeg(img, channels=3)  # [0, 255]
-    img = tf.image.convert_image_dtype(img, tf.float32)  # [0, 1]
+    # img = tf.image.convert_image_dtype(img, tf.float32)  # [0, 1]
+    img = tf.cast(img, 'float32')  # [0, 255]
     return img
 
 
@@ -53,7 +54,8 @@ def random_process_image(img, img_shape=(112, 112), random_status=2, random_crop
     if random_status >= 0:
         img = tf.image.random_flip_left_right(img)
     if random_status >= 1:
-        img = tf.image.random_brightness(img, 0.1 * random_status)
+        # 25.5 == 255 * 0.1
+        img = tf.image.random_brightness(img, 25.5 * random_status)
     if random_status >= 2:
         img = tf.image.random_contrast(img, 1 - 0.1 * random_status, 1 + 0.1 * random_status)
         img = tf.image.random_saturation(img, 1 - 0.1 * random_status, 1 + 0.1 * random_status)
@@ -62,7 +64,7 @@ def random_process_image(img, img_shape=(112, 112), random_status=2, random_crop
         img = tf.image.resize(img, img_shape)
 
     if random_status >= 1:
-        img = tf.clip_by_value(img, 0.0, 1.0)
+        img = tf.clip_by_value(img, 0.0, 255.0)
     return img
 
 
@@ -101,7 +103,7 @@ def prepare_dataset(
         ds = ds.map(random_process_func , num_parallel_calls=AUTOTUNE)
 
     ds = ds.batch(batch_size)  # Use batch --> map has slightly effect on dataset reading time, but harm the randomness
-    ds = ds.map(lambda xx, yy: ((xx * 2) - 1, yy))
+    ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
     ds = ds.prefetch(buffer_size=AUTOTUNE)
     return ds
 
@@ -153,6 +155,7 @@ class Triplet_dataset:
             train_dataset = train_dataset.map(self.process_batch_path_2, num_parallel_calls=self.AUTOTUNE)
         else:
             train_dataset = train_dataset.map(self.process_batch_path_1, num_parallel_calls=self.AUTOTUNE)
+        train_dataset = train_dataset.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
         self.train_dataset = train_dataset.prefetch(buffer_size=self.AUTOTUNE)
         self.classes = classes
 
