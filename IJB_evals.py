@@ -64,7 +64,16 @@ def extract_IJB_data(data_path, sub_set, save_path=None, force_reload=False):
     if not force_reload and os.path.exists(save_path):
         print(">>>> Reloading from backup: %s..." % save_path)
         aa = np.load(save_path)
-        return aa["ndimages"], aa["templates"], aa["medias"], aa["p1"], aa["p2"], aa["label"], aa["face_scores"]
+        return (
+            aa["templates"],
+            aa["medias"],
+            aa["p1"],
+            aa["p2"],
+            aa["label"],
+            aa["img_names"],
+            aa["landmarks"],
+            aa["face_scores"],
+        )
 
     if sub_set == "IJBB":
         media_list_path = os.path.join(data_path, "IJBB/meta/ijbb_face_tid_mid.txt")
@@ -108,30 +117,40 @@ def extract_IJB_data(data_path, sub_set, save_path=None, force_reload=False):
     print(">>>> Loaded face_scores value counts:", dict(zip(*np.histogram(face_scores, bins=9)[::-1])))
     # {0.1: 2515, 0.2: 0, 0.3: 62, 0.4: 94, 0.5: 136, 0.6: 197, 0.7: 291, 0.8: 538, 0.9: 223797}
 
-    print(">>>> Running warp affine...")
-    ndimages = [
-        face_align_landmark(cv2.imread(img_name), landmark)
-        for img_name, landmark in tqdm(zip(img_names, landmarks), total=len(img_names))
-    ]
-    ndimages = np.stack(ndimages)
-    print("Finale image size:", ndimages.shape)
+    # print(">>>> Running warp affine...")
+    # ndimages = [
+    #     face_align_landmark(cv2.imread(img_name), landmark)
+    #     for img_name, landmark in tqdm(zip(img_names, landmarks), total=len(img_names))
+    # ]
+    # ndimages = np.stack(ndimages)
+    # print("Finale image size:", ndimages.shape)
     # (227630, 112, 112, 3)
 
     print(">>>> Saving backup to: %s..." % save_path)
     np.savez(
-        save_path, ndimages=ndimages, templates=templates, medias=medias, p1=p1, p2=p2, label=label, face_scores=face_scores
+        save_path,
+        templates=templates,
+        medias=medias,
+        p1=p1,
+        p2=p2,
+        label=label,
+        img_names=img_names,
+        landmarks=landmarks,
+        face_scores=face_scores,
     )
-    return ndimages, templates, medias, p1, p2, label, face_scores
+    return templates, medias, p1, p2, label, img_names, landmarks, face_scores
 
 
-def get_embeddings(model_interf, ndimages, batch_size=64, flip=True):
-    steps = int(np.ceil(len(ndimages) / batch_size))
+def get_embeddings(model_interf, img_names, landmarks, batch_size=64, flip=True):
+    steps = int(np.ceil(len(img_names) / batch_size))
     embs, embs_f = [], []
-    for id in tqdm(range(steps), "Embedding"):
-        img_batch = ndimages[id * batch_size : (id + 1) * batch_size]
-        embs.extend(model_interf(img_batch))
+    for batch_id in tqdm(range(0, len(img_names), batch_size), "Embedding", total=steps):
+        batch_imgs, batch_landmarks = img_names[batch_id : batch_id + batch_size], landmarks[batch_id : batch_id + batch_size]
+        ndimages = [face_align_landmark(cv2.imread(img), landmark) for img, landmark in zip(batch_imgs, batch_landmarks)]
+        ndimages = np.stack(ndimages)
+        embs.extend(model_interf(ndimages))
         if flip:
-            embs_f.extend(model_interf(img_batch[:, :, ::-1, :]))
+            embs_f.extend(model_interf(ndimages[:, :, ::-1, :]))
     return np.array(embs), np.array(embs_f)
 
 
@@ -183,10 +202,19 @@ def verification(template_norm_feats=None, unique_templates=None, p1=None, p2=No
 
 
 def run_model_test(
-    data_path, subset, interf_func, batch_size=64, use_flip_test=True, use_norm_score=False, use_detector_score=True
+    data_path,
+    subset,
+    interf_func,
+    batch_size=64,
+    force_reload=False,
+    use_flip_test=True,
+    use_norm_score=False,
+    use_detector_score=True,
 ):
-    ndimages, templates, medias, p1, p2, label, face_scores = extract_IJB_data(data_path, subset)
-    embs, embs_f = get_embeddings(interf_func, ndimages, batch_size=batch_size)
+    templates, medias, p1, p2, label, img_names, landmarks, face_scores = extract_IJB_data(
+        data_path, subset, force_reload=force_reload
+    )
+    embs, embs_f = get_embeddings(interf_func, img_names, landmarks, batch_size=batch_size)
     img_input_feats = process_embeddings(
         embs,
         embs_f,
@@ -201,9 +229,11 @@ def run_model_test(
     return score, embs, embs_f, templates, medias, p1, p2, label, face_scores
 
 
-def run_model_test_bunch(data_path, subset, interf_func, batch_size=64):
-    ndimages, templates, medias, p1, p2, label, face_scores = extract_IJB_data(data_path, subset)
-    embs, embs_f = get_embeddings(interf_func, ndimages, batch_size=batch_size)
+def run_model_test_bunch(data_path, subset, interf_func, batch_size=64, force_reload=False):
+    templates, medias, p1, p2, label, img_names, landmarks, face_scores = extract_IJB_data(
+        data_path, subset, force_reload=force_reload
+    )
+    embs, embs_f = get_embeddings(interf_func, img_names, landmarks, batch_size=batch_size)
 
     results = {}
     for use_norm_score in [True, False]:
@@ -286,8 +316,7 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
     return tpr_result_df, fig
 
 
-if __name__ == "__main__":
-    import sys
+def parse_arguments(argv):
     import argparse
 
     default_save_result_name = "{model_name}_{subset}.npz"
@@ -299,9 +328,10 @@ if __name__ == "__main__":
     parser.add_argument("-L", "--save_label", action="store_true", help="Also save label data, useful for plot only")
     parser.add_argument("-E", "--save_embeddings", action="store_true", help="Also save embeddings data")
     parser.add_argument("-B", "--bunch", action="store_true", help="Run all 8 tests N{0,1}D{0,1}F{0,1}")
+    parser.add_argument("-F", "--force_reload", action="store_true", help="Force reload, instead of using cache")
     parser.add_argument("-b", "--batch_size", type=int, default=64, help="Batch size for get_embeddings")
     parser.add_argument("-p", "--plot_only", nargs="*", type=str, help="Plot saved results, Format 1 2 3 or 1, 2, 3 or *.npy")
-    args = parser.parse_known_args(sys.argv[1:])[0]
+    args = parser.parse_known_args(argv)[0]
 
     if args.plot_only != None and len(args.plot_only) != 0:
         # Plot only
@@ -310,38 +340,48 @@ if __name__ == "__main__":
         score_files = []
         for ss in args.plot_only:
             score_files.extend(glob(ss.replace(",", "").strip()))
-        plot_roc_and_calculate_tpr(score_files)
+        args.plot_only = score_files
     elif args.model_file == None:
         print("Please provide -m MODEL_FILE")
+        exit(1)
     else:
         if args.model_file.endswith(".h5"):
             # Keras model file "model.h5"
-            from tensorflow import keras
-
-            interf_func = keras_model_interf(args.model_file)
             model_name = os.path.splitext(os.path.basename(args.model_file))[0]
         else:
             # MXNet model file "models/r50-arcface-emore/model,1"
-            import mxnet as mx
-
-            interf_func = Mxnet_model_interf(args.model_file)
             model_name = os.path.basename(os.path.dirname(args.model_file))
 
         if args.save_result == default_save_result_name:
-            save_result = default_save_result_name.format(model_name=model_name, subset=args.subset)
-        else:
-            save_result = args.save_result
+            args.save_result = default_save_result_name.format(model_name=model_name, subset=args.subset)
+    return args
 
-        save_name = os.path.splitext(save_result)[0]
+
+if __name__ == "__main__":
+    import sys
+
+    args = parse_arguments(sys.argv[1:])
+    if args.plot_only != None and len(args.plot_only) != 0:
+        plot_roc_and_calculate_tpr(args.plot_only)
+    else:
+        if args.model_file.endswith(".h5"):
+            import tensorflow as tf
+
+            interf_func = keras_model_interf(mm)
+        else:
+            import mxnet as mx
+
+            interf_func = Mxnet_model_interf(mm)
+        save_name = os.path.splitext(args.save_result)[0]
         if args.bunch:
             results, embs, embs_f, templates, medias, p1, p2, label, face_scores = run_model_test_bunch(
-                args.data_path, args.subset, interf_func, batch_size=args.batch_size
+                args.data_path, args.subset, interf_func, batch_size=args.batch_size, force_reload=args.force_reload
             )
             scores = list(results.values())
             names = [save_name + "_" + ii for ii in results.keys()]
         else:
             score, embs, embs_f, templates, medias, p1, p2, label, face_scores = run_model_test(
-                args.data_path, args.subset, interf_func, batch_size=args.batch_size
+                args.data_path, args.subset, interf_func, batch_size=args.batch_size, force_reload=args.force_reload
             )
             scores, names = [score], [save_name]
 
@@ -355,6 +395,6 @@ if __name__ == "__main__":
 else:
     try:
         import mxnet as mx
-        from tensorflow import keras
+        import tensorflow as tf
     except:
         pass
