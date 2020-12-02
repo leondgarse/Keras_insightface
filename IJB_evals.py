@@ -58,9 +58,9 @@ def face_align_landmark(img, landmark, image_size=(112, 112), method="similar"):
     return ndimage
 
 
-def extract_IJB_data(data_path, sub_set, save_path=None, force_reload=False):
+def extract_IJB_data(data_path, subset, save_path=None, force_reload=False):
     if save_path == None:
-        save_path = os.path.join(data_path, sub_set + "_backup.npz")
+        save_path = os.path.join(data_path, subset + "_backup.npz")
     if not force_reload and os.path.exists(save_path):
         print(">>>> Reloading from backup: %s..." % save_path)
         aa = np.load(save_path)
@@ -75,7 +75,7 @@ def extract_IJB_data(data_path, sub_set, save_path=None, force_reload=False):
             aa["face_scores"],
         )
 
-    if sub_set == "IJBB":
+    if subset == "IJBB":
         media_list_path = os.path.join(data_path, "IJBB/meta/ijbb_face_tid_mid.txt")
         pair_list_path = os.path.join(data_path, "IJBB/meta/ijbb_template_pair_label.txt")
         img_path = os.path.join(data_path, "IJBB/loose_crop")
