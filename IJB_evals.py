@@ -318,7 +318,6 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
 
 def parse_arguments(argv):
     import argparse
-
     default_save_result_name = "{model_name}_{subset}.npz"
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-m", "--model_file", type=str, default=None, help="Saved model file path, could be keras / mxnet one")
@@ -366,12 +365,10 @@ if __name__ == "__main__":
     else:
         if args.model_file.endswith(".h5"):
             import tensorflow as tf
-
-            interf_func = keras_model_interf(mm)
+            interf_func = keras_model_interf(args.model_file)
         else:
             import mxnet as mx
-
-            interf_func = Mxnet_model_interf(mm)
+            interf_func = Mxnet_model_interf(args.model_file)
         save_name = os.path.splitext(args.save_result)[0]
         if args.bunch:
             results, embs, embs_f, templates, medias, p1, p2, label, face_scores = run_model_test_bunch(
@@ -386,11 +383,11 @@ if __name__ == "__main__":
             scores, names = [score], [save_name]
 
         if args.save_embeddings:
-            np.savez(save_result, scores=scores, names=names, embs=embs, embs_f=embs_f, label=label)
+            np.savez(args.save_result, scores=scores, names=names, embs=embs, embs_f=embs_f, label=label)
         elif args.save_label:
-            np.savez(save_result, scores=scores, names=names, label=label)
+            np.savez(args.save_result, scores=scores, names=names, label=label)
         else:
-            np.savez(save_result, scores=scores, names=names)
+            np.savez(args.save_result, scores=scores, names=names)
         plot_roc_and_calculate_tpr(scores, names=names, label=label)
 else:
     try:
