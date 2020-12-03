@@ -52,8 +52,6 @@
   	- [Multi GPU train](#multi-gpu-train)
   	- [TFLite model inference time test on ARM32](#tflite-model-inference-time-test-on-arm32)
   - [Sub Center ArcFace](#sub-center-arcface)
-  	- [Loss TopK Usage](#loss-topk-usage)
-  	- [Mobilenet test on CASIA dataset](#mobilenet-test-on-casia-dataset)
   - [Knowledge distillation](#knowledge-distillation)
   - [Evaluating on IJB datasets](#evaluating-on-ijb-datasets)
   - [Related Projects](#related-projects)
@@ -457,7 +455,6 @@
 ***
 
 # Sub Center ArcFace
-## Loss TopK Usage
   - [Original MXNet Subcenter ArcFace](https://github.com/deepinsight/insightface/tree/master/recognition/SubCenter-ArcFace)
   - [PDF Sub-center ArcFace: Boosting Face Recognition by Large-scale Noisy Web Faces](https://ibug.doc.ic.ac.uk/media/uploads/documents/eccv_1445.pdf)
   - **This is still under test, Multi GPU is NOT tested**
@@ -548,17 +545,15 @@
     ```sh
     $ CUDA_VISIBLE_DEVICES='-1' ./data_drop_top_k.py -M checkpoints/TT_mobilenet_topk_bs256.h5 -D /datasets/faces_casia_112x112_folders/ -L 20
     ```
-## Mobilenet test on CASIA dataset
   - [SubCenter_training_Mobilenet_on_CASIA.ipynb](checkpoints/SubCenter_training_Mobilenet_on_CASIA.ipynb)
-  - **Result**
 
-  | Scenario                                    | Max lfw    | Max cfp_fp | Max agedb_30 |
-  | ------------------------------------------- | ---------- | ---------- | ------------ |
-  | Baseline, topk 1                            | 0.9822     | 0.8694     | 0.8695       |
-  | TopK 3                                      | 0.9838     | **0.9044** | 0.8743       |
-  | TopK 3->1                                   | 0.9838     | 0.8960     | 0.8768       |
-  | TopK 3->1, bottleneckOnly, initial_epoch=0  | **0.9878** | 0.8920     | **0.8857**   |
-  | TopK 3->1, bottleneckOnly, initial_epoch=40 | 0.9835     | **0.9030** | 0.8763       |
+    | Scenario                                    | Max lfw    | Max cfp_fp | Max agedb_30 |
+    | ------------------------------------------- | ---------- | ---------- | ------------ |
+    | Baseline, topk 1                            | 0.9822     | 0.8694     | 0.8695       |
+    | TopK 3                                      | 0.9838     | **0.9044** | 0.8743       |
+    | TopK 3->1                                   | 0.9838     | 0.8960     | 0.8768       |
+    | TopK 3->1, bottleneckOnly, initial_epoch=0  | **0.9878** | 0.8920     | **0.8857**   |
+    | TopK 3->1, bottleneckOnly, initial_epoch=40 | 0.9835     | **0.9030** | 0.8763       |
 ***
 
 # Knowledge distillation
