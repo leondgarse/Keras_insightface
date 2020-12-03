@@ -50,7 +50,7 @@
   	- [Other backbones](#other-backbones)
   	- [Optimizer with weight decay](#optimizer-with-weight-decay)
   	- [Multi GPU train](#multi-gpu-train)
-  	- [TFLite model inference time test on ARM32](#tflite-model-inference-time-test-on-arm32)
+  - [TFLite model inference time test on ARM32](#tflite-model-inference-time-test-on-arm32)
   - [Sub Center ArcFace](#sub-center-arcface)
   - [Knowledge distillation](#knowledge-distillation)
   - [Evaluating on IJB datasets](#evaluating-on-ijb-datasets)
@@ -420,7 +420,9 @@
     ```py
     sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1, reduction=tf.keras.losses.Reduction.NONE), "epoch": 25}]
     ```
-## TFLite model inference time test on ARM32
+***
+
+# TFLite model inference time test on ARM32
   - Test using [TFLite Model Benchmark Tool](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/tools/benchmark)
   - **Platform**
     - CPU: `rk3288`
