@@ -318,7 +318,7 @@
   ```py
   # Exponential, lr_decay < 1
   tt = train.Train(..., lr_base=0.001, lr_decay=0.05, ...)
-  # Cosine with restarts on epoch, lr_decay < 1
+  # Cosine with restarts on epoch, lr_decay > 1
   tt = train.Train(..., lr_base=0.001, lr_decay=105, lr_decay_steps=0, lr_min=1e-7, ...)
   # Cosine with restarts on batch, lr_decay > 1 and lr_decay_steps > 1
   tt = train.Train(..., lr_base=0.001, lr_decay=105 * 1000, lr_decay_steps=1000, lr_min=1e-7, ...)
