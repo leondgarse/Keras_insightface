@@ -73,7 +73,7 @@
 ***
 
 # Comparing Resnet34 with original MXNet version
-  - The [original MXNet version](https://github.com/deepinsight/insightface) has a self defined [resnet](https://github.com/deepinsight/insightface/blob/master/src/symbols/fresnet.py) which is different with the typical one.
+  - The [original MXNet version](https://github.com/deepinsight/insightface) has a self defined [resnet](https://github.com/deepinsight/insightface/blob/master/recognition/symbol/fresnet.py) which is different with the typical one.
     - Basic block is different, containing less layers.
     - In `Resnet50` case , blocks number changes from `[3, 4, 6, 3]` to `[3, 4, 14, 3]`.
     - Remove `bias` from `Conv2D` layers.
@@ -164,7 +164,7 @@
     img_5 img_6 | 0
     img_7 img_8 | 0
     ```
-    Image data in bin files like `CFP-FP` `AgeDB-30` is not compatible with `tf.image.decode_jpeg`, we need to reformat it.
+    Image data in bin files like `CFP-FP` `AgeDB-30` is not compatible with `tf.image.decode_jpeg`, we need to reformat it, which is done by `-T` parameter.
     ```py
     ''' Throw error if not reformated yet '''
     ValueError: Can't convert non-rectangular Python sequence to Tensor.
@@ -259,10 +259,10 @@
     # `softmax` / `arcface` + `triplet`
     sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "triplet": 1, "alpha": 0.3, "epoch": 2}]
     # `triplet` + `centerloss`
-    sch = [{"loss": losses.BatchHardTripletLoss(0.25), "centerloss": 1, "epoch": 2}]
+    sch = [{"loss": losses.BatchHardTripletLoss(0.25), "centerloss": 0.01, "epoch": 2}]
     sch = [{"loss": losses.CenterLoss(num_classes=85742, emb_shape=256), "triplet": 10, "alpha": 0.25, "epoch": 2}]
     # `softmax` / `arcface` + `triplet` + `centerloss`
-    sch = [{"loss": losses.ArcfaceLoss(), "centerloss": 32, "triplet": 32, "alpha": 0.2, "epoch": 2}]
+    sch = [{"loss": losses.ArcfaceLoss(), "centerloss": 1, "triplet": 32, "alpha": 0.2, "epoch": 2}]
     ```
   - **Saving strategy**
     - **Model** will save the latest one on every epoch end to local path `./checkpoints`, name is specified by `train.Train` `save_path`.
@@ -270,20 +270,20 @@
     ```py
     ''' Continue training from last saved file '''
     from tensorflow import keras
-    import losses
-    import train
+    import losses, train
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, 'keras_mobilefacenet_256_II.h5', eval_paths, model='./checkpoints/keras_mobilefacenet_256.h5', compile=True, lr_base=0.001, batch_size=768, random_status=3)
+    tt = train.Train(data_path, 'keras_mobilenet_emore_II.h5', eval_paths, model='./checkpoints/keras_mobilenet_emore.h5',
+                    compile=True, lr_base=0.001, batch_size=480, random_status=3)
     sch = [
-      # {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "optimizer": "nadam", "epoch": 25},
-      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "optimizer": "nadam", "epoch": 6},
-      # {"loss": losses.scale_softmax, "epoch": 10},
-      {"loss": losses.ArcfaceLoss(), "centerloss": True, "epoch": 35},
-      {"loss": losses.BatchHardTripletLoss(0.35), "epoch": 10},
-      {"loss": losses.BatchHardTripletLoss(0.33), "epoch": 10},
+      # {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.01, "optimizer": optimizer, "epoch": 20},
+      # {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.1, "epoch": 20},
+      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 1, "epoch": 5},
+      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.3},
+      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.25},
+      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.2},
     ]
-    tt.train(sch, 19) # 19 is the initial_epoch
+    tt.train(sch, 45) # 45 is the initial_epoch
     ```
     If reload a `centerloss` trained model, please keep `save_path` same as previous, as `centerloss` needs to reload saved `xxx_centers.npy` by `save_path` name.
   - **Gently stop** is a callback to stop training gently. Input an `n` and `<Enter>` anytime during training, will set training stop on that epoch ends.
@@ -316,14 +316,14 @@
     - Set `lr_decay_steps` a list will use `Constant lr decay`, in this case `lr_decay_steps` means the decay epochs.
     - `lr_base` and `lr_decay` set the lr base and decay rate on each decay epoch.
   ```py
-  # Exponential
-  tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, lr_decay=0.05, batch_size=640, random_status=3)
-  # Cosine with restarts on epoch
-  tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, lr_decay=105, lr_decay_steps=0, lr_min=1e-7, batch_size=640, random_status=3)
-  # Cosine with restarts on batch
-  tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, lr_decay=105 * 1000, lr_decay_steps=1000, lr_min=1e-7, batch_size=640, random_status=3)
-  # Constant
-  tt = train.Train(data_path, save_path='keras_mobile_facenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[3, 5, 7, 16, 20, 24], batch_size=640, random_status=3)
+  # Exponential, lr_decay < 1
+  tt = train.Train(..., lr_base=0.001, lr_decay=0.05, ...)
+  # Cosine with restarts on epoch, lr_decay < 1
+  tt = train.Train(..., lr_base=0.001, lr_decay=105, lr_decay_steps=0, lr_min=1e-7, ...)
+  # Cosine with restarts on batch, lr_decay > 1 and lr_decay_steps > 1
+  tt = train.Train(..., lr_base=0.001, lr_decay=105 * 1000, lr_decay_steps=1000, lr_min=1e-7, ...)
+  # Constant, lr_decay_steps is a list
+  tt = train.Train(..., lr_base=0.1, lr_decay=0.1, lr_decay_steps=[3, 5, 7, 16, 20, 24], ...)
   ```
   ```py
   import myCallbacks
@@ -367,7 +367,7 @@
     [ii.name for ii in mm.layers[:3]]
     # ['input_1', 'stem_conv_pad', 'stem_conv']
     ```
-    Other implementation here can be found here [Github qubvel/EfficientNet](https://github.com/qubvel/efficientnet).
+    Other's implementation can be found here [Github qubvel/EfficientNet](https://github.com/qubvel/efficientnet).
   - **ResNeSt / RegNet** [Github QiaoranC/tf_ResNeSt_RegNet_model](https://github.com/QiaoranC/tf_ResNeSt_RegNet_model)
     ```py
     from models.model_factory import get_model
@@ -641,8 +641,8 @@
     CUDA_VISIBLE_DEVICES='1' python IJB_evals.py -m 'checkpoints/basic_model.h5' -L -d /media/SD/IJB_release -B
 
     # Plot result only, this needs the `label` data, which can be saved using `-L` parameter.
-    # But the mxnet provided `.npy` file not containing it.
-    # So should plot with providing the `txt` file containing label data.
+    # But the `.npy` files provided within the IBJ dataset not containing it.
+    # So should plot with the `txt` file containing label data.
     python IJB_evals.py --plot_only /media/SD/IJB_release/IJBB/result/*100*.npy /media/SD/IJB_release/IJBB/meta/ijbb_template_pair_label.txt
     ```
   - See `-h` for detail usage.
