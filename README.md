@@ -350,7 +350,7 @@
   plt.legend()
   plt.tight_layout()
   ```
-  ![](checkpoints/learning_rate_decay.png)
+  ![](checkpoints/learning_rate_decay.svg)
 ## Other backbones
   - **EfficientNet** `tf-nightly` / `tf 2.3.0` now includes all `EfficientNet` backbone in `tensorflow.keras.applications`, but it has a `Rescaling` and `Normalization` layer on the head.
     ```py
