@@ -73,7 +73,7 @@
 ***
 
 # Comparing Resnet34 with original MXNet version
-  - The [original MXNet version](https://github.com/deepinsight/insightface) has a self defined [resnet](https://github.com/deepinsight/insightface/blob/master/recognition/symbol/fresnet.py) which is different with the typical one.
+  - The [original MXNet version](https://github.com/deepinsight/insightface) has a self defined [resnet](https://github.com/deepinsight/insightface/blob/master/recognition/symbol/fresnet.py) which is different with keras build-in version.
     - Basic block is different, containing less layers.
     - In `Resnet50` case , blocks number changes from `[3, 4, 6, 3]` to `[3, 4, 14, 3]`.
     - Remove `bias` from `Conv2D` layers.
@@ -89,8 +89,9 @@
     - Use a self defined `Resnet34` based on [keras application resnet](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/keras/applications/resnet.py), which is similar with the MXNet version. Other parameters is almost a mimic of the MXNet version.
     - `MXNet SGD` behaves different with `tfa SGDW`, detail explains [here my notebook weight-decay](https://github.com/leondgarse/Atom_notebook/blob/master/public/2020/12-01_Insightface_training.md#weight-decay). It's mathematically `adding l2 regularizer` works same with `MXNet SGD weight_decay with momentum`, as long as applying `wd_mult`.
     - In my test, `MXNet wd_mult` is NOT working if just added in `mx.symbol.Variable`, has to be added by `opt.set_wd_mult`.
-    - I have to train 1 epoch to warmup first, maybe caused be the initializer.
-    - This result just showing `Keras` is able to reproduce `MXNet` accuracy using similar strategy and backbone.
+    - Have to train 1 epoch to warmup first, maybe caused be the initializer.
+    - The difference in training accuracy is that the MXNet version calculating accuracy **after** applying `arcface` conversion, mine is before.
+    - This result is just showing `Keras` is able to reproduce `MXNet` accuracy using similar strategy and backbone.
     ```py
     # import tensorflow_addons as tfa
     import train, losses
