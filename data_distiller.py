@@ -61,14 +61,14 @@ def data_distiller(data_path, model, dest_file=None, batch_size=256, limit=-1):
         if model.endswith(".h5"):
             # Keras model file
             basic_model = tf.keras.models.load_model(model, compile=False)
-            infer = lambda imgs: basic_model((imgs * 2) - 1).numpy()
+            infer = lambda imgs: basic_model((imgs - 127.5) * 0.0078125).numpy()
         else:
             # MXNet model file, like models/r50-arcface-emore/model,1
             basic_model = get_mxnet_model(model)
-            infer = lambda imgs: mxnet_model_infer(basic_model, (imgs.numpy() * 255).astype('uint8'))
+            infer = lambda imgs: mxnet_model_infer(basic_model, imgs.numpy().astype('uint8'))
     else:
         # TF model
-        infer = lambda imgs: model((imgs * 2) - 1).numpy()
+        infer = lambda imgs: model((imgs - 127.5) * 0.0078125).numpy()
 
     """ Extract embeddings """
     new_image_names, new_image_classes, embeddings = [], [], []

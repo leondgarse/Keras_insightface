@@ -270,6 +270,10 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
         elif isinstance(score, str) and score.endswith(".npy"):
             name = name if name is not None else os.path.splitext(os.path.basename(score))[0]
             score_dict[name] = np.load(score)
+        elif isinstance(score, str) and score.endswith(".txt"):
+            # IJB meta data like ijbb_template_pair_label.txt
+            pairs = np.loadtxt(score, dtype=str)
+            label = pairs[:, 2].astype(np.int)
         else:
             name = name if name is not None else str(id)
             score_dict[name] = score

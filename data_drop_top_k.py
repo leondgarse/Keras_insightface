@@ -42,7 +42,7 @@ def data_drop_top_k(model, data_path, dest_file=None, deg_thresh=75, limit=0):
     for ii in tqdm(range(total_idxes)):
         imms = image_names[image_classes == ii]
         imgs = tf.stack([tf_imread(imm) for imm in imms])
-        imgs = (imgs * 2) - 1
+        imgs = (imgs - 127.5) * 0.0078125
         embs = normalize(basic_model(imgs).numpy(), axis=1)
 
         """ Find the best center """

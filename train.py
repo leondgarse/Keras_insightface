@@ -137,7 +137,7 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), ou
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
-        nn = keras.layers.Conv2D(emb_shape, 1, use_bias=False, activation=None, kernel_initializer="glorot_normal")(nn)
+        nn = keras.layers.Conv2D(emb_shape, 1, use_bias=True, activation=None, kernel_initializer="glorot_normal")(nn)
         nn = keras.layers.Flatten()(nn)
         # nn = keras.layers.Dense(emb_shape, activation=None, use_bias=True, kernel_initializer="glorot_normal")(nn)
     # `fix_gamma=True` in MXNet means `scale=False` in Keras
@@ -146,11 +146,67 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), ou
     return basic_model
 
 
+def add_l2_regularizer_2_model(model, weight_decay, custom_objects={}, apply_to_batch_normal=True):
+    # https://github.com/keras-team/keras/issues/2717#issuecomment-456254176
+    if 0:
+        regularizers_type = {}
+        for layer in model.layers:
+            rrs = [kk for kk in layer.__dict__.keys() if "regularizer" in kk and not kk.startswith("_")]
+            if len(rrs) != 0:
+                # print(layer.name, layer.__class__.__name__, rrs)
+                if layer.__class__.__name__ not in regularizers_type:
+                    regularizers_type[layer.__class__.__name__] = rrs
+        print(regularizers_type)
+
+    for layer in model.layers:
+        attrs = []
+        if isinstance(layer, keras.layers.Dense) or isinstance(layer, keras.layers.Conv2D):
+            # print(">>>> Dense or Conv2D", layer.name, "use_bias:", layer.use_bias)
+            attrs = ["kernel_regularizer"]
+            if layer.use_bias:
+                attrs.append("bias_regularizer")
+        elif isinstance(layer, keras.layers.DepthwiseConv2D):
+            # print(">>>> DepthwiseConv2D", layer.name, "use_bias:", layer.use_bias)
+            attrs = ["depthwise_regularizer"]
+            if layer.use_bias:
+                attrs.append("bias_regularizer")
+        elif isinstance(layer, keras.layers.SeparableConv2D):
+            # print(">>>> SeparableConv2D", layer.name, "use_bias:", layer.use_bias)
+            attrs = ["pointwise_regularizer", "depthwise_regularizer"]
+            if layer.use_bias:
+                attrs.append("bias_regularizer")
+        elif apply_to_batch_normal and isinstance(layer, keras.layers.BatchNormalization):
+            # print(">>>> BatchNormalization", layer.name, "scale:", layer.scale, ", center:", layer.center)
+            if layer.center:
+                attrs.append("beta_regularizer")
+            if layer.scale:
+                attrs.append("gamma_regularizer")
+        elif apply_to_batch_normal and isinstance(layer, keras.layers.PReLU):
+            # print(">>>> PReLU", layer.name)
+            attrs = ["alpha_regularizer"]
+
+        for attr in attrs:
+            if hasattr(layer, attr) and layer.trainable:
+                setattr(layer, attr, keras.regularizers.L2(weight_decay / 2))
+
+    # So far, the regularizers only exist in the model config. We need to
+    # reload the model so that Keras adds them to each layer's losses.
+    # temp_weight_file = "tmp_weights.h5"
+    # model.save_weights(temp_weight_file)
+    # out_model = keras.models.model_from_json(model.to_json(), custom_objects=custom_objects)
+    # out_model.load_weights(temp_weight_file, by_name=True)
+    # os.remove(temp_weight_file)
+    # return out_model
+    return keras.models.clone_model(model)
+
+
 class NormDense(keras.layers.Layer):
     def __init__(self, units=1000, kernel_regularizer=None, loss_top_k=1, **kwargs):
         super(NormDense, self).__init__(**kwargs)
         self.init = keras.initializers.glorot_normal()
-        self.units, self.kernel_regularizer, self.loss_top_k = units, kernel_regularizer, loss_top_k
+        self.units, self.loss_top_k = units, loss_top_k
+        self.kernel_regularizer = keras.regularizers.get(kernel_regularizer)
+        self.supports_masking = True
 
     def build(self, input_shape):
         self.w = self.add_weight(
@@ -176,7 +232,7 @@ class NormDense(keras.layers.Layer):
 
     def get_config(self):
         config = super(NormDense, self).get_config()
-        config.update({"units": self.units, "loss_top_k": self.loss_top_k})
+        config.update({"units": self.units, "loss_top_k": self.loss_top_k, "kernel_regularizer": keras.regularizers.serialize(self.kernel_regularizer)})
         return config
 
     @classmethod
@@ -209,7 +265,7 @@ class Train:
         basic_model=None,
         model=None,
         compile=True,
-        output_wd_multiply=1,   # works ONLY for SGDW
+        output_weight_decay=0,  # L2 regularizer for output layer, 0 for None, >=1 for value in basic_model, (0, 1) for specific value.
         custom_objects={},
         batch_size=128,
         lr_base=0.001,
@@ -270,17 +326,22 @@ class Train:
             return
 
         self.softmax, self.arcface, self.triplet, self.center = "softmax", "arcface", "triplet", "center"
+        if output_weight_decay >= 1:
+            l2_weight_decay = 0
+            for ii in self.basic_model.layers:
+                if hasattr(ii, 'kernel_regularizer') and isinstance(ii.kernel_regularizer, keras.regularizers.L2):
+                    l2_weight_decay = ii.kernel_regularizer.l2
+                    break
+            print(">>>> L2 regularizer value from basic_model:", l2_weight_decay)
+            output_weight_decay *= l2_weight_decay * 2
+        self.output_weight_decay = output_weight_decay
 
         self.batch_size = batch_size
         if tf.distribute.has_strategy():
             strategy = tf.distribute.get_strategy()
             self.batch_size = batch_size * strategy.num_replicas_in_sync
             print(">>>> num_replicas_in_sync: %d, batch_size: %d" % (strategy.num_replicas_in_sync, self.batch_size))
-        self.data_path, self.random_status = data_path, random_status
-        self.train_ds, self.steps_per_epoch, self.classes = None, None, 0
-        self.is_triplet_dataset = False
-        self.default_optimizer = "adam"
-        self.metrics = ["accuracy"]
+
         my_evals = [evals.eval_callback(self.basic_model, ii, batch_size=batch_size, eval_freq=eval_freq) for ii in eval_paths]
         if len(my_evals) != 0:
             my_evals[-1].save_model = os.path.splitext(save_path)[0]
@@ -291,8 +352,11 @@ class Train:
         self.basic_callbacks = basic_callbacks
         self.my_hist = [ii for ii in self.basic_callbacks if isinstance(ii, myCallbacks.My_history)][0]
         self.custom_callbacks = []
-        self.output_wd_multiply = output_wd_multiply
-        self.dataset_cache = dataset_cache
+
+        self.data_path, self.random_status, self.dataset_cache = data_path, random_status, dataset_cache
+        self.train_ds, self.steps_per_epoch, self.classes, self.is_triplet_dataset = None, None, 0, False
+        self.default_optimizer = "adam"
+        self.metrics = ["accuracy"]
         self.is_distiller = False
 
     def __search_embedding_layer__(self, model):
@@ -344,21 +408,27 @@ class Train:
             output_layer = min(len(self.basic_model.layers), len(self.model.layers) - 1)
             self.model = keras.models.Model(inputs, self.model.layers[output_layer].output)
 
-        if self.output_wd_multiply != 1:
-            # kernel_regularizer = L2_decay_wdm(lambda: self.output_wd_multiply * self.optimizer.weight_decay)
-            # kernel_regularizer = L2_decay_wdm(lambda: (self.output_wd_multiply - 1) / 2 * self.optimizer.weight_decay)
-            # print(">>>> Output weight decay multiplier: %f" % (self.output_wd_multiply))
-            l2 = self.optimizer.weight_decay.numpy() / self.optimizer.lr.numpy() * (self.output_wd_multiply - 1) / 2
-            kernel_regularizer = keras.regularizers.L2(l2)
-            print(">>>> Output weight decay multiplier: %f, l2: %f" % (self.output_wd_multiply, l2))
-
+        if self.output_weight_decay != 0:
+            print(">>>> Add L2 regularizer to model output layer, output_weight_decay = %f" % self.output_weight_decay)
+            output_kernel_regularizer = keras.regularizers.L2(self.output_weight_decay / 2)
         else:
-            kernel_regularizer = None
+            output_kernel_regularizer = None
+
+        # if self.output_wd_multiply != 1:
+        #     # output_kernel_regularizer = L2_decay_wdm(lambda: self.output_wd_multiply * self.optimizer.weight_decay)
+        #     # output_kernel_regularizer = L2_decay_wdm(lambda: (self.output_wd_multiply - 1) / 2 * self.optimizer.weight_decay)
+        #     # print(">>>> Output weight decay multiplier: %f" % (self.output_wd_multiply))
+        #     l2 = self.optimizer.weight_decay.numpy() / self.optimizer.lr.numpy() * (self.output_wd_multiply - 1) / 2
+        #     output_kernel_regularizer = keras.regularizers.L2(l2)
+        #     print(">>>> Output weight decay multiplier: %f, l2: %f" % (self.output_wd_multiply, l2))
+        # else:
+        #     output_kernel_regularizer = None
 
         if type == self.softmax:
             print(">>>> Add softmax layer...")
-            # output = keras.layers.Dense(self.classes, name=self.softmax, activation="softmax", kernel_regularizer=kernel_regularizer)(embedding)
-            output_layer = keras.layers.Dense(self.classes, use_bias=False, name=self.softmax, activation="softmax", kernel_regularizer=kernel_regularizer)
+            output_layer = keras.layers.Dense(
+                self.classes, use_bias=False, name=self.softmax, activation="softmax", kernel_regularizer=output_kernel_regularizer
+            )
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
                 output_layer.build(embedding.shape)
                 weight_cur = output_layer.get_weights()
@@ -370,7 +440,7 @@ class Train:
             self.model = keras.models.Model(inputs, output)
         elif type == self.arcface:
             print(">>>> Add arcface layer, loss_top_k=%d..." % (loss_top_k))
-            output_layer = NormDense(self.classes, name=self.arcface, loss_top_k=loss_top_k, kernel_regularizer=kernel_regularizer)
+            output_layer = NormDense(self.classes, name=self.arcface, loss_top_k=loss_top_k, kernel_regularizer=output_kernel_regularizer)
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
                 output_layer.build(embedding.shape)
                 weight_cur = output_layer.get_weights()

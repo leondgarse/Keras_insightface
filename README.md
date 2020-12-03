@@ -55,6 +55,7 @@
   	- [Loss TopK Usage](#loss-topk-usage)
   	- [Mobilenet test on CASIA dataset](#mobilenet-test-on-casia-dataset)
   - [Knowledge distillation](#knowledge-distillation)
+  - [Evaluating on IJB datasets](#evaluating-on-ijb-datasets)
   - [Related Projects](#related-projects)
 
   <!-- /TOC -->
@@ -62,13 +63,13 @@
 
 # Current accuracy
 
-  | Model backbone   | lfw      | cfp_fp   | agedb_30 | Epochs |
-  | ---------------- | -------- | -------- | -------- | ------ |
-  | [Mobilenet](checkpoints/mobilenet_adamw_BS256_E80_arc_tripD_basic_agedb_30_epoch_123_0.955333.h5)        | 0.996167 | 0.948429 | 0.955333 | 120    |
-  | [se_mobilefacenet](checkpoints/keras_se_mobile_facenet_emore_triplet_basic_agedb_30_epoch_100_0.958333.h5) | 0.996333 | 0.964714 | 0.958833 | 100    |
-  | [Resnet34 on CASIA](https://drive.google.com/file/d/1EoYQytka3w7EeTh1v9WioBNxolGnPWp6/view?usp=sharing) | 0.994000 | 0.965429 | 0.942333 | 40     |
-  | ResNet101V2      | 0.997333 | 0.976714 | 0.971000 | 110    |
-  | ResNeSt101       | 0.997667 | 0.981000 | 0.973333 | 100    |
+  | Model backbone   | Dataset | lfw      | cfp_fp   | agedb_30 | Epochs |
+  | ---------------- | ------- | -------- | -------- | -------- | ------ |
+  | [Mobilenet](checkpoints/mobilenet_adamw_BS256_E80_arc_tripD_basic_agedb_30_epoch_123_0.955333.h5)        | Emore |0.996167 | 0.948429 | 0.955333 | 120    |
+  | [se_mobilefacenet](checkpoints/keras_se_mobile_facenet_emore_triplet_basic_agedb_30_epoch_100_0.958333.h5) | Emore | 0.996333 | 0.964714 | 0.958833 | 100    |
+  | [Resnet34 on CASIA](https://drive.google.com/file/d/1EoYQytka3w7EeTh1v9WioBNxolGnPWp6/view?usp=sharing) | Emore | 0.994000 | 0.965429 | 0.942333 | 40     |
+  | ResNet101V2      | Emore | 0.997333 | 0.976714 | 0.971000 | 110    |
+  | ResNeSt101       | Emore | 0.997667 | 0.981000 | 0.973333 | 100    |
 ***
 
 # Comparing Resnet34 with original MXNet version
@@ -81,16 +82,17 @@
     - `CASIA` dataset contains `490623` images belongs to `10572` classes, for `batch_size = 512`, means `959 steps` per epoch.
     - Learning rate decay on `epochs = [20, 30]`, means `--lr-steps '19180,28770'`.
     ```sh
-    CUDA_VISIBLE_DEVICES='0' python -u train_softmax.py --data-dir /datasets/faces_casia --network "r34" \
-        --loss-type 4 --prefix "./model/mxnet_r34_casia" --per-batch-size 512 --lr-steps '19180,28770' \
-        --margin-s 64.0 --margin-m 0.5 --ckpt 1 --emb-size 512 --fc7-wd-mult 10.0 --wd 0.0005 \
-        --verbose 959 --end-epoch 38400 --ce-loss
+    cd ~/workspace/insightface/recognition/ArcFace
+    CUDA_VISIBLE_DEVICES='0' python train.py --network r34 --dataset casia --loss 'arcface' --per-batch-size 512 --lr-steps '19180,28770' --verbose 959
     ```
   - **Keras version**
     - Use a self defined `Resnet34` based on [keras application resnet](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/keras/applications/resnet.py), which is similar with the MXNet version. Other parameters is almost a mimic of the MXNet version.
-    - I have to train 1 epoch to warmup first, but still, sometimes the `SGDW` loss value will go very high...
+    - `MXNet SGD` behaves different with `tfa SGDW`, detail explains [here my notebook weight-decay](https://github.com/leondgarse/Atom_notebook/blob/master/public/2020/12-01_Insightface_training.md#weight-decay). It's mathematically `adding l2 regularizer` works same with `MXNet SGD weight_decay with momentum`, as long as applying `wd_mult`.
+    - In my test, `MXNet wd_mult` is NOT working if just added in `mx.symbol.Variable`, has to be added by `opt.set_wd_mult`.
+    - I have to train 1 epoch to warmup first, maybe caused be the initializer.
+    - This result just showing `Keras` is able to reproduce `MXNet` accuracy using similar strategy and backbone.
     ```py
-    import tensorflow_addons as tfa
+    # import tensorflow_addons as tfa
     import train, losses
 
     data_basic_path = '/datasets/'
@@ -98,35 +100,36 @@
     eval_paths = [data_basic_path + ii for ii in ['faces_casia/lfw.bin', 'faces_casia/cfp_fp.bin', 'faces_casia/agedb_30.bin']]
 
     basic_model = train.buildin_models("resnet34", dropout=0.4, emb_shape=512, output_layer='E', bn_momentum=0.9, bn_epsilon=2e-5)
-    tt = train.Train(data_path, save_path='NNNN_resnet34_MXNET_E_sgdw_5e4_dr4_lr1e1_wd10_random0_arc32_E1_arcT4_BS512_casia.h5',
+    basic_model = train.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=True)
+    tt = train.Train(data_path, save_path='NNNN_resnet34_MXNET_E_SGD_REG_1e3_lr1e1_random0_arc_S32_E1_BS512_casia.h5',
         eval_paths=eval_paths, basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
-        batch_size=512, random_status=0, output_wd_multiply=10)
+        batch_size=512, random_status=0, output_weight_decay=1)
 
-    optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
+    # optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
+    optimizer = keras.optimizers.SGD(learning_rate=0.1, momentum=0.9)
     sch = [
-        # {"loss": keras.losses.CategoricalCrossentropy(), "epoch": 1, "optimizer": optimizer},
-        {"loss": losses.ArcfaceLossT4(scale=32), "epoch": 1, "optimizer": optimizer},
-        {"loss": losses.ArcfaceLossT4(scale=64), "epoch": 40},
+        {"loss": losses.ArcfaceLoss(scale=32), "epoch": 1, "optimizer": optimizer},
+        {"loss": losses.ArcfaceLoss(scale=64), "epoch": 40},
     ]
     tt.train(sch, 0)
     ```
-  - **Result**
+  - **Results**
 
-    | Backbone             | Optimizer | warmup     | random status | lfw,cfp_fp,agedb_30,epoch   |
-    | -------------------- | --------- | ---------- | ------------- | --------------------------- |
-    | MXNet r34            | SGDW      | None       | 0             | 0.9940, 0.9496, 0.9477, E35 |
-    | TF resnet34          | SGDW      | ArcFace 32 | 0             | 0.9932, 0.9483, 0.9467, E36 |
-    | TF resnet34          | SGDW      | Softmax    | 3             | 0.9940, 0.9654, 0.9423, E40 |
-    | Original TF Resnet50 | SGDW      | Softmax    | 0             | 0.9898, 0.8756, 0.9038, E34 |
-
-    - limit the max loss value as `80` when plot.
+    | Backbone    | Optimizer | wd   | l2_reg | lfw,cfp_fp,agedb_30,epoch       |
+    | ----------- | --------- | ---- | ------ | ------------------------------- |
+    | MXNet r34   | SGD       | 5e-4 | None   | 0.9933, 0.9514, 0.9448, E31     |
+    | TF resnet34 | SGD       | None | None   | 0.9897, 0.9269, 0.9228, E20     |
+    | TF resnet34 | SGDW      | 5e-4 | None   | 0.9927, 0.9476, 0.9388, E32     |
+    | TF resnet34 | SGDW      | 1e-3 | None   | 0.9935, **0.9549**, 0.9458, E35 |
+    | TF resnet34 | SGD       | None | 5e-4   | **0.9940**, 0.9466, 0.9415, E31 |
+    | TF resnet34 | SGD       | None | 1e-3   | 0.9935, 0.9484, **0.9485**, E31 |
 
     ![](checkpoints/resnet34.svg)
 ***
 
 # Usage
 ## Beforehand Data Prepare
-  - **Training Data** in this project is `MS1M-ArcFace` downloaded from [Insightface Dataset Zoo](https://github.com/deepinsight/insightface/wiki/Dataset-Zoo)
+  - **Training Data** in this project is downloaded from [Insightface Dataset Zoo](https://github.com/deepinsight/insightface/wiki/Dataset-Zoo)
   - **Evaluating data** is `LFW` `CFP-FP` `AgeDB-30` bin files included in `MS1M-ArcFace` dataset
   - Any other data is also available just in the right format
   - **[prepare_data.py](prepare_data.py)** script, Extract data from mxnet record format to `folders`.
@@ -153,7 +156,7 @@
     │   ├── 708.jpg
     │   └── 709.jpg
     ```
-  - **Evaluting bin files** include jpeg image data pairs, and a label indicating if it's a same person, so there are double images than labels
+  - **Evaluating bin files** include jpeg image data pairs, and a label indicating if it's a same person, so there are double images than labels
     ```sh
     #    bins   | issame_list
     img_1 img_2 | 1
@@ -167,87 +170,73 @@
     ValueError: Can't convert non-rectangular Python sequence to Tensor.
     ```
 ## Training scripts
-  - **Scripts**
+  - **Basic Scripts**
     - [backbones](backbones) basic model implementation of `mobilefacenet` / `mobilenetv3` / `resnest` / `efficientnet`. Most of them are copied from `keras.applications` source code and modified. Other backbones like `ResNet101V2` is loaded from `keras.applications` in `train.buildin_models`.
     - [data.py](data.py) loads image data as `tf.dataset` for training. `Triplet` dataset is different from others.
-    - [data_drop_top_k.py](data_drop_top_k.py) create dataset after trained with [Sub Center ArcFace](#sub-center-arcface) method.
-    - [data_distiller.py](data_distiller.py) create dataset for [Knowledge distillation](#knowledge-distillation).
     - [evals.py](evals.py) contains evaluating callback using `bin` files.
     - [losses.py](losses.py) contains `softmax` / `arcface` / `centerloss` / `triplet` loss functions.
     - [myCallbacks.py](myCallbacks.py) contains my other callbacks, like saving model / learning rate adjusting / save history.
+    - [train.py](train.py) contains a `Train` class. It uses a `scheduler` to connect different `loss` / `optimizer` / `epochs`. The basic function is simply `basic_model` --> `build dataset` --> `add output layer` --> `add callbacks` --> `compile` --> `fit`.
+  - **Other Scripts**
+    - [IJB_evals.py](IJB_evals.py) evaluates model accuracy using [insightface/evaluation/IJB/](https://github.com/deepinsight/insightface/tree/master/evaluation/IJB) datasets.
+    - [data_drop_top_k.py](data_drop_top_k.py) create dataset after trained with [Sub Center ArcFace](#sub-center-arcface) method.
+    - [data_distiller.py](data_distiller.py) create dataset for [Knowledge distillation](#knowledge-distillation).
     - [plot.py](plot.py) contains a history plot function.
-    - [train.py](train.py) contains a `Train` class. It uses a `scheduler` to connect different `loss` / `optimizer` / `epochs`. The basic function is simple `load data --> model --> compile --> fit`.
+    - [video_test.py](video_test.py) can be used to test model using video camera.
   - **Model** contains two part
     - **Basic model** is layers from `input` to `embedding`.
     - **Model** is `Basic model` + `bottleneck` layer, like `softmax` / `arcface` layer. For triplet training, `Model` == `Basic model`. For combined `loss` training, it may have multiple outputs.
-  - **Training example**
+  - **Training example** `train.Train` is mostly functioned as a scheduler.
     ```py
     from tensorflow import keras
     import losses
     import train
     import tensorflow_addons as tfa
 
-    basic_model = train.buildin_models("MobileNet", dropout=0, emb_shape=256)
-    # basic_model = train.buildin_models("ResNet101V2", dropout=0, emb_shape=512)
-    # basic_model = train.buildin_models("ResNest101", dropout=0, emb_shape=512)
-    # basic_model = train.buildin_models('EfficientNetB0', dropout=0, emb_shape=256)
-    # basic_model = train.buildin_models('EfficientNetB4', dropout=0, emb_shape=256)
+    # basic_model = train.buildin_models("ResNet101V2", dropout=0.4, emb_shape=512, output_layer="E")
+    # basic_model = train.buildin_models("ResNest50", dropout=0.4, emb_shape=512, output_layer="E")
+    # basic_model = train.buildin_models('EfficientNetB4', dropout=0, emb_shape=256, output_layer="GDC")
     # basic_model = mobile_facenet.mobile_facenet(256, dropout=0, name="mobile_facenet_256")
     # basic_model = mobile_facenet.mobile_facenet(256, dropout=0, name="se_mobile_facenet_256", use_se=True)
+    basic_model = train.buildin_models("MobileNet", dropout=0, emb_shape=256, output_layer="GDC")
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
 
-    tt = train.Train(data_path, save_path='keras_mobilenet_emore.h5', eval_paths=eval_paths, basic_model=basic_model, lr_base=0.001, batch_size=640, random_status=3)
+    tt = train.Train(data_path, save_path='keras_mobilenet_emore.h5', eval_paths=eval_paths,
+                    basic_model=basic_model, lr_base=0.001, batch_size=512, random_status=2)
     optimizer = tfa.optimizers.AdamW(weight_decay=5e-5)
     sch = [
-      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 1, "optimizer": optimizer, "epoch": 20},
-      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 32, "epoch": 20},
-      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 64, "epoch": 20},
+      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.01, "optimizer": optimizer, "epoch": 20},
+      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.1, "epoch": 20},
+      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 1, "epoch": 20},
       {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.3},
       {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.25},
       {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.2},
     ]
     tt.train(sch, 0)
     ```
-    Buildin model names in `train.Train` can be printed by
+  - **train.print_buildin_models** is used to print build-in model names in `train.py`.
+  - **train.add_l2_regularizer_2_model** will add `l2_regularizer` to model layers. The actual added `l2` value is divided by `2`.
     ```py
-    train.print_buildin_models()
+    # Will add keras.regularizers.L2(5e-4) to all layers
+    basic_model = train.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=True)
     ```
-    `train.Train` is mostly functioned as a scheduler, the basic strategy is simple
-    ```py
-    from tensorflow import keras
-    import losses, data, evals, myCallbacks
-    from backbones import mobile_facenet
-    # Dataset
-    data_path = '/datasets/faces_emore_112x112_folders'
-    train_ds = data.prepare_dataset(data_path, batch_size=512, random_status=3, random_crop=(100, 100, 3))
-    classes = train_ds.element_spec[-1].shape[-1]
-    # Model
-    basic_model = mobile_facenet.mobile_facenet(256, dropout=0, name="mobile_facenet_256")
-    model_output = keras.layers.Dense(classes, activation="softmax")(basic_model.outputs[0])
-    model = keras.models.Model(basic_model.inputs[0], model_output)
-    # Evals and basic callbacks
-    eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    my_evals = [evals.eval_callback(basic_model, ii, batch_size=512, eval_freq=1) for ii in eval_paths]
-    my_evals[-1].save_model = 'keras_mobilefacenet'
-    basic_callbacks = myCallbacks.basic_callbacks(checkpoint='keras_mobilefacenet.h5', evals=my_evals, lr=0.001)
-    callbacks = my_evals + basic_callbacks
-    # Compile and fit
-    model.compile(optimizer='nadam', loss=keras.losses.CategoricalCrossentropy(label_smoothing=0.1), metrics=["accuracy"])
-    model.fit(train_ds, epochs=15, callbacks=callbacks, verbose=1)
-    ```
-  - **train.Train** `basic_model` and `model` parameters. Combine these two parameters to initializing model from different sources. Sometimes may need `custom_objects` to load model.
+  - **train.Train model parameters** including `basic_model` / `model`. Combine them to initialize model from different sources. Sometimes may need `custom_objects` to load model.
     | basic_model                                                     | model           | Used for                                   |
     | --------------------------------------------------------------- | --------------- | ------------------------------------------ |
     | model structure                                                 | None            | Scratch train                              |
     | basic model .h5 file                                            | None            | Continue training from a saved basic model |
     | None for 'embedding' layer or layer index of basic model output | model .h5 file  | Continue training from last saved model    |
     | None for 'embedding' layer or layer index of basic model output | model structure | Continue training from a modified model    |
+  - **train.Train output_weight_decay** controls `L2 regularizer` value added to `output_layer`.
+    - `0` for None.
+    - `(0, 1)` for specific value, actual added value will also divided by `2`.
+    - `>= 1` will be value multiplied by `L2 regularizer` value in `basic_model` if added.
   - **Scheduler** is a list of dicts, each contains a training plan
     - **loss** indicates the loss function. **Required**.
     - **optimizer** is the optimizer used in this plan, `None` indicates using the last one.
     - **epoch** indicates how many epochs will be trained. **Required**.
-    - **bottleneckOnly** True / False, `True` will set `basic_model.trainable = False`, train the bottleneck layer only.
+    - **bottleneckOnly** True / False, `True` will set `basic_model.trainable = False`, train the output layer only.
     - **centerloss** float value, if set a non zero value, attach a `CenterLoss` to `logits_loss`, and the value means `loss_weight`.
     - **triplet** float value, if set a non zero value, attach a `BatchHardTripletLoss` to `logits_loss`, and the value means `loss_weight`.
     - **alpha** float value, default to `0.35`. Alpha value for `BatchHardTripletLoss` if attached.
@@ -258,14 +247,14 @@
     # Scheduler examples
     sch = [
         {"loss": losses.scale_softmax, "optimizer": "adam", "epoch": 2},
-        {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 10, "epoch": 2},
+        {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.01, "epoch": 2},
         {"loss": losses.ArcfaceLoss(scale=32.0, label_smoothing=0.1), "optimizer": keras.optimizers.SGD(0.1, momentum=0.9), "epoch": 2},
         {"loss": losses.BatchAllTripletLoss(0.3), "epoch": 2},
         {"loss": losses.BatchHardTripletLoss(0.25), "epoch": 2},
         {"loss": losses.CenterLoss(num_classes=85742, emb_shape=256), "epoch": 2},
     ]
     ```
-    Some more complicated combinations are also supported, but it may lead to nowhere...
+    Some more complicated combinations are also supported.
     ```py
     # `softmax` / `arcface` + `triplet`
     sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "triplet": 1, "alpha": 0.3, "epoch": 2}]
@@ -414,7 +403,7 @@
     opt = tfa.optimizers.AdamW(weight_decay=5e-5)
     sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "epoch": 60, "optimizer": opt}]
     ```
-    The behavior of `weight_decay` in `mx.optimizer.SGD` and `tfa.optimizers.SGDW` is different as explained [here](https://github.com/leondgarse/Keras_insightface/issues/5#issuecomment-711854877).
+    The different behavior of `mx.optimizer.SGD weight_decay` / `tfa.optimizers.SGDW weight_decay` / `L2_regulalizer` is explained [here my notebook weight-decay](https://github.com/leondgarse/Atom_notebook/blob/master/public/2020/12-01_Insightface_training.md#weight-decay).
   - [Train test on cifar10](https://colab.research.google.com/drive/1tD2OrnrYtFPC7q_i62b8al1o3qelU-Vi?usp=sharing)
 ## Multi GPU train
   - Add an overall `tf.distribute.MirroredStrategy().scope()` `with` block. This is just working in my case... The `batch_size` will be multiplied by `GPU numbers`.
@@ -636,6 +625,30 @@
     | r100    | 0.4     | SGDW      | 7       | 0.9905     | 0.9170     | 0.9112       |
     | r100    | 0.4     | SGDW      | 64      | **0.9938** | 0.9333     | **0.9435**   |
     | r100    | 0.4     | AdamW     | 64      | 0.9920     | **0.9346** | 0.9387       |
+***
+
+# Evaluating on IJB datasets
+  - [IJB_evals.py](IJB_evals.py) evaluates model accuracy using [insightface/evaluation/IJB/](https://github.com/deepinsight/insightface/tree/master/evaluation/IJB) datasets.
+  - In case placing `IJB` dataset `/media/SD/IJB_release`, basic usage will be:
+    ```sh
+    # Test mxnet model
+    CUDA_VISIBLE_DEVICES='1' python IJB_evals.py -m '/media/SD/IJB_release/pretrained_models/MS1MV2-ResNet100-Arcface/model,0' -L -d /media/SD/IJB_release
+
+    # Test keras model
+    CUDA_VISIBLE_DEVICES='1' python IJB_evals.py -m 'checkpoints/basic_model.h5' -L -d /media/SD/IJB_release
+
+    # Run all 8 tests N{0,1}D{0,1}F{0,1}
+    CUDA_VISIBLE_DEVICES='1' python IJB_evals.py -m 'checkpoints/basic_model.h5' -L -d /media/SD/IJB_release -B
+
+    # Plot result only, this needs the `label` data, which can be saved using `-L` parameter.
+    # But the mxnet provided `.npy` file not containing it.
+    # So should plot with providing the `txt` file containing label data.
+    python IJB_evals.py --plot_only /media/SD/IJB_release/IJBB/result/*100*.npy /media/SD/IJB_release/IJBB/meta/ijbb_template_pair_label.txt
+    ```
+  - See `-h` for detail usage.
+    ```sh
+    python IJB_evals.py -h
+    ```
 ***
 
 # Related Projects

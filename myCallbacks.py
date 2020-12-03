@@ -48,6 +48,11 @@ class My_history(keras.callbacks.Callback):
         for kk, vv in self.custom_obj.items():
             tt = losses_utils.compute_weighted_loss(vv())
             self.history.setdefault(kk, []).append(tt)
+        if len(self.model.losses) != 0:
+            regular_loss = K.sum(self.model.losses).numpy()
+            print("regular_loss:", regular_loss)
+            self.history.setdefault("regular_loss", []).append(float(regular_loss))
+            self.history["loss"][-1] -= regular_loss
         if self.initial_file:
             with open(self.initial_file, "w") as ff:
                 json.dump(self.history, ff)
@@ -165,7 +170,8 @@ def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_de
         lr_scheduler = ConstantDecayScheduler(sch=lr_decay_steps, lr_base=lr, decay_rate=lr_decay)
     elif lr_decay < 1:
         # Exponential decay
-        lr_scheduler = LearningRateScheduler(lambda epoch: scheduler(epoch, lr, lr_decay, lr_min))
+        warmup = 10 if lr_decay_steps == 0 else lr_decay_steps
+        lr_scheduler = LearningRateScheduler(lambda epoch: scheduler(epoch, lr, lr_decay, lr_min, warmup=warmup))
     else:
         # Cosine decay on epoch / batch
         lr_scheduler = CosineLrScheduler(

@@ -20,7 +20,7 @@ class eval_callback(tf.keras.callbacks.Callback):
         super(eval_callback, self).__init__()
         bins, issame_list = np.load(test_bin_file, encoding="bytes", allow_pickle=True)
         ds = tf.data.Dataset.from_tensor_slices(bins)
-        _imread = lambda xx: (tf.image.convert_image_dtype(tf.image.decode_jpeg(xx), dtype=tf.float32) - 0.5) * 2
+        _imread = lambda xx: (tf.cast(tf.image.decode_jpeg(xx, channels=3), 'float32') - 127.5) * 0.0078125
         ds = ds.map(_imread)
         self.ds = ds.batch(batch_size)
         if flip:
@@ -48,7 +48,7 @@ class eval_callback(tf.keras.callbacks.Callback):
             emb = self.basic_model(img_batch)
             if self.flip:
                 emb_f = self.basic_model(tf.image.flip_left_right(img_batch))
-                emb = (emb + emb_f) / 2
+                emb = emb + emb_f
             embs.extend(emb.numpy())
         return np.array(embs)
 
@@ -62,7 +62,7 @@ class eval_callback(tf.keras.callbacks.Callback):
             emb = pp(aa)
             if self.flip:
                 emb_f = pp(bb)
-                emb = (emb + emb_f) / 2
+                emb = emb + emb_f
             # Dont know how to handle this, for multi GPU, emb is calculated multi times...
             embs.extend(emb[: emb.shape[0] // self.num_replicas].numpy())
         return np.array(embs)
