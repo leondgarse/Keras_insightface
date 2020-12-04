@@ -20,7 +20,7 @@ class eval_callback(tf.keras.callbacks.Callback):
         super(eval_callback, self).__init__()
         bins, issame_list = np.load(test_bin_file, encoding="bytes", allow_pickle=True)
         ds = tf.data.Dataset.from_tensor_slices(bins)
-        _imread = lambda xx: (tf.cast(tf.image.decode_jpeg(xx, channels=3), 'float32') - 127.5) * 0.0078125
+        _imread = lambda xx: (tf.cast(tf.image.decode_jpeg(xx, channels=3), "float32") - 127.5) * 0.0078125
         ds = ds.map(_imread)
         self.ds = ds.batch(batch_size)
         if flip:

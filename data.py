@@ -46,7 +46,7 @@ def tf_imread(file_path):
     img = tf.io.read_file(file_path)
     img = tf.image.decode_jpeg(img, channels=3)  # [0, 255]
     # img = tf.image.convert_image_dtype(img, tf.float32)  # [0, 1]
-    img = tf.cast(img, 'float32')  # [0, 255]
+    img = tf.cast(img, "float32")  # [0, 255]
     return img
 
 
@@ -100,7 +100,7 @@ def prepare_dataset(
 
     if is_train and random_status >= 0:
         random_process_func = lambda xx, yy: (random_process_image(xx, img_shape, random_status, random_crop), yy)
-        ds = ds.map(random_process_func , num_parallel_calls=AUTOTUNE)
+        ds = ds.map(random_process_func, num_parallel_calls=AUTOTUNE)
 
     ds = ds.batch(batch_size)  # Use batch --> map has slightly effect on dataset reading time, but harm the randomness
     ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))

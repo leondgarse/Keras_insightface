@@ -9,19 +9,21 @@ import cv2
 
 
 class Mxnet_model_interf:
+    import mxnet as mx
+
     def __init__(self, model_file, layer="fc1", image_size=(112, 112)):
         cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
         if len(cvd) > 0 and int(cvd) != -1:
-            ctx = [mx.gpu(ii) for ii in range(len(cvd.split(",")))]
+            ctx = [self.mx.gpu(ii) for ii in range(len(cvd.split(",")))]
         else:
-            ctx = [mx.cpu()]
+            ctx = [self.mx.cpu()]
 
         prefix, epoch = model_file.split(",")
         print(">>>> loading mxnet model:", prefix, epoch, ctx)
-        sym, arg_params, aux_params = mx.model.load_checkpoint(prefix, int(epoch))
+        sym, arg_params, aux_params = self.mx.model.load_checkpoint(prefix, int(epoch))
         all_layers = sym.get_internals()
         sym = all_layers[layer + "_output"]
-        model = mx.mod.Module(symbol=sym, context=ctx, label_names=None)
+        model = self.mx.mod.Module(symbol=sym, context=ctx, label_names=None)
         model.bind(data_shapes=[("data", (1, 3, image_size[0], image_size[1]))])
         model.set_params(arg_params, aux_params)
         self.model = model
@@ -29,14 +31,16 @@ class Mxnet_model_interf:
     def __call__(self, imgs):
         # print(imgs.shape, imgs[0])
         imgs = imgs.transpose(0, 3, 1, 2)
-        data = mx.nd.array(imgs)
-        db = mx.io.DataBatch(data=(data,))
+        data = self.mx.nd.array(imgs)
+        db = self.mx.io.DataBatch(data=(data,))
         self.model.forward(db, is_train=False)
         emb = self.model.get_outputs()[0].asnumpy()
         return emb
 
 
 def keras_model_interf(model_file):
+    import tensorflow as tf
+
     mm = tf.keras.models.load_model(model_file, compile=False)
     return lambda imgs: mm((tf.cast(imgs, "float32") - 127.5) * 0.0078125).numpy()
 
@@ -63,11 +67,11 @@ def read_IJB_meta_columns_to_int(file_path, columns, dtype=str, skiprows=0, deli
     return (meta[:, ii].astype("int") for ii in columns)
 
 
-def extract_IJB_data(data_path, subset, save_path=None, force_reload=False):
+def extract_IJB_data_11(data_path, subset, save_path=None, force_reload=False):
     if save_path == None:
         save_path = os.path.join(data_path, subset + "_backup.npz")
     if not force_reload and os.path.exists(save_path):
-        print(">>>> Reloading from backup: %s..." % save_path)
+        print(">>>> Reloading from backup: %s ..." % save_path)
         aa = np.load(save_path)
         return (
             aa["templates"],
@@ -92,15 +96,12 @@ def extract_IJB_data(data_path, subset, save_path=None, force_reload=False):
         img_list_path = os.path.join(data_path, "IJBC/meta/ijbc_name_5pts_score.txt")
 
     print(">>>> Loading templates and medias...")
-    templates, medias = read_IJB_meta_columns_to_int(media_list_path, columns=[1, 2]) # ['1.jpg', '1', '69544']
-    print(
-        "templates: %s, medias: %s, unique templates: %s"
-        % (templates.shape, medias.shape, np.unique(templates).shape)
-    )
+    templates, medias = read_IJB_meta_columns_to_int(media_list_path, columns=[1, 2])  # ['1.jpg', '1', '69544']
+    print("templates: %s, medias: %s, unique templates: %s" % (templates.shape, medias.shape, np.unique(templates).shape))
     # (227630,) (227630,) (12115,)
 
     print(">>>> Loading pairs...")
-    p1, p2, label = read_IJB_meta_columns_to_int(pair_list_path, columns=[0, 1, 2]) # ['1', '11065', '1']
+    p1, p2, label = read_IJB_meta_columns_to_int(pair_list_path, columns=[0, 1, 2])  # ['1', '11065', '1']
     print("p1: %s, unique p1: %s" % (p1.shape, np.unique(p1).shape))
     print("p2: %s, unique p2: %s" % (p2.shape, np.unique(p2).shape))
     print("label: %s, label value counts: %s" % (label.shape, dict(zip(*np.unique(label, return_counts=True)))))
@@ -120,16 +121,7 @@ def extract_IJB_data(data_path, subset, save_path=None, force_reload=False):
     print("face_scores value counts:", dict(zip(*np.histogram(face_scores, bins=9)[::-1])))
     # {0.1: 2515, 0.2: 0, 0.3: 62, 0.4: 94, 0.5: 136, 0.6: 197, 0.7: 291, 0.8: 538, 0.9: 223797}
 
-    # print(">>>> Running warp affine...")
-    # ndimages = [
-    #     face_align_landmark(cv2.imread(img_name), landmark)
-    #     for img_name, landmark in tqdm(zip(img_names, landmarks), total=len(img_names))
-    # ]
-    # ndimages = np.stack(ndimages)
-    # print("Finale image size:", ndimages.shape)
-    # (227630, 112, 112, 3)
-
-    print(">>>> Saving backup to: %s..." % save_path)
+    print(">>>> Saving backup to: %s ..." % save_path)
     np.savez(
         save_path,
         templates=templates,
@@ -141,7 +133,63 @@ def extract_IJB_data(data_path, subset, save_path=None, force_reload=False):
         landmarks=landmarks,
         face_scores=face_scores,
     )
+    print()
     return templates, medias, p1, p2, label, img_names, landmarks, face_scores
+
+
+def extract_gallery_prob_data(data_path, subset, save_path=None, force_reload=False):
+    if save_path == None:
+        save_path = os.path.join(data_path, subset + "_gallery_prob_backup.npz")
+    if not force_reload and os.path.exists(save_path):
+        print(">>>> Reloading from backup: %s ..." % save_path)
+        aa = np.load(save_path)
+        return (
+            aa["gallery_templates"],
+            aa["gallery_subject_ids"],
+            aa["probe_mixed_templates"],
+            aa["probe_mixed_subject_ids"],
+        )
+
+    if subset == "IJBC":
+        meta_dir = os.path.join(data_path, "IJBC/meta")
+        gallery_s1_record = os.path.join(meta_dir, "ijbc_1N_gallery_G1.csv")
+        gallery_s2_record = os.path.join(meta_dir, "ijbc_1N_gallery_G2.csv")
+        probe_mixed_record = os.path.join(meta_dir, "ijbc_1N_probe_mixed.csv")
+    else:
+        meta_dir = os.path.join(data_path, "IJBB/meta")
+        gallery_s1_record = os.path.join(meta_dir, "ijbb_1N_gallery_S1.csv")
+        gallery_s2_record = os.path.join(meta_dir, "ijbb_1N_gallery_S2.csv")
+        probe_mixed_record = os.path.join(meta_dir, "ijbb_1N_probe_mixed.csv")
+
+    print(">>>> Loading gallery feature...")
+    s1_templates, s1_subject_ids = read_IJB_meta_columns_to_int(gallery_s1_record, columns=[0, 1], skiprows=1, delimiter=",")
+    s2_templates, s2_subject_ids = read_IJB_meta_columns_to_int(gallery_s2_record, columns=[0, 1], skiprows=1, delimiter=",")
+    gallery_templates = np.concatenate([s1_templates, s2_templates])
+    gallery_subject_ids = np.concatenate([s1_subject_ids, s2_subject_ids])
+    print("s1 gallery: %s, ids: %s, unique: %s" % (s1_templates.shape, s1_subject_ids.shape, np.unique(s1_templates).shape))
+    print("s2 gallery: %s, ids: %s, unique: %s" % (s2_templates.shape, s2_subject_ids.shape, np.unique(s2_templates).shape))
+    print(
+        "total gallery: %s, ids: %s, unique: %s"
+        % (gallery_templates.shape, gallery_subject_ids.shape, np.unique(gallery_templates).shape)
+    )
+
+    print(">>>> Loading prope feature...")
+    probe_mixed_templates, probe_mixed_subject_ids = read_IJB_meta_columns_to_int(
+        probe_mixed_record, columns=[0, 1], skiprows=1, delimiter=","
+    )
+    print("probe_mixed_templates: %s, unique: %s" % (probe_mixed_templates.shape, np.unique(probe_mixed_templates).shape))
+    print("probe_mixed_subject_ids: %s, unique: %s" % (probe_mixed_subject_ids.shape, np.unique(probe_mixed_subject_ids).shape))
+
+    print(">>>> Saving backup to: %s ..." % save_path)
+    np.savez(
+        save_path,
+        gallery_templates=gallery_templates,
+        gallery_subject_ids=gallery_subject_ids,
+        probe_mixed_templates=probe_mixed_templates,
+        probe_mixed_subject_ids=probe_mixed_subject_ids,
+    )
+    print()
+    return gallery_templates, gallery_subject_ids, probe_mixed_templates, probe_mixed_subject_ids
 
 
 def get_embeddings(model_interf, img_names, landmarks, batch_size=64, flip=True):
@@ -168,10 +216,10 @@ def process_embeddings(embs, embs_f=[], use_flip_test=True, use_norm_score=False
 
 
 def image2template_feature(img_feats=None, templates=None, medias=None, choose_templates=None, choose_ids=None):
-    if choose_templates is not None:    # 1N
+    if choose_templates is not None:  # 1N
         unique_templates, indices = np.unique(choose_templates, return_index=True)
         unique_subjectids = choose_ids[indices]
-    else:   # 11
+    else:  # 11
         unique_templates = np.unique(templates)
         unique_subjectids = None
 
@@ -195,7 +243,7 @@ def image2template_feature(img_feats=None, templates=None, medias=None, choose_t
     return template_norm_feats, unique_templates, unique_subjectids
 
 
-def verification(template_norm_feats=None, unique_templates=None, p1=None, p2=None, batch_size=100000):
+def verification_11(template_norm_feats=None, unique_templates=None, p1=None, p2=None, batch_size=100000):
     template2id = np.zeros((max(unique_templates) + 1, 1), dtype=int)
     for count_template, uqt in enumerate(unique_templates):
         template2id[uqt] = count_template
@@ -209,59 +257,121 @@ def verification(template_norm_feats=None, unique_templates=None, p1=None, p2=No
     return np.array(score)
 
 
-def run_model_test(
-    data_path,
-    subset,
-    interf_func,
-    batch_size=64,
-    force_reload=False,
-    use_flip_test=True,
-    use_norm_score=False,
-    use_detector_score=True,
-):
-    templates, medias, p1, p2, label, img_names, landmarks, face_scores = extract_IJB_data(
-        data_path, subset, force_reload=force_reload
-    )
-    embs, embs_f = get_embeddings(interf_func, img_names, landmarks, batch_size=batch_size)
-    img_input_feats = process_embeddings(
-        embs,
-        embs_f,
-        use_flip_test=use_flip_test,
-        use_norm_score=use_norm_score,
-        use_detector_score=use_detector_score,
-        face_scores=face_scores,
-    )
+def evaluation_1N(query_feats, gallery_feats, query_ids, reg_ids):
+    import heapq
 
-    template_norm_feats, unique_templates, _ = image2template_feature(img_input_feats, templates, medias)
-    score = verification(template_norm_feats, unique_templates, p1, p2)
-    return score, embs, embs_f, templates, medias, p1, p2, label, face_scores
+    Fars = [0.01, 0.1]
+    print("query_feats: %s, gallery_feats: %s" % (query_feats.shape, gallery_feats.shape))
+
+    query_num = query_feats.shape[0]
+    gallery_num = gallery_feats.shape[0]
+
+    similarity = np.dot(query_feats, gallery_feats.T)
+    print("similarity shape:", similarity.shape)
+    top_inds = np.argsort(-similarity)
+    print("top_inds shape:", top_inds.shape)
+
+    # gen_mask
+    mask = []
+    for query_id in query_ids:
+        pos = [i for i, x in enumerate(reg_ids) if query_id == x]
+        if len(pos) != 1:
+            raise RuntimeError("RegIdsError with id = {}， duplicate = {} ".format(query_id, len(pos)))
+        mask.append(pos[0])
+
+    # calculate top_n
+    correct_num_1, correct_num_5, correct_num_10 = 0, 0, 0
+    for i in range(query_num):
+        top_1, top_5, top_10 = top_inds[i, 0], top_inds[i, 0:5], top_inds[i, 0:10]
+        if mask[i] == top_1:
+            correct_num_1 += 1
+        if mask[i] in top_5:
+            correct_num_5 += 1
+        if mask[i] in top_10:
+            correct_num_10 += 1
+    print("top1: %f, top5: %f, top10: %f" % (correct_num_1 / query_num, correct_num_5 / query_num, correct_num_10 / query_num))
+
+    neg_pair_num = query_num * gallery_num - query_num
+    print("neg_pair_num:", neg_pair_num)
+    required_topk = [math.ceil(query_num * x) for x in Fars]
+    top_sims = similarity
+    # calculate fars and tprs
+    pos_sims = []
+    for i in range(query_num):
+        gt = mask[i]
+        pos_sims.append(top_sims[i, gt])
+        top_sims[i, gt] = -2.0
+
+    pos_sims = np.array(pos_sims)
+    neg_sims = top_sims[np.where(top_sims > -2.0)]
+    neg_sims_sorted = heapq.nlargest(max(required_topk), neg_sims)  # heap sort
+    print("pos_sims: %s, neg_sims: %s, neg_sims_sorted: %d" % (pos_sims.shape, neg_sims.shape, len(neg_sims_sorted)))
+    for far, pos in zip(Fars, required_topk):
+        th = neg_sims[pos - 1]
+        recall = np.sum(pos_sims > th) / query_num
+        print("far = {:.10f} pr = {:.10f} th = {:.10f}".format(far, recall, th))
 
 
-def run_model_test_bunch(data_path, subset, interf_func, batch_size=64, force_reload=False):
-    templates, medias, p1, p2, label, img_names, landmarks, face_scores = extract_IJB_data(
-        data_path, subset, force_reload=force_reload
-    )
-    embs, embs_f = get_embeddings(interf_func, img_names, landmarks, batch_size=batch_size)
+class IJB_test:
+    def __init__(self, model_file, data_path, subset, batch_size=64, force_reload=False):
+        interf_func = keras_model_interf(model_file) if model_file.endswith(".h5") else Mxnet_model_interf(model_file)
+        templates, medias, p1, p2, label, img_names, landmarks, face_scores = extract_IJB_data_11(
+            data_path, subset, force_reload=force_reload
+        )
+        self.embs, self.embs_f = get_embeddings(interf_func, img_names, landmarks, batch_size=batch_size)
+        self.templates, self.medias, self.p1, self.p2, self.face_scores = templates, medias, p1, p2, face_scores
+        self.label = label
 
-    results = {}
-    for use_norm_score in [True, False]:
-        for use_detector_score in [True, False]:
-            for use_flip_test in [True, False]:
-                name = "N{:d}D{:d}F{:d}".format(use_norm_score, use_detector_score, use_flip_test)
-                print(">>>>", name, use_norm_score, use_detector_score, use_flip_test)
+    def run_model_test_single(self, use_flip_test=True, use_norm_score=False, use_detector_score=True):
+        img_input_feats = process_embeddings(
+            self.embs,
+            self.embs_f,
+            use_flip_test=use_flip_test,
+            use_norm_score=use_norm_score,
+            use_detector_score=use_detector_score,
+            face_scores=self.face_scores,
+        )
+        template_norm_feats, unique_templates, _ = image2template_feature(img_input_feats, self.templates, self.medias)
+        score = verification_11(template_norm_feats, unique_templates, self.p1, self.p2)
+        return score
 
-                img_input_feats = process_embeddings(
-                    embs,
-                    embs_f,
-                    use_flip_test=use_flip_test,
-                    use_norm_score=use_norm_score,
-                    use_detector_score=use_detector_score,
-                    face_scores=face_scores,
-                )
-                template_norm_feats, unique_templates, _ = image2template_feature(img_input_feats, templates, medias)
-                score = verification(template_norm_feats, unique_templates, p1, p2)
-                results[name] = score
-    return results, embs, embs_f, templates, medias, p1, p2, label, face_scores
+    def run_model_test_bunch(self):
+        scores, names = [], []
+        for use_norm_score in [True, False]:
+            for use_detector_score in [True, False]:
+                for use_flip_test in [True, False]:
+                    names.append("N{:d}D{:d}F{:d}".format(use_norm_score, use_detector_score, use_flip_test))
+                    print(">>>>", name, use_norm_score, use_detector_score, use_flip_test)
+                    scores.append(self.run_model_test_single(use_flip_test, use_norm_score, use_detector_score))
+        return scores, names
+
+    def run_model_test_1N(self):
+        gallery_templates, gallery_subject_ids, probe_mixed_templates, probe_mixed_subject_ids = extract_gallery_prob_data(
+            args.data_path, args.subset, force_reload=args.force_reload
+        )
+        img_input_feats = process_embeddings(
+            self.embs,
+            self.embs_f,
+            use_flip_test=True,
+            use_norm_score=False,
+            use_detector_score=True,
+            face_scores=self.face_scores,
+        )
+        gallery_templates_feature, gallery_unique_templates, gallery_unique_subject_ids = image2template_feature(
+            img_input_feats, total_templates, total_medias, gallery_templates, gallery_subject_ids
+        )
+        print("gallery_templates_feature:", gallery_templates_feature.shape)
+        print("gallery_unique_subject_ids:", gallery_unique_subject_ids.shape)
+
+        probe_mixed_templates_feature, probe_mixed_unique_templates, probe_mixed_unique_subject_ids = image2template_feature(
+            img_input_feats, total_templates, total_medias, probe_mixed_templates, probe_mixed_subject_ids
+        )
+        print("probe_mixed_templates_feature:", probe_mixed_templates_feature.shape)
+        print("probe_mixed_unique_subject_ids:", probe_mixed_unique_subject_ids.shape)
+
+        evaluation_1N(
+            probe_mixed_templates_feature, gallery_templates_feature, probe_mixed_unique_subject_ids, gallery_unique_subject_ids
+        )
 
 
 def plot_roc_and_calculate_tpr(scores, names=None, label=None):
@@ -330,6 +440,7 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
 
 def parse_arguments(argv):
     import argparse
+
     default_save_result_name = "{model_name}_{subset}.npz"
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-m", "--model_file", type=str, default=None, help="Saved model file path, could be keras / mxnet one")
@@ -338,7 +449,8 @@ def parse_arguments(argv):
     parser.add_argument("-r", "--save_result", type=str, default=default_save_result_name, help="Filename for saving result")
     parser.add_argument("-L", "--save_label", action="store_true", help="Also save label data, useful for plot only")
     parser.add_argument("-E", "--save_embeddings", action="store_true", help="Also save embeddings data")
-    parser.add_argument("-B", "--bunch", action="store_true", help="Run all 8 tests N{0,1}D{0,1}F{0,1}")
+    parser.add_argument("-B", "--is_bunch", action="store_true", help="Run all 8 tests N{0,1}D{0,1}F{0,1}")
+    parser.add_argument("-N", "--is_one_2_N", action="store_true", help="Run 1:N test instead of 1:1")
     parser.add_argument("-F", "--force_reload", action="store_true", help="Force reload, instead of using cache")
     parser.add_argument("-b", "--batch_size", type=int, default=64, help="Batch size for get_embeddings")
     parser.add_argument("-p", "--plot_only", nargs="*", type=str, help="Plot saved results, Format 1 2 3 or 1, 2, 3 or *.npy")
@@ -374,36 +486,25 @@ if __name__ == "__main__":
     args = parse_arguments(sys.argv[1:])
     if args.plot_only != None and len(args.plot_only) != 0:
         plot_roc_and_calculate_tpr(args.plot_only)
-    else:
-        if args.model_file.endswith(".h5"):
-            import tensorflow as tf
-            interf_func = keras_model_interf(args.model_file)
-        else:
-            import mxnet as mx
-            interf_func = Mxnet_model_interf(args.model_file)
-        save_name = os.path.splitext(args.save_result)[0]
-        if args.bunch:
-            results, embs, embs_f, templates, medias, p1, p2, label, face_scores = run_model_test_bunch(
-                args.data_path, args.subset, interf_func, batch_size=args.batch_size, force_reload=args.force_reload
-            )
-            scores = list(results.values())
-            names = [save_name + "_" + ii for ii in results.keys()]
-        else:
-            score, embs, embs_f, templates, medias, p1, p2, label, face_scores = run_model_test(
-                args.data_path, args.subset, interf_func, batch_size=args.batch_size, force_reload=args.force_reload
-            )
-            scores, names = [score], [save_name]
+        exit(0)
 
-        if args.save_embeddings:
-            np.savez(args.save_result, scores=scores, names=names, embs=embs, embs_f=embs_f, label=label)
-        elif args.save_label:
-            np.savez(args.save_result, scores=scores, names=names, label=label)
-        else:
-            np.savez(args.save_result, scores=scores, names=names)
-        plot_roc_and_calculate_tpr(scores, names=names, label=label)
-else:
-    try:
-        import mxnet as mx
-        import tensorflow as tf
-    except:
-        pass
+    save_name = os.path.splitext(args.save_result)[0]
+    save_items = {}
+    tt = IJB_test(args.model_file, args.data_path, args.subset, args.batch_size, args.force_reload)
+    if args.is_one_2_N:  # 1:N test
+        tt.run_model_test_1N()
+    elif args.is_bunch:  # All 8 tests N{0,1}D{0,1}F{0,1}
+        scores, names = tt.run_model_test_bunch()
+        save_items.update({"scores": scores, "names": [save_name + "_" + ii for ii in names]})
+    else:  # Basic 1:1 N0D1F1 test
+        score = tt.run_model_test_single()
+        save_items.update({"scores": [score], "names": [save_name]})
+
+    if args.save_embeddings:
+        save_items.update({"embs": tt.embs, "embs_f": tt.embs_f})
+    if args.save_label:
+        save_items.update({"label": tt.label})
+    np.savez(args.save_result, **save_items)
+
+    if not args.is_one_2_N:
+        plot_roc_and_calculate_tpr(scores, names=names, label=tt.label)

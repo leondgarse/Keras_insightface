@@ -38,20 +38,21 @@ def set_scale(scale):
     global Scale, Default_text_font_size, Default_legend_font_size, Default_figure_base_size
     if Scale != scale:
         import matplotlib as mpl
+
         Scale, scale = scale, scale / Scale
-        mpl.rcParams['axes.titlesize'] *= scale
-        mpl.rcParams['legend.fontsize'] *= scale
-        mpl.rcParams['font.size'] *= scale
+        mpl.rcParams["axes.titlesize"] *= scale
+        mpl.rcParams["legend.fontsize"] *= scale
+        mpl.rcParams["font.size"] *= scale
 
-        mpl.rcParams['axes.linewidth'] *= scale
-        mpl.rcParams['lines.linewidth'] *= scale
-        mpl.rcParams['grid.linewidth'] *= scale
-        mpl.rcParams['lines.markersize'] *= scale
+        mpl.rcParams["axes.linewidth"] *= scale
+        mpl.rcParams["lines.linewidth"] *= scale
+        mpl.rcParams["grid.linewidth"] *= scale
+        mpl.rcParams["lines.markersize"] *= scale
 
-        mpl.rcParams['xtick.labelsize'] *= scale
-        mpl.rcParams['ytick.labelsize'] *= scale
-        mpl.rcParams['ytick.major.pad'] *= scale
-        mpl.rcParams['xtick.major.pad'] *= scale
+        mpl.rcParams["xtick.labelsize"] *= scale
+        mpl.rcParams["ytick.labelsize"] *= scale
+        mpl.rcParams["ytick.major.pad"] *= scale
+        mpl.rcParams["xtick.major.pad"] *= scale
 
         Default_text_font_size *= scale
         Default_legend_font_size *= scale
@@ -66,7 +67,15 @@ def peak_scatter(ax, array, peak_method, color="r", init_epoch=0, limit_max=1e9)
         if ii[pp] != 0:
             y_pos = ii[pp] if ii[pp] < limit_max else limit_max
             ax.scatter(pp + start, y_pos, color=color, marker="v")
-            ax.text(pp + start, y_pos, "{:.4f}".format(ii[pp]), va="bottom", ha="right", fontsize=Default_text_font_size, rotation=-30)
+            ax.text(
+                pp + start,
+                y_pos,
+                "{:.4f}".format(ii[pp]),
+                va="bottom",
+                ha="right",
+                fontsize=Default_text_font_size,
+                rotation=-30,
+            )
         start += len(ii)
 
 
@@ -129,7 +138,14 @@ def hist_plot(
         loss_names = [""] * len(loss_lists)
 
     if len(loss_lists) != 0:
-        arrays_plot(axes[0], loss_lists, label=fig_label, init_epoch=init_epoch, pre_value=pre_item.get("loss", 0), limit_max=limit_loss_max)
+        arrays_plot(
+            axes[0],
+            loss_lists,
+            label=fig_label,
+            init_epoch=init_epoch,
+            pre_value=pre_item.get("loss", 0),
+            limit_max=limit_loss_max,
+        )
         peak_scatter(axes[0], loss_lists, np.argmin, init_epoch=init_epoch, limit_max=limit_loss_max)
     axes[0].set_title("loss")
     if fig_label:
@@ -215,7 +231,17 @@ def hist_plot(
 
 
 def hist_plot_split(
-    history, epochs, names=None, customs=[], save=None, axes=None, init_epoch=0, pre_item={}, fig_label=None, eval_split=True, limit_loss_max=1e9
+    history,
+    epochs,
+    names=None,
+    customs=[],
+    save=None,
+    axes=None,
+    init_epoch=0,
+    pre_item={},
+    fig_label=None,
+    eval_split=True,
+    limit_loss_max=1e9,
 ):
     splits = [[int(sum(epochs[:id])), int(sum(epochs[:id])) + ii] for id, ii in enumerate(epochs)]
     split_func = lambda aa: [aa[ii:jj] for ii, jj in splits if ii < len(aa)]
@@ -251,5 +277,15 @@ def hist_plot_split(
         fig_label = os.path.splitext(os.path.basename(history[-1]))[0]
 
     return hist_plot(
-        loss_lists, accuracy_lists, customs_dict, names, save, axes, init_epoch, pre_item, fig_label, eval_split=eval_split, limit_loss_max=limit_loss_max
+        loss_lists,
+        accuracy_lists,
+        customs_dict,
+        names,
+        save,
+        axes,
+        init_epoch,
+        pre_item,
+        fig_label,
+        eval_split=eval_split,
+        limit_loss_max=limit_loss_max,
     )

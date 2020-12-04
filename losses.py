@@ -162,6 +162,7 @@ class ArcfaceLossT4(tf.keras.losses.Loss):
     def from_config(cls, config):
         return cls(**config)
 
+
 # ArcfaceLoss class
 # [AdaCos: Adaptively Scaling Cosine Logits for Effectively Learning Deep Face Representations](https://arxiv.org/pdf/1905.00292.pdf)
 class AdaCosLossSimple(tf.keras.losses.Loss):
@@ -169,12 +170,12 @@ class AdaCosLossSimple(tf.keras.losses.Loss):
         super(AdaCosLossSimple, self).__init__(**kwargs)
         self.max_median, self.from_logits, self.label_smoothing = max_median, from_logits, label_smoothing
         self.num_classes = num_classes
-        self.theta_med_max = tf.cast(max_median, 'float32')
+        self.theta_med_max = tf.cast(max_median, "float32")
         if scale == 0:
-            self.scale = tf.sqrt(2.) * tf.math.log(float(num_classes) - 1)
+            self.scale = tf.sqrt(2.0) * tf.math.log(float(num_classes) - 1)
         else:
             # In reload condition
-            self.scale = tf.cast(scale, 'float32')
+            self.scale = tf.cast(scale, "float32")
 
     @tf.function
     def call(self, y_true, norm_logits):
@@ -187,7 +188,7 @@ class AdaCosLossSimple(tf.keras.losses.Loss):
         B_avg = tf.where(pick_cond, tf.zeros_like(norm_logits), tf.exp(self.scale * norm_logits))
         B_avg = tf.reduce_mean(tf.reduce_sum(B_avg, axis=1))
         self.scale = tf.math.log(B_avg) / tf.cos(tf.minimum(self.theta_med_max, theta_med))
-        tf.print(", scale =", self.scale, ", theta_med =", theta_med, end='')
+        tf.print(", scale =", self.scale, ", theta_med =", theta_med, end="")
 
         arcface_logits = norm_logits * self.scale
         return tf.keras.losses.categorical_crossentropy(
@@ -214,7 +215,17 @@ class AdaCosLossSimple(tf.keras.losses.Loss):
 
 
 class AdaCosLossT4(tf.keras.losses.Loss):
-    def __init__(self, batch_size, num_classes, margin=0.5, scale=0, max_median=np.cos(np.pi / 4), from_logits=True, label_smoothing=0, **kwargs):
+    def __init__(
+        self,
+        batch_size,
+        num_classes,
+        margin=0.5,
+        scale=0,
+        max_median=np.cos(np.pi / 4),
+        from_logits=True,
+        label_smoothing=0,
+        **kwargs
+    ):
         super(AdaCosLossT4, self).__init__(**kwargs)
         self.margin, self.max_median, self.from_logits, self.label_smoothing = margin, max_median, from_logits, label_smoothing
         self.batch_size, self.num_classes = batch_size, num_classes
@@ -225,13 +236,13 @@ class AdaCosLossT4(tf.keras.losses.Loss):
         self.theta_func = lambda xx: xx * margin_cos - tf.sqrt(1 - tf.pow(xx, 2)) * margin_sin
 
         # self.theta_med_max = self.theta_func(tf.cast(max_median, 'float32'))
-        self.theta_med_max = tf.cast(max_median, 'float32')
+        self.theta_med_max = tf.cast(max_median, "float32")
         self.med_pos = batch_size // 2
         if scale == 0:
-            self.scale = tf.sqrt(2.) * tf.math.log(float(num_classes) - 1)
+            self.scale = tf.sqrt(2.0) * tf.math.log(float(num_classes) - 1)
         else:
             # In reload condition
-            self.scale = tf.cast(scale, 'float32')
+            self.scale = tf.cast(scale, "float32")
         tf.print("Init med_pos:", self.med_pos, "scale:", self.scale, "theta_med_max:", self.theta_med_max)
 
     @tf.function
@@ -243,7 +254,7 @@ class AdaCosLossT4(tf.keras.losses.Loss):
         B_avg = tf.where(pick_cond, tf.zeros_like(norm_logits), tf.exp(self.scale * norm_logits))
         B_avg = tf.reduce_mean(tf.reduce_sum(B_avg, axis=1))
         self.scale = tf.math.log(B_avg) / tf.maximum(self.theta_med_max, theta_med)
-        tf.print(", scale =", self.scale, ", theta_med =", theta_med, end='')
+        tf.print(", scale =", self.scale, ", theta_med =", theta_med, end="")
 
         theta = self.theta_func(y_pred_vals)
         theta_valid = tf.where(y_pred_vals > self.threshold, theta, y_pred_vals - self.low_pred_punish)
@@ -274,6 +285,7 @@ class AdaCosLossT4(tf.keras.losses.Loss):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
 
 # Callback to save center values on each epoch end
 class Save_Numpy_Callback(tf.keras.callbacks.Callback):

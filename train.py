@@ -197,6 +197,7 @@ def replace_ReLU_with_PReLU(model):
             print(">>>> Convert ReLU:", layer.name)
             return keras.layers.PReLU(shared_axes=[1, 2], name=layer.name)
         return layer
+
     # model = keras.applications.MobileNet(include_top=False, input_shape=(112, 112, 3), weights=None)
     return keras.models.clone_model(model, clone_function=convert_ReLU)
 
@@ -233,7 +234,9 @@ class NormDense(keras.layers.Layer):
 
     def get_config(self):
         config = super(NormDense, self).get_config()
-        config.update({"units": self.units, "loss_top_k": self.loss_top_k, "kernel_regularizer": keras.regularizers.serialize(self.kernel_regularizer)})
+        config.update(
+            {"units": self.units, "loss_top_k": self.loss_top_k, "kernel_regularizer": keras.regularizers.serialize(self.kernel_regularizer),}
+        )
         return config
 
     @classmethod
@@ -264,7 +267,6 @@ class Train:
         custom_objects.update(
             {
                 "NormDense": NormDense,
-                "L2_decay_wdm": L2_decay_wdm,
                 "margin_softmax": losses.margin_softmax,
                 "MarginSoftmax": losses.MarginSoftmax,
                 "arcface_loss": losses.arcface_loss,
@@ -314,7 +316,7 @@ class Train:
         if output_weight_decay >= 1:
             l2_weight_decay = 0
             for ii in self.basic_model.layers:
-                if hasattr(ii, 'kernel_regularizer') and isinstance(ii.kernel_regularizer, keras.regularizers.L2):
+                if hasattr(ii, "kernel_regularizer") and isinstance(ii.kernel_regularizer, keras.regularizers.L2):
                     l2_weight_decay = ii.kernel_regularizer.l2
                     break
             print(">>>> L2 regularizer value from basic_model:", l2_weight_decay)
@@ -363,7 +365,7 @@ class Train:
         if self.train_ds == None or self.is_triplet_dataset == True:
             print(">>>> Init softmax dataset...")
             self.train_ds = data.prepare_dataset(
-                self.data_path, batch_size=self.batch_size, random_status=self.random_status, random_crop=(100, 100, 3), cache=self.dataset_cache
+                self.data_path, batch_size=self.batch_size, random_status=self.random_status, random_crop=(100, 100, 3), cache=self.dataset_cache,
             )
             label_spec = self.train_ds.element_spec[-1]
             if isinstance(label_spec, tuple):
@@ -399,10 +401,7 @@ class Train:
         else:
             output_kernel_regularizer = None
 
-        # if self.output_wd_multiply != 1:
-        #     # output_kernel_regularizer = L2_decay_wdm(lambda: self.output_wd_multiply * self.optimizer.weight_decay)
-        #     # output_kernel_regularizer = L2_decay_wdm(lambda: (self.output_wd_multiply - 1) / 2 * self.optimizer.weight_decay)
-        #     # print(">>>> Output weight decay multiplier: %f" % (self.output_wd_multiply))
+        # if self.output_weight_decay != 0:
         #     l2 = self.optimizer.weight_decay.numpy() / self.optimizer.lr.numpy() * (self.output_wd_multiply - 1) / 2
         #     output_kernel_regularizer = keras.regularizers.L2(l2)
         #     print(">>>> Output weight decay multiplier: %f, l2: %f" % (self.output_wd_multiply, l2))
@@ -412,7 +411,7 @@ class Train:
         if type == self.softmax:
             print(">>>> Add softmax layer...")
             output_layer = keras.layers.Dense(
-                self.classes, use_bias=False, name=self.softmax, activation="softmax", kernel_regularizer=output_kernel_regularizer
+                self.classes, use_bias=False, name=self.softmax, activation="softmax", kernel_regularizer=output_kernel_regularizer,
             )
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
                 output_layer.build(embedding.shape)
@@ -503,9 +502,8 @@ class Train:
             self.__init_model__(type, sch.get("lossTopK", 1))
 
             # loss_weights
-            cur_loss = [cur_loss]
+            cur_loss, loss_weights = [cur_loss], None
             self.callbacks = self.my_evals + self.custom_callbacks + self.basic_callbacks
-            loss_weights = None
             if sch.get("centerloss", False) and type != self.center:
                 print(">>>> Attach centerloss...")
                 emb_shape = self.basic_model.output_shape[-1]

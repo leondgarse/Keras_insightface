@@ -65,7 +65,7 @@ def data_distiller(data_path, model, dest_file=None, batch_size=256, limit=-1):
         else:
             # MXNet model file, like models/r50-arcface-emore/model,1
             basic_model = get_mxnet_model(model)
-            infer = lambda imgs: mxnet_model_infer(basic_model, imgs.numpy().astype('uint8'))
+            infer = lambda imgs: mxnet_model_infer(basic_model, imgs.numpy().astype("uint8"))
     else:
         # TF model
         infer = lambda imgs: model((imgs - 127.5) * 0.0078125).numpy()
@@ -86,7 +86,7 @@ def data_distiller(data_path, model, dest_file=None, batch_size=256, limit=-1):
     if dest_file is None:
         src_name = os.path.splitext(os.path.basename(dataset_pickle_file_src))[0]
         dest_file = src_name + "_label_embs_normed_{}.npz".format(embeddings[0].shape[0])
-    dest_file = dest_file if dest_file.endswith('.npz') else dest_file + '.npz'
+    dest_file = dest_file if dest_file.endswith(".npz") else dest_file + ".npz"
     np.savez_compressed(dest_file, image_names=new_image_names, image_classes=new_image_classes, embeddings=embeddings)
     # with open(dest_file, "wb") as ff:
     #     pickle.dump({"image_names": new_image_names, "image_classes": new_image_classes, "embeddings": embeddings}, ff)
@@ -106,7 +106,7 @@ if __name__ == "__main__":
     parser.add_argument("-D", "--data_path", type=str, required=True, help="Original dataset path")
     parser.add_argument("-d", "--dest_file", type=str, default=None, help="Dest file path to save the processed dataset npz")
     parser.add_argument("-b", "--batch_size", type=int, default=256, help="Batch size")
-    parser.add_argument("-L", "--limit", type=int, default=-1, help="Test parameter, limit converting only the first [NUM] ones")
+    parser.add_argument("-L", "--limit", type=int, default=-1, help="Test parameter, limit converting only the first [NUM]")
     args = parser.parse_known_args(sys.argv[1:])[0]
 
     data_distiller(args.data_path, args.model_file, args.dest_file, args.batch_size, args.limit)
