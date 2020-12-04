@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import numpy as np
 from tqdm import tqdm
@@ -291,9 +292,9 @@ def evaluation_1N(query_feats, gallery_feats, query_ids, reg_ids):
             correct_num_10 += 1
     print("top1: %f, top5: %f, top10: %f" % (correct_num_1 / query_num, correct_num_5 / query_num, correct_num_10 / query_num))
 
-    neg_pair_num = query_num * gallery_num - query_num
-    print("neg_pair_num:", neg_pair_num)
-    required_topk = [math.ceil(query_num * x) for x in Fars]
+    # neg_pair_num = query_num * gallery_num - query_num
+    # print("neg_pair_num:", neg_pair_num)
+    required_topk = [int(np.ceil(query_num * x)) for x in Fars]
     top_sims = similarity
     # calculate fars and tprs
     pos_sims = []
@@ -313,12 +314,22 @@ def evaluation_1N(query_feats, gallery_feats, query_ids, reg_ids):
 
 
 class IJB_test:
-    def __init__(self, model_file, data_path, subset, batch_size=64, force_reload=False):
-        interf_func = keras_model_interf(model_file) if model_file.endswith(".h5") else Mxnet_model_interf(model_file)
+    def __init__(self, model_file, data_path, subset, batch_size=64, force_reload=False, restore_embs=None):
         templates, medias, p1, p2, label, img_names, landmarks, face_scores = extract_IJB_data_11(
             data_path, subset, force_reload=force_reload
         )
-        self.embs, self.embs_f = get_embeddings(interf_func, img_names, landmarks, batch_size=batch_size)
+        if model_file != None:
+            interf_func = keras_model_interf(model_file) if model_file.endswith(".h5") else Mxnet_model_interf(model_file)
+            self.embs, self.embs_f = get_embeddings(interf_func, img_names, landmarks, batch_size=batch_size)
+        elif restore_embs != None:
+            print(">>>> Reload embeddings from:", restore_embs)
+            aa = np.load(restore_embs)
+            if "embs" in aa and "embs_f" in aa:
+                self.embs, self.embs_f = aa["embs"], aa["embs_f"]
+            else:
+                print("ERROR: %s NOT containing embs / embs_f" % restore_embs)
+                exit(1)
+        self.data_path, self.subset, self.force_reload = data_path, subset, force_reload
         self.templates, self.medias, self.p1, self.p2, self.face_scores = templates, medias, p1, p2, face_scores
         self.label = label
 
@@ -340,14 +351,15 @@ class IJB_test:
         for use_norm_score in [True, False]:
             for use_detector_score in [True, False]:
                 for use_flip_test in [True, False]:
-                    names.append("N{:d}D{:d}F{:d}".format(use_norm_score, use_detector_score, use_flip_test))
+                    name = "N{:d}D{:d}F{:d}".format(use_norm_score, use_detector_score, use_flip_test)
                     print(">>>>", name, use_norm_score, use_detector_score, use_flip_test)
+                    names.append(name)
                     scores.append(self.run_model_test_single(use_flip_test, use_norm_score, use_detector_score))
         return scores, names
 
     def run_model_test_1N(self):
         gallery_templates, gallery_subject_ids, probe_mixed_templates, probe_mixed_subject_ids = extract_gallery_prob_data(
-            args.data_path, args.subset, force_reload=args.force_reload
+            self.data_path, self.subset, force_reload=self.force_reload
         )
         img_input_feats = process_embeddings(
             self.embs,
@@ -358,13 +370,13 @@ class IJB_test:
             face_scores=self.face_scores,
         )
         gallery_templates_feature, gallery_unique_templates, gallery_unique_subject_ids = image2template_feature(
-            img_input_feats, total_templates, total_medias, gallery_templates, gallery_subject_ids
+            img_input_feats, self.templates, self.medias, gallery_templates, gallery_subject_ids
         )
         print("gallery_templates_feature:", gallery_templates_feature.shape)
         print("gallery_unique_subject_ids:", gallery_unique_subject_ids.shape)
 
         probe_mixed_templates_feature, probe_mixed_unique_templates, probe_mixed_unique_subject_ids = image2template_feature(
-            img_input_feats, total_templates, total_medias, probe_mixed_templates, probe_mixed_subject_ids
+            img_input_feats, self.templates, self.medias, probe_mixed_templates, probe_mixed_subject_ids
         )
         print("probe_mixed_templates_feature:", probe_mixed_templates_feature.shape)
         print("probe_mixed_unique_subject_ids:", probe_mixed_unique_subject_ids.shape)
@@ -380,9 +392,9 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
         name = None if names is None else names[id]
         if isinstance(score, str) and score.endswith(".npz"):
             aa = np.load(score)
-            score = aa["scores"] if "scores" in aa else []
+            score = aa.get("scores", [])
             label = aa["label"] if label is None and "label" in aa else label
-            score_name = aa["names"] if "names" in aa else []
+            score_name = aa.get("names", [])
             for ss, nn in zip(score, score_name):
                 score_dict[nn] = ss
         elif isinstance(score, str) and score.endswith(".npy"):
@@ -441,18 +453,20 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
 def parse_arguments(argv):
     import argparse
 
-    default_save_result_name = "{model_name}_{subset}.npz"
+    default_save_result_name = "IJB_result/{model_name}_{subset}.npz"
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-m", "--model_file", type=str, default=None, help="Saved model file path, could be keras / mxnet one")
     parser.add_argument("-d", "--data_path", type=str, default="./", help="Dataset path")
     parser.add_argument("-s", "--subset", type=str, default="IJBB", help="Subset test target, could be IJBB / IJBC")
-    parser.add_argument("-r", "--save_result", type=str, default=default_save_result_name, help="Filename for saving result")
-    parser.add_argument("-L", "--save_label", action="store_true", help="Also save label data, useful for plot only")
-    parser.add_argument("-E", "--save_embeddings", action="store_true", help="Also save embeddings data")
+    parser.add_argument("-b", "--batch_size", type=int, default=64, help="Batch size for get_embeddings")
+    parser.add_argument(
+        "-R", "--save_result", type=str, default=default_save_result_name, help="Filename for saving / restore result"
+    )
+    parser.add_argument("-L", "--save_label", action="store_true", help="Save label data, useful for plot only")
+    parser.add_argument("-E", "--save_embeddings", action="store_true", help="Save embeddings data")
     parser.add_argument("-B", "--is_bunch", action="store_true", help="Run all 8 tests N{0,1}D{0,1}F{0,1}")
     parser.add_argument("-N", "--is_one_2_N", action="store_true", help="Run 1:N test instead of 1:1")
     parser.add_argument("-F", "--force_reload", action="store_true", help="Force reload, instead of using cache")
-    parser.add_argument("-b", "--batch_size", type=int, default=64, help="Batch size for get_embeddings")
     parser.add_argument("-p", "--plot_only", nargs="*", type=str, help="Plot saved results, Format 1 2 3 or 1, 2, 3 or *.npy")
     args = parser.parse_known_args(argv)[0]
 
@@ -464,10 +478,10 @@ def parse_arguments(argv):
         for ss in args.plot_only:
             score_files.extend(glob(ss.replace(",", "").strip()))
         args.plot_only = score_files
-    elif args.model_file == None:
-        print("Please provide -m MODEL_FILE")
+    elif args.model_file == None and args.save_result == default_save_result_name:
+        print("Please provide -m MODEL_FILE, see `--help` for usage.")
         exit(1)
-    else:
+    elif args.model_file != None:
         if args.model_file.endswith(".h5"):
             # Keras model file "model.h5"
             model_name = os.path.splitext(os.path.basename(args.model_file))[0]
@@ -486,25 +500,31 @@ if __name__ == "__main__":
     args = parse_arguments(sys.argv[1:])
     if args.plot_only != None and len(args.plot_only) != 0:
         plot_roc_and_calculate_tpr(args.plot_only)
-        exit(0)
+    else:
+        save_name = os.path.splitext(args.save_result)[0]
+        save_items = {}
+        tt = IJB_test(args.model_file, args.data_path, args.subset, args.batch_size, args.force_reload, args.save_result)
+        if args.is_one_2_N:  # 1:N test
+            tt.run_model_test_1N()
+        elif args.is_bunch:  # All 8 tests N{0,1}D{0,1}F{0,1}
+            scores, names = tt.run_model_test_bunch()
+            names = [save_name + "_" + ii for ii in names]
+            save_items.update({"scores": scores, "names": names})
+        else:  # Basic 1:1 N0D1F1 test
+            score = tt.run_model_test_single()
+            scores, names = [score], [save_name]
+            save_items.update({"scores": scores, "names": names})
 
-    save_name = os.path.splitext(args.save_result)[0]
-    save_items = {}
-    tt = IJB_test(args.model_file, args.data_path, args.subset, args.batch_size, args.force_reload)
-    if args.is_one_2_N:  # 1:N test
-        tt.run_model_test_1N()
-    elif args.is_bunch:  # All 8 tests N{0,1}D{0,1}F{0,1}
-        scores, names = tt.run_model_test_bunch()
-        save_items.update({"scores": scores, "names": [save_name + "_" + ii for ii in names]})
-    else:  # Basic 1:1 N0D1F1 test
-        score = tt.run_model_test_single()
-        save_items.update({"scores": [score], "names": [save_name]})
+        if args.save_embeddings:
+            save_items.update({"embs": tt.embs, "embs_f": tt.embs_f})
+        if args.save_label:
+            save_items.update({"label": tt.label})
 
-    if args.save_embeddings:
-        save_items.update({"embs": tt.embs, "embs_f": tt.embs_f})
-    if args.save_label:
-        save_items.update({"label": tt.label})
-    np.savez(args.save_result, **save_items)
+        if args.model_file != None or args.save_embeddings:  # embeddings not restored from file or should save_embeddings again
+            save_path = os.path.dirname(args.save_result)
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+            np.savez(args.save_result, **save_items)
 
-    if not args.is_one_2_N:
-        plot_roc_and_calculate_tpr(scores, names=names, label=tt.label)
+        if not args.is_one_2_N:
+            plot_roc_and_calculate_tpr(scores, names=names, label=tt.label)
