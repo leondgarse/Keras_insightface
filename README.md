@@ -89,7 +89,6 @@
     - In my test, `MXNet wd_mult` is NOT working if just added in `mx.symbol.Variable`, has to be added by `opt.set_wd_mult`.
     - Have to train 1 epoch to warmup first, maybe caused be the initializer.
     - The difference in training accuracy is that the MXNet version calculating accuracy **after** applying `arcface` conversion, mine is before.
-    - This result is just showing `Keras` is able to reproduce `MXNet` accuracy using similar strategy and backbone.
     ```py
     # import tensorflow_addons as tfa
     import train, losses
@@ -112,7 +111,7 @@
     ]
     tt.train(sch, 0)
     ```
-  - **Results**
+  - **Results** This result is just showing `Keras` is able to reproduce `MXNet` accuracy using similar strategy and backbone.
 
     | Backbone    | Optimizer | wd   | l2_reg | lfw,cfp_fp,agedb_30,epoch       |
     | ----------- | --------- | ---- | ------ | ------------------------------- |
@@ -629,18 +628,25 @@
   - [IJB_evals.py](IJB_evals.py) evaluates model accuracy using [insightface/evaluation/IJB/](https://github.com/deepinsight/insightface/tree/master/evaluation/IJB) datasets.
   - In case placing `IJB` dataset `/media/SD/IJB_release`, basic usage will be:
     ```sh
-    # Test mxnet model
-    CUDA_VISIBLE_DEVICES='1' python IJB_evals.py -m '/media/SD/IJB_release/pretrained_models/MS1MV2-ResNet100-Arcface/model,0' -L -d /media/SD/IJB_release
+    # Test mxnet model, default scenario N0D1F1
+    CUDA_VISIBLE_DEVICES='1' python IJB_evals.py -m '/media/SD/IJB_release/pretrained_models/MS1MV2-ResNet100-Arcface/model,0' -d /media/SD/IJB_release -L
 
-    # Test keras model
-    CUDA_VISIBLE_DEVICES='1' python IJB_evals.py -m 'checkpoints/basic_model.h5' -L -d /media/SD/IJB_release
+    # Test keras h5 model, default scenario N0D1F1
+    CUDA_VISIBLE_DEVICES='1' python IJB_evals.py -m 'checkpoints/basic_model.h5' -d /media/SD/IJB_release -L
 
-    # Run all 8 tests N{0,1}D{0,1}F{0,1}
-    CUDA_VISIBLE_DEVICES='1' python IJB_evals.py -m 'checkpoints/basic_model.h5' -L -d /media/SD/IJB_release -B
+    # `-B` to run all 8 tests N{0,1}D{0,1}F{0,1}
+    CUDA_VISIBLE_DEVICES='1' python IJB_evals.py -m 'checkpoints/basic_model.h5' -d /media/SD/IJB_release -B -L
+
+    # `-N` to run 1N test
+    CUDA_VISIBLE_DEVICES='1' python IJB_evals.py -m 'checkpoints/basic_model.h5' -d /media/SD/IJB_release -N -L
+
+    # `-E` to save embeddings data
+    CUDA_VISIBLE_DEVICES='1' python IJB_evals.py -m 'checkpoints/basic_model.h5' -d /media/SD/IJB_release -E
+    # Then can be restored for other tests, add `-E` to save again
+    python IJB_evals.py -R IJB_result/MS1MV2-ResNet100-Arcface_IJBB.npz -d /media/SD/IJB_release -B
 
     # Plot result only, this needs the `label` data, which can be saved using `-L` parameter.
-    # But the `.npy` files provided within the IBJ dataset not containing it.
-    # So should plot with the `txt` file containing label data.
+    # Or should provide the label txt file.
     python IJB_evals.py --plot_only /media/SD/IJB_release/IJBB/result/*100*.npy /media/SD/IJB_release/IJBB/meta/ijbb_template_pair_label.txt
     ```
   - See `-h` for detail usage.
