@@ -1,13 +1,11 @@
+import os
 import data
-import data_gen
 import evals
 import losses
 import myCallbacks
 import tensorflow as tf
 from tensorflow import keras
 import tensorflow.keras.backend as K
-import os
-
 import multiprocessing as mp
 
 if mp.get_start_method() != "forkserver":
@@ -60,12 +58,8 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), ou
     elif name == "nasnetmobile":
         xx = keras.applications.NASNetMobile(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name.startswith("efficientnet"):
-        if "-dev" in tf.__version__:
-            # import tensorflow.keras.applications.efficientnet as efficientnet
-            from backbones import efficientnet
-        else:
-            # import efficientnet.tfkeras as efficientnet
-            from backbones import efficientnet
+        # import tensorflow.keras.applications.efficientnet as efficientnet
+        from backbones import efficientnet
 
         if name[-2] == "b":
             compound_scale = int(name[-1])
@@ -101,8 +95,6 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), ou
     elif name.startswith("mobilenetv3"):
         from backbones import mobilenet_v3
 
-        # size = "small" if "small" in name else "large"
-        # xx = mobilenetv3.MobilenetV3(input_shape=input_shape, include_top=False, size=size)
         if "small" in name:
             xx = mobilenet_v3.MobileNetV3Small(input_shape=input_shape, include_top=False, weights="imagenet")
         else:
@@ -114,12 +106,10 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), ou
         xx = mobile_facenet.mobile_facenet(input_shape=input_shape, include_top=False, name=name, use_se=use_se)
     else:
         return None
-    # xx = keras.models.load_model('checkpoints/mobilnet_v1_basic_922667.h5', compile=False)
     xx.trainable = True
 
     inputs = xx.inputs[0]
     nn = xx.outputs[0]
-    # nn = keras.layers.Conv2D(emb_shape, xx.output_shape[1], use_bias=False)(nn)
 
     if output_layer == "E":
         """ Fully Connected """
@@ -200,6 +190,17 @@ def add_l2_regularizer_2_model(model, weight_decay, custom_objects={}, apply_to_
     return keras.models.clone_model(model)
 
 
+def replace_ReLU_with_PReLU(model):
+    def convert_ReLU(layer):
+        # print(layer.name)
+        if isinstance(layer, keras.layers.ReLU):
+            print(">>>> Convert ReLU:", layer.name)
+            return keras.layers.PReLU(shared_axes=[1, 2], name=layer.name)
+        return layer
+    # model = keras.applications.MobileNet(include_top=False, input_shape=(112, 112, 3), weights=None)
+    return keras.models.clone_model(model, clone_function=convert_ReLU)
+
+
 class NormDense(keras.layers.Layer):
     def __init__(self, units=1000, kernel_regularizer=None, loss_top_k=1, **kwargs):
         super(NormDense, self).__init__(**kwargs)
@@ -238,22 +239,6 @@ class NormDense(keras.layers.Layer):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
-
-
-class L2_decay_wdm(keras.regularizers.L2):
-    def __init__(self, wd_func=None, **kwargs):
-        super(L2_decay_wdm, self).__init__(**kwargs)
-        self.wd_func = wd_func
-
-    def __call__(self, x):
-        self.l2 = self.wd_func()
-        # tf.print(", l2 =", self.l2, end='')
-        return super(L2_decay_wdm, self).__call__(x)
-
-    def get_config(self):
-        self.l2 = 0  # Just a fake value for saving
-        config = super(L2_decay_wdm, self).get_config()
-        return config
 
 
 class Train:

@@ -58,6 +58,11 @@ def face_align_landmark(img, landmark, image_size=(112, 112), method="similar"):
     return ndimage
 
 
+def read_IJB_meta_columns_to_int(file_path, columns, dtype=str, skiprows=0, delimiter=None):
+    meta = np.loadtxt(file_path, dtype=dtype, skiprows=skiprows, delimiter=delimiter)
+    return (meta[:, ii].astype("int") for ii in columns)
+
+
 def extract_IJB_data(data_path, subset, save_path=None, force_reload=False):
     if save_path == None:
         save_path = os.path.join(data_path, subset + "_backup.npz")
@@ -87,20 +92,18 @@ def extract_IJB_data(data_path, subset, save_path=None, force_reload=False):
         img_list_path = os.path.join(data_path, "IJBC/meta/ijbc_name_5pts_score.txt")
 
     print(">>>> Loading templates and medias...")
-    ijb_meta = np.loadtxt(media_list_path, dtype=str)  # ['1.jpg', '1', '69544']
-    templates, medias = ijb_meta[:, 1].astype(np.int), ijb_meta[:, 2].astype(np.int)
+    templates, medias = read_IJB_meta_columns_to_int(media_list_path, columns=[1, 2]) # ['1.jpg', '1', '69544']
     print(
-        ">>>> Loaded templates: %s, medias: %s, unique templates: %s"
+        "templates: %s, medias: %s, unique templates: %s"
         % (templates.shape, medias.shape, np.unique(templates).shape)
     )
     # (227630,) (227630,) (12115,)
 
     print(">>>> Loading pairs...")
-    pairs = np.loadtxt(pair_list_path, dtype=str)  # ['1', '11065', '1']
-    p1, p2, label = pairs[:, 0].astype(np.int), pairs[:, 1].astype(np.int), pairs[:, 2].astype(np.int)
-    print(">>>> Loaded p1: %s, unique p1: %s" % (p1.shape, np.unique(p1).shape))
-    print(">>>> Loaded p2: %s, unique p2: %s" % (p2.shape, np.unique(p2).shape))
-    print(">>>> Loaded label: %s, label value counts: %s" % (label.shape, dict(zip(*np.unique(label, return_counts=True)))))
+    p1, p2, label = read_IJB_meta_columns_to_int(pair_list_path, columns=[0, 1, 2]) # ['1', '11065', '1']
+    print("p1: %s, unique p1: %s" % (p1.shape, np.unique(p1).shape))
+    print("p2: %s, unique p2: %s" % (p2.shape, np.unique(p2).shape))
+    print("label: %s, label value counts: %s" % (label.shape, dict(zip(*np.unique(label, return_counts=True)))))
     # (8010270,) (8010270,) (8010270,) (1845,) (10270,) # 10270 + 1845 = 12115
     # {0: 8000000, 1: 10270}
 
@@ -112,9 +115,9 @@ def extract_IJB_data(data_path, subset, save_path=None, force_reload=False):
     img_names = np.array([os.path.join(img_path, ii) for ii in img_records[:, 0]])
     landmarks = img_records[:, 1:-1].astype("float32").reshape(-1, 5, 2)
     face_scores = img_records[:, -1].astype("float32")
-    print(">>>> Loaded img_names: %s, landmarks: %s, face_scores: %s" % (img_names.shape, landmarks.shape, face_scores.shape))
+    print("img_names: %s, landmarks: %s, face_scores: %s" % (img_names.shape, landmarks.shape, face_scores.shape))
     # (227630,) (227630, 5, 2) (227630,)
-    print(">>>> Loaded face_scores value counts:", dict(zip(*np.histogram(face_scores, bins=9)[::-1])))
+    print("face_scores value counts:", dict(zip(*np.histogram(face_scores, bins=9)[::-1])))
     # {0.1: 2515, 0.2: 0, 0.3: 62, 0.4: 94, 0.5: 136, 0.6: 197, 0.7: 291, 0.8: 538, 0.9: 223797}
 
     # print(">>>> Running warp affine...")
@@ -164,27 +167,32 @@ def process_embeddings(embs, embs_f=[], use_flip_test=True, use_norm_score=False
     return embs
 
 
-def image2template_feature(img_feats=None, templates=None, medias=None):
-    unique_templates = np.unique(templates)
-    template_feats = np.zeros((len(unique_templates), img_feats.shape[1]))
+def image2template_feature(img_feats=None, templates=None, medias=None, choose_templates=None, choose_ids=None):
+    if choose_templates is not None:    # 1N
+        unique_templates, indices = np.unique(choose_templates, return_index=True)
+        unique_subjectids = choose_ids[indices]
+    else:   # 11
+        unique_templates = np.unique(templates)
+        unique_subjectids = None
 
+    template_feats = np.zeros((len(unique_templates), img_feats.shape[1]))
     for count_template, uqt in tqdm(enumerate(unique_templates), "Extract template feature", total=len(unique_templates)):
         (ind_t,) = np.where(templates == uqt)
         face_norm_feats = img_feats[ind_t]
         face_medias = medias[ind_t]
         unique_medias, unique_media_counts = np.unique(face_medias, return_counts=True)
         media_norm_feats = []
-        for uu, ct in zip(unique_medias, unique_media_counts):
-            (ind_m,) = np.where(face_medias == uu)
+        for u, ct in zip(unique_medias, unique_media_counts):
+            (ind_m,) = np.where(face_medias == u)
             if ct == 1:
-                media_norm_feats.append(face_norm_feats[ind_m])
+                media_norm_feats += [face_norm_feats[ind_m]]
             else:  # image features from the same video will be aggregated into one feature
-                media_norm_feats.append(np.mean(face_norm_feats[ind_m], 0, keepdims=True))
+                media_norm_feats += [np.mean(face_norm_feats[ind_m], 0, keepdims=True)]
         media_norm_feats = np.array(media_norm_feats)
         # media_norm_feats = media_norm_feats / np.sqrt(np.sum(media_norm_feats ** 2, -1, keepdims=True))
         template_feats[count_template] = np.sum(media_norm_feats, 0)
     template_norm_feats = normalize(template_feats)
-    return template_norm_feats, unique_templates
+    return template_norm_feats, unique_templates, unique_subjectids
 
 
 def verification(template_norm_feats=None, unique_templates=None, p1=None, p2=None, batch_size=100000):
@@ -224,7 +232,7 @@ def run_model_test(
         face_scores=face_scores,
     )
 
-    template_norm_feats, unique_templates = image2template_feature(img_input_feats, templates, medias)
+    template_norm_feats, unique_templates, _ = image2template_feature(img_input_feats, templates, medias)
     score = verification(template_norm_feats, unique_templates, p1, p2)
     return score, embs, embs_f, templates, medias, p1, p2, label, face_scores
 
@@ -250,7 +258,7 @@ def run_model_test_bunch(data_path, subset, interf_func, batch_size=64, force_re
                     use_detector_score=use_detector_score,
                     face_scores=face_scores,
                 )
-                template_norm_feats, unique_templates = image2template_feature(img_input_feats, templates, medias)
+                template_norm_feats, unique_templates, _ = image2template_feature(img_input_feats, templates, medias)
                 score = verification(template_norm_feats, unique_templates, p1, p2)
                 results[name] = score
     return results, embs, embs_f, templates, medias, p1, p2, label, face_scores
