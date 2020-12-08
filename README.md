@@ -404,7 +404,7 @@
     The different behavior of `mx.optimizer.SGD weight_decay` / `tfa.optimizers.SGDW weight_decay` / `L2_regulalizer` is explained [here my notebook weight-decay](https://github.com/leondgarse/Atom_notebook/blob/master/public/2020/12-01_Insightface_training.md#weight-decay).
   - [Train test on cifar10](https://colab.research.google.com/drive/1tD2OrnrYtFPC7q_i62b8al1o3qelU-Vi?usp=sharing)
 ## Multi GPU train using horovod or distribute strategy
-  - [Testing tensorflow horovod and distribute strategy](https://github.com/leondgarse/Atom_notebook/blob/master/public/2020/08-11_keras_train.md#tensorflow-horovod-and-distribute)
+  - **Horovod** usage is still under test. [Testing tensorflow horovod and distribute strategy](https://github.com/leondgarse/Atom_notebook/blob/master/public/2020/08-11_keras_train.md#tensorflow-horovod-and-distribute)
   - Add an overall `tf.distribute.MirroredStrategy().scope()` `with` block. This is just working in my case... The `batch_size` will be multiplied by `count of GPUs`.
     ```py
     tf.__version__
