@@ -67,6 +67,10 @@ def random_process_image(img, img_shape=(112, 112), random_status=2, random_crop
         img = tf.clip_by_value(img, 0.0, 255.0)
     return img
 
+def pick_by_image_per_class(image_classes, image_per_class):
+    cc = pd.value_counts(image_classes)
+    class_pick = cc[cc >= image_per_class].index
+    return np.array([ii in class_pick for ii in image_classes]), class_pick
 
 def prepare_dataset(
     data_path,
@@ -76,6 +80,7 @@ def prepare_dataset(
     img_shape=(112, 112),
     random_status=2,
     random_crop=None,
+    image_per_class=0,
     cache=False,
     shuffle_buffer_size=None,
     is_train=True,
@@ -84,6 +89,12 @@ def prepare_dataset(
     if len(image_names) == 0:
         return None
     print(">>>> Image length: %d, Image class length: %d, classes: %d" % (len(image_names), len(image_classes), classes))
+    if image_per_class != 0:
+        pick, class_pick = pick_by_image_per_class(image_classes, image_per_class)
+        image_names, image_classes = image_names[pick], image_classes[pick]
+        if len(embeddings) != 0:
+            embeddings = embeddings[pick]
+        print(">>>> After pick[%d], image length: %d, valid classes: %d" % (image_per_class, len(image_names), class_pick.shape[0]))
 
     if len(embeddings) == 0:
         ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes))
@@ -122,10 +133,13 @@ class Triplet_dataset:
     ):
         self.AUTOTUNE = tf.data.experimental.AUTOTUNE
         image_names, image_classes, _, classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)
-        image_dataframe = pd.DataFrame({"image_names": image_names, "image_classes": image_classes})
-        image_dataframe = image_dataframe.groupby("image_classes").apply(lambda xx: xx.image_names.values)
-        aa = image_dataframe.map(len)
-        self.image_dataframe = image_dataframe[aa > image_per_class]
+        image_per_class = max(4, image_per_class)
+        pick, _ = pick_by_image_per_class(image_classes, image_per_class)
+
+        image_dataframe = pd.DataFrame({"image_names": image_names[pick], "image_classes": image_classes[pick]})
+        self.image_dataframe = image_dataframe.groupby("image_classes").apply(lambda xx: xx.image_names.values)
+        # aa = image_dataframe.map(len)
+        # self.image_dataframe = image_dataframe[aa > image_per_class]
         self.split_func = lambda xx: np.array(
             np.split(np.random.permutation(xx)[: len(xx) // image_per_class * image_per_class], len(xx) // image_per_class)
         )

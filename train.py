@@ -22,9 +22,10 @@ def print_buildin_models():
     print(
         """
     >>>> buildin_models
-    mobilenet, mobilenetv2, mobilenetv3_small, mobilenetv3_large, mobilefacenet, se_mobilefacenet, nasnetmobile
+    mobilenet, mobilenetv2, mobilenetv3_small, mobilenetv3_large, mobilefacenet, se_mobilefacenet
     resnet34, resnet50, resnet50v2, resnet101, resnet101v2, se_resnext, resnest50, resnest101,
     efficientnetb0, efficientnetb1, efficientnetb2, efficientnetb3, efficientnetb4, efficientnetb5, efficientnetb6, efficientnetb7,
+    or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
     """,
         end="",
     )
@@ -32,78 +33,66 @@ def print_buildin_models():
 
 # MXNET: bn_momentum=0.9, bn_epsilon=2e-5, TF default: bn_momentum=0.99, bn_epsilon=0.001
 def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), output_layer="GDC", bn_momentum=0.99, bn_epsilon=0.001, **kwargs):
-    name = name.lower()
+    name_lower = name.lower()
     """ Basic model """
-    if name == "mobilenet":
+    if name_lower == "mobilenet":
         xx = keras.applications.MobileNet(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
-    elif name == "mobilenetv2":
+    elif name_lower == "mobilenetv2":
         xx = keras.applications.MobileNetV2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
-    elif name == "resnet34":
+    elif name_lower == "resnet34":
         from backbones import resnet
 
         xx = resnet.ResNet34(input_shape=input_shape, include_top=False, weights=None, **kwargs)
-    elif name == "r50":
+    elif name_lower == "r50":
         from backbones import resnet
 
         xx = resnet.ResNet50(input_shape=input_shape, include_top=False, weights=None, **kwargs)
-    elif name == "resnet50":
+    elif name_lower == "resnet50":
         xx = keras.applications.ResNet50(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
-    elif name == "resnet50v2":
+    elif name_lower == "resnet50v2":
         xx = keras.applications.ResNet50V2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
-    elif name == "resnet101":
+    elif name_lower == "resnet101":
         # xx = ResNet101(input_shape=input_shape, include_top=False, weights=None, **kwargs)
         xx = keras.applications.ResNet101(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
-    elif name == "resnet101v2":
+    elif name_lower == "resnet101v2":
         xx = keras.applications.ResNet101V2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
-    elif name == "nasnetmobile":
-        xx = keras.applications.NASNetMobile(input_shape=input_shape, include_top=False, weights=None, **kwargs)
-    elif name.startswith("efficientnet"):
+    elif name_lower.startswith("efficientnet"):
         # import tensorflow.keras.applications.efficientnet as efficientnet
         from backbones import efficientnet
 
-        if name[-2] == "b":
-            compound_scale = int(name[-1])
-            models = [
-                efficientnet.EfficientNetB0,
-                efficientnet.EfficientNetB1,
-                efficientnet.EfficientNetB2,
-                efficientnet.EfficientNetB3,
-                efficientnet.EfficientNetB4,
-                efficientnet.EfficientNetB5,
-                efficientnet.EfficientNetB6,
-                efficientnet.EfficientNetB7,
-            ]
-            model = models[compound_scale]
-        else:
-            model = efficientnet.EfficientNetL2
-        xx = model(weights="imagenet", include_top=False, input_shape=input_shape)  # or weights='imagenet'
-    elif name.startswith("se_resnext"):
+        model_name = "EfficientNet" + name_lower[-2].upper() + name_lower[-1]
+        model_class = getattr(efficientnet, model_name)
+        xx = model_class(weights="imagenet", include_top=False, input_shape=input_shape)  # or weights='imagenet'
+    elif name_lower.startswith("se_resnext"):
         from keras_squeeze_excite_network import se_resnext
 
-        if name.endswith("101"):  # se_resnext101
+        if name_lower.endswith("101"):  # se_resnext101
             depth = [3, 4, 23, 3]
         else:  # se_resnext50
             depth = [3, 4, 6, 3]
         xx = se_resnext.SEResNextImageNet(weights="imagenet", input_shape=input_shape, include_top=False, depth=depth)
-    elif name.startswith("resnest"):
+    elif name_lower.startswith("resnest"):
         from backbones import resnest
 
-        if name == "resnest50":
+        if name_lower == "resnest50":
             xx = resnest.ResNest50(input_shape=input_shape)
         else:
             xx = resnest.ResNest101(input_shape=input_shape)
-    elif name.startswith("mobilenetv3"):
+    elif name_lower.startswith("mobilenetv3"):
         from backbones import mobilenet_v3
 
-        if "small" in name:
+        if "small" in name_lower:
             xx = mobilenet_v3.MobileNetV3Small(input_shape=input_shape, include_top=False, weights="imagenet")
         else:
             xx = mobilenet_v3.MobileNetV3Large(input_shape=input_shape, include_top=False, weights="imagenet")
-    elif "mobilefacenet" in name or "mobile_facenet" in name:
+    elif "mobilefacenet" in name_lower or "mobile_facenet" in name_lower:
         from backbones import mobile_facenet
 
-        use_se = True if "se" in name else False
+        use_se = True if "se" in name_lower else False
         xx = mobile_facenet.mobile_facenet(input_shape=input_shape, include_top=False, name=name, use_se=use_se)
+    elif hasattr(keras.applications, name):
+        model_class = getattr(keras.applications, name)
+        xx = model_class(weights="imagenet", include_top=False, input_shape=input_shape)
     else:
         return None
     xx.trainable = True
@@ -191,14 +180,15 @@ def add_l2_regularizer_2_model(model, weight_decay, custom_objects={}, apply_to_
 
 
 def replace_ReLU_with_PReLU(model):
+    from tensorflow.keras.layers import ReLU, PReLU, Activation
+
     def convert_ReLU(layer):
         # print(layer.name)
-        if isinstance(layer, keras.layers.ReLU):
+        if isinstance(layer, ReLU) or (isinstance(layer, Activation) and layer.activation == keras.activations.relu):
             print(">>>> Convert ReLU:", layer.name)
-            return keras.layers.PReLU(shared_axes=[1, 2], name=layer.name)
+            return PReLU(shared_axes=[1, 2], name=layer.name)
         return layer
 
-    # model = keras.applications.MobileNet(include_top=False, input_shape=(112, 112, 3), weights=None)
     return keras.models.clone_model(model, clone_function=convert_ReLU)
 
 
@@ -262,7 +252,7 @@ class Train:
         lr_min=0,
         eval_freq=1,
         random_status=0,
-        dataset_cache=False,
+        image_per_class=0,  # For triplet, image_per_class will be `4` if it's `< 4`
     ):
         custom_objects.update(
             {
@@ -340,7 +330,7 @@ class Train:
         self.my_hist = [ii for ii in self.basic_callbacks if isinstance(ii, myCallbacks.My_history)][0]
         self.custom_callbacks = []
 
-        self.data_path, self.random_status, self.dataset_cache = data_path, random_status, dataset_cache
+        self.data_path, self.random_status, self.image_per_class = data_path, random_status, image_per_class
         self.train_ds, self.steps_per_epoch, self.classes, self.is_triplet_dataset = None, None, 0, False
         self.default_optimizer = "adam"
         self.metrics = ["accuracy"]
@@ -356,7 +346,9 @@ class Train:
             print(">>>> Init triplet dataset...")
             # batch_size = int(self.batch_size / 4 * 1.5)
             batch_size = self.batch_size // 4
-            tt = data.Triplet_dataset(self.data_path, batch_size=batch_size, random_status=self.random_status, random_crop=(100, 100, 3))
+            tt = data.Triplet_dataset(
+                self.data_path, batch_size=batch_size, random_status=self.random_status, random_crop=(100, 100, 3), image_per_class=self.image_per_class
+            )
             self.train_ds = tt.train_dataset
             self.classes = self.train_ds.element_spec[-1].shape[-1]
             self.is_triplet_dataset = True
@@ -365,7 +357,7 @@ class Train:
         if self.train_ds == None or self.is_triplet_dataset == True:
             print(">>>> Init softmax dataset...")
             self.train_ds = data.prepare_dataset(
-                self.data_path, batch_size=self.batch_size, random_status=self.random_status, random_crop=(100, 100, 3), cache=self.dataset_cache,
+                self.data_path, batch_size=self.batch_size, random_status=self.random_status, random_crop=(100, 100, 3), image_per_class=self.image_per_class,
             )
             label_spec = self.train_ds.element_spec[-1]
             if isinstance(label_spec, tuple):
