@@ -321,11 +321,11 @@ class CenterLoss(tf.keras.losses.Loss):
         # embedding = y_pred[:, : self.emb_shape]
         labels = tf.argmax(y_true, axis=1)
         centers_batch = tf.gather(self.centers, labels)
-        diff = centers_batch - embedding
         # loss = tf.reduce_mean(tf.square(embedding - centers_batch))
-        loss = tf.reduce_sum(tf.square(diff), axis=-1) / 2
+        loss = tf.reduce_sum(tf.square(embedding - centers_batch), axis=-1) / 2
 
         # Update centers
+        diff = centers_batch - embedding
         unique_label, unique_idx, unique_count = tf.unique_with_counts(labels)
         appear_times = tf.cast(tf.gather(unique_count, unique_idx), tf.float32)
 

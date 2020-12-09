@@ -22,45 +22,44 @@ def print_buildin_models():
     print(
         """
     >>>> buildin_models
-    mobilenet, mobilenetv2, mobilenetv3_small, mobilenetv3_large, mobilefacenet, se_mobilefacenet
-    resnet34, resnet50, resnet50v2, resnet101, resnet101v2, se_resnext, resnest50, resnest101,
-    efficientnetb0, efficientnetb1, efficientnetb2, efficientnetb3, efficientnetb4, efficientnetb5, efficientnetb6, efficientnetb7,
-    or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
+    MXNet version resnet: r34, r50, r100, r101,
+    Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
+    EfficientNet: efficientnetb[0-7], efficientnetl2,
+    Custom: se_resnext, resnest50, resnest101, mobilenetv3_small, mobilenetv3_large, mobilefacenet, se_mobilefacenet,
+    Or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
     """,
         end="",
     )
 
 
 # MXNET: bn_momentum=0.9, bn_epsilon=2e-5, TF default: bn_momentum=0.99, bn_epsilon=0.001
-def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), output_layer="GDC", bn_momentum=0.99, bn_epsilon=0.001, **kwargs):
+def buildin_models(
+    name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), output_layer="GDC", bn_momentum=0.99, bn_epsilon=0.001, add_pointwise_conv=False, **kwargs
+):
     name_lower = name.lower()
     """ Basic model """
     if name_lower == "mobilenet":
         xx = keras.applications.MobileNet(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name_lower == "mobilenetv2":
         xx = keras.applications.MobileNetV2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
-    elif name_lower == "resnet34":
-        from backbones import resnet
+    elif name_lower == "r34" or name_lower == "r50" or name_lower == "r100" or name_lower == "r101":
+        from backbones import resnet  # MXNet insightface version resnet
 
-        xx = resnet.ResNet34(input_shape=input_shape, include_top=False, weights=None, **kwargs)
-    elif name_lower == "r50":
-        from backbones import resnet
-
-        xx = resnet.ResNet50(input_shape=input_shape, include_top=False, weights=None, **kwargs)
-    elif name_lower == "resnet50":
-        xx = keras.applications.ResNet50(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
-    elif name_lower == "resnet50v2":
-        xx = keras.applications.ResNet50V2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
-    elif name_lower == "resnet101":
-        # xx = ResNet101(input_shape=input_shape, include_top=False, weights=None, **kwargs)
-        xx = keras.applications.ResNet101(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
-    elif name_lower == "resnet101v2":
-        xx = keras.applications.ResNet101V2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
+        model_name = "ResNet" + name_lower[1:]
+        model_class = getattr(resnet, model_name)
+        xx = model_class(input_shape=input_shape, include_top=False, weights=None, **kwargs)
+    elif name_lower.startswith("resnet"):  # keras.applications.ResNetxxx
+        if name_lower.endswith("v2"):
+            model_name = "ResNet" + name_lower[len("resnet") : -2] + "V2"
+        else:
+            model_name = "ResNet" + name_lower[len("resnet") :]
+        model_class = getattr(keras.applications, model_name)
+        xx = model_class(weights="imagenet", include_top=False, input_shape=input_shape)
     elif name_lower.startswith("efficientnet"):
         # import tensorflow.keras.applications.efficientnet as efficientnet
         from backbones import efficientnet
 
-        model_name = "EfficientNet" + name_lower[-2].upper() + name_lower[-1]
+        model_name = "EfficientNet" + name_lower[-2:].upper()
         model_class = getattr(efficientnet, model_name)
         xx = model_class(weights="imagenet", include_top=False, input_shape=input_shape)  # or weights='imagenet'
     elif name_lower.startswith("se_resnext"):
@@ -100,6 +99,11 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), ou
     inputs = xx.inputs[0]
     nn = xx.outputs[0]
 
+    if add_pointwise_conv:  # Model using `pointwise_conv + GDC` is smaller than `E`
+        nn = keras.layers.Conv2D(512, 1, use_bias=False, padding="same")(nn)
+        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
+        nn = keras.layers.PReLU(shared_axes=[1, 2])(nn)
+
     if output_layer == "E":
         """ Fully Connected """
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
@@ -109,9 +113,6 @@ def buildin_models(name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), ou
         nn = keras.layers.Dense(emb_shape, activation=None, use_bias=True, kernel_initializer="glorot_normal")(nn)
     else:
         """ GDC """
-        # nn = keras.layers.Conv2D(512, 1, use_bias=False)(nn)
-        # nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
-        # nn = keras.layers.PReLU(shared_axes=[1, 2])(nn)
         nn = keras.layers.DepthwiseConv2D(int(nn.shape[1]), depth_multiplier=1, use_bias=False)(nn)
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
         if dropout > 0 and dropout < 1:

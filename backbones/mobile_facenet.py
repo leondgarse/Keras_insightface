@@ -113,9 +113,9 @@ def mobile_facenet(
         M = DepthwiseConv2D(int(M.shape[1]), depth_multiplier=1, use_bias=False)(M)  # (1, 1, 512)
         M = BatchNormalization(axis=channel_axis)(M)
 
-        M = Conv2D(emb_shape, 1, use_bias=False, activation=None)(M)
         if dropout > 0 and dropout < 1:
             M = Dropout(dropout)(M)
+        M = Conv2D(emb_shape, 1, use_bias=False, activation=None)(M)
         M = Flatten()(M)
         M = BatchNormalization(axis=channel_axis, name="embedding")(M)
 

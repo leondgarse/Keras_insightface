@@ -1,6 +1,3 @@
-"""
-Copied from https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/keras/applications/resnet.py
-"""
 # Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +13,9 @@ Copied from https://github.com/tensorflow/tensorflow/blob/master/tensorflow/pyth
 # limitations under the License.
 # ==============================================================================
 # pylint: disable=invalid-name
-"""ResNet models for Keras.
+"""
+Copied from https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/keras/applications/resnet.py
+This is intend to implemente the MXNet insightface version ResNet
 
 Reference:
   - [Deep Residual Learning for Image Recognition](
@@ -199,7 +198,7 @@ def ResNet34(include_top=True,
   """Instantiates the ResNet34 architecture."""
 
   def stack_fn(x):
-    x = stack1(x, 64, 3, stride1=2, name='conv2')
+    x = stack1(x, 64, 3, name='conv2')
     x = stack1(x, 128, 4, name='conv3')
     x = stack1(x, 256, 6, name='conv4')
     return stack1(x, 512, 3, name='conv5')
@@ -217,10 +216,46 @@ def ResNet50(include_top=True,
   """Instantiates the ResNet50 architecture."""
 
   def stack_fn(x):
-    x = stack1(x, 64, 3, stride1=2, name='conv2')
+    x = stack1(x, 64, 3, name='conv2')
     x = stack1(x, 128, 4, name='conv3')
     x = stack1(x, 256, 14, name='conv4')
     return stack1(x, 512, 3, name='conv5')
 
   return ResNet(stack_fn, False, False, 'resnet50', include_top, weights,
+                input_tensor, input_shape, pooling, classes, **kwargs)
+
+def ResNet100(include_top=True,
+             weights='imagenet',
+             input_tensor=None,
+             input_shape=None,
+             pooling=None,
+             classes=1000,
+             **kwargs):
+  """Instantiates the ResNet50 architecture."""
+
+  def stack_fn(x):
+    x = stack1(x, 64, 3, name='conv2')
+    x = stack1(x, 128, 13, name='conv3')
+    x = stack1(x, 256, 30, name='conv4')
+    return stack1(x, 512, 3, name='conv5')
+
+  return ResNet(stack_fn, False, False, 'resnet100', include_top, weights,
+                input_tensor, input_shape, pooling, classes, **kwargs)
+
+def ResNet101(include_top=True,
+             weights='imagenet',
+             input_tensor=None,
+             input_shape=None,
+             pooling=None,
+             classes=1000,
+             **kwargs):
+  """Instantiates the ResNet50 architecture."""
+
+  def stack_fn(x):
+    x = stack1(x, 64, 3, name='conv2')
+    x = stack1(x, 128, 4, name='conv3')
+    x = stack1(x, 256, 23, name='conv4')
+    return stack1(x, 512, 3, name='conv5')
+
+  return ResNet(stack_fn, False, False, 'resnet101', include_top, weights,
                 input_tensor, input_shape, pooling, classes, **kwargs)

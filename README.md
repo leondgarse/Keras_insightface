@@ -97,7 +97,7 @@
     data_path = data_basic_path + 'faces_casia_112x112_folders'
     eval_paths = [data_basic_path + ii for ii in ['faces_casia/lfw.bin', 'faces_casia/cfp_fp.bin', 'faces_casia/agedb_30.bin']]
 
-    basic_model = train.buildin_models("resnet34", dropout=0.4, emb_shape=512, output_layer='E', bn_momentum=0.9, bn_epsilon=2e-5)
+    basic_model = train.buildin_models("r34", dropout=0.4, emb_shape=512, output_layer='E', bn_momentum=0.9, bn_epsilon=2e-5)
     basic_model = train.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=True)
     tt = train.Train(data_path, save_path='NNNN_resnet34_MXNET_E_SGD_REG_1e3_lr1e1_random0_arc_S32_E1_BS512_casia.h5',
         eval_paths=eval_paths, basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
@@ -214,6 +214,14 @@
     tt.train(sch, 0)
     ```
   - **train.print_buildin_models** is used to print build-in model names in `train.py`.
+    ```py
+    >>>> buildin_models
+    MXNet version resnet: r34, r50, r100, r101,
+    Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
+    EfficientNet: efficientnetb[0-7], efficientnetl2,
+    Custom: se_resnext, resnest50, resnest101, mobilenetv3_small, mobilenetv3_large, mobilefacenet, se_mobilefacenet,
+    Or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
+    ```
   - **train.add_l2_regularizer_2_model** will add `l2_regularizer` to model layers. The actual added `l2` value is divided by `2`.
     ```py
     # Will add keras.regularizers.L2(5e-4) to all layers
