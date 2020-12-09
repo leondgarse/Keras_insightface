@@ -65,7 +65,7 @@
   | ---------------- | ------- | -------- | -------- | -------- | ------ |
   | [Mobilenet](checkpoints/mobilenet_adamw_BS256_E80_arc_tripD_basic_agedb_30_epoch_123_0.955333.h5)        | Emore |0.996167 | 0.948429 | 0.955333 | 120    |
   | [se_mobilefacenet](checkpoints/keras_se_mobile_facenet_emore_triplet_basic_agedb_30_epoch_100_0.958333.h5) | Emore | 0.996333 | 0.964714 | 0.958833 | 100    |
-  | [Resnet34 on CASIA](https://drive.google.com/file/d/1EoYQytka3w7EeTh1v9WioBNxolGnPWp6/view?usp=sharing) | Emore | 0.994000 | 0.965429 | 0.942333 | 40     |
+  | [Resnet34](https://drive.google.com/file/d/1EoYQytka3w7EeTh1v9WioBNxolGnPWp6/view?usp=sharing) | CASIA | 0.994000 | 0.965429 | 0.942333 | 40     |
   | ResNet101V2      | Emore | 0.997333 | 0.976714 | 0.971000 | 110    |
   | ResNeSt101       | Emore | 0.997667 | 0.981000 | 0.973333 | 100    |
 ***
@@ -85,7 +85,7 @@
     ```
   - **Keras version**
     - Use a self defined `Resnet34` based on [keras application resnet](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/keras/applications/resnet.py), which is similar with the MXNet version. Other parameters is almost a mimic of the MXNet version.
-    - `MXNet SGD` behaves different with `tfa SGDW`, detail explains [here my notebook weight-decay](https://github.com/leondgarse/Atom_notebook/blob/master/public/2020/12-01_Insightface_training.md#weight-decay). It's mathematically `adding l2 regularizer` works same with `MXNet SGD weight_decay with momentum`, as long as applying `wd_mult`.
+    - `MXNet SGD` behaves different with `tfa SGDW`, detail explains [here the discussion](https://github.com/leondgarse/Keras_insightface/discussions/19). It's mathematically `adding l2 regularizer` works same with `MXNet SGD weight_decay with momentum`, as long as applying `wd_mult`.
     - In my test, `MXNet wd_mult` is NOT working if just added in `mx.symbol.Variable`, has to be added by `opt.set_wd_mult`.
     - Have to train 1 epoch to warmup first, maybe caused be the initializer.
     - The difference in training accuracy is that the MXNet version calculating accuracy **after** applying `arcface` conversion, mine is before.
@@ -401,10 +401,10 @@
     opt = tfa.optimizers.AdamW(weight_decay=5e-5)
     sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "epoch": 60, "optimizer": opt}]
     ```
-    The different behavior of `mx.optimizer.SGD weight_decay` / `tfa.optimizers.SGDW weight_decay` / `L2_regulalizer` is explained [here my notebook weight-decay](https://github.com/leondgarse/Atom_notebook/blob/master/public/2020/12-01_Insightface_training.md#weight-decay).
+    The different behavior of `mx.optimizer.SGD weight_decay` / `tfa.optimizers.SGDW weight_decay` / `L2_regulalizer` is explained [here the discussion](https://github.com/leondgarse/Keras_insightface/discussions/19).
   - [Train test on cifar10](https://colab.research.google.com/drive/1tD2OrnrYtFPC7q_i62b8al1o3qelU-Vi?usp=sharing)
 ## Multi GPU train using horovod or distribute strategy
-  - **Horovod** usage is still under test. [Testing tensorflow horovod and distribute strategy](https://github.com/leondgarse/Atom_notebook/blob/master/public/2020/08-11_keras_train.md#tensorflow-horovod-and-distribute)
+  - **Horovod** usage is still under test. [Tensorflow multi GPU training using distribute strategies vs Horovod](https://github.com/leondgarse/Keras_insightface/discussions/17)
   - Add an overall `tf.distribute.MirroredStrategy().scope()` `with` block. This is just working in my case... The `batch_size` will be multiplied by `count of GPUs`.
     ```py
     tf.__version__
@@ -547,7 +547,7 @@
     ```sh
     $ CUDA_VISIBLE_DEVICES='-1' ./data_drop_top_k.py -M checkpoints/TT_mobilenet_topk_bs256.h5 -D /datasets/faces_casia_112x112_folders/ -L 20
     ```
-  - [SubCenter_training_Mobilenet_on_CASIA.ipynb](checkpoints/SubCenter_training_Mobilenet_on_CASIA.ipynb)
+  - **[[Discussions] SubCenter_training_Mobilenet_on_CASIA](https://github.com/leondgarse/Keras_insightface/discussions/20)**
 
     | Scenario                                    | Max lfw    | Max cfp_fp | Max agedb_30 |
     | ------------------------------------------- | ---------- | ---------- | ------------ |
@@ -612,7 +612,7 @@
     ]
     tt.train(sch, 0)
     ```
-  - **[Knowledge_distillation_training_Mobilenet_on_CASIA.ipynb](checkpoints/Knowledge_distillation_training_Mobilenet_on_CASIA.ipynb)**
+  - **[[Discussions] Knowledge_distillation_training_Mobilenet_on_CASIA](https://github.com/leondgarse/Keras_insightface/discussions/22)**
 
     | Teacher | Dropout | Optimizer | Distill | Max lfw    | Max cfp_fp | Max agedb_30 |
     | ------- | ------- | --------- | ------- | ---------- | ---------- | ------------ |
