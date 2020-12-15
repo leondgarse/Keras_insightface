@@ -1,55 +1,26 @@
 # ___Keras insightface___
-  - Keras implementation of [deepinsight/insightface](https://github.com/deepinsight/insightface).
-  - This is still under working, many things are still testing here, so there may lots of errors atm.
-  - **Any advise is welcome**!
-  - **Environment**
-    ```py
-    # $ ipython
-    Python 3.7.6 | packaged by conda-forge | (default, Mar 23 2020, 23:03:20)
-    In [1]: tf.__version__
-    Out[1]: '2.3.1'
-    ```
-    Or `tf-nightly`
-    ```py
-    In [1]: tf.__version__
-    Out[1]: '2.4.0-dev20200806'
-    ```
-  - **Default import**
-    ```py
-    import os
-    import sys
-    import pandas as pd
-    import numpy as np
-    import tensorflow as tf
-    from tensorflow import keras
+***
 
-    gpus = tf.config.experimental.list_physical_devices("GPU")
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
-    ```
-  - **Conda install `tf-nightly`**
-    ```sh
-    conda create -n tf-nightly
-    conda activate tf-nightly
-    pip install tf-nightly glob2 pandas tqdm scikit-image scikit-learn ipython
+# License
+  This is the keras implementation of [deepinsight/insightface](https://github.com/deepinsight/insightface), and is released under the MIT License. There is no limitation for both acadmic and commercial usage.
 
-    # Install cuda 10.1 if not installed
-    conda install cudnn=7.6.5=cuda10.1_0
-    ```
+  The training data containing the annotation (and the models trained with these data) are available for non-commercial research purposes only.
 # Table of Contents
   <!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
 
   - [___Keras insightface___](#keras-insightface)
+  - [License](#license)
   - [Table of Contents](#table-of-contents)
   - [Current accuracy](#current-accuracy)
   - [Comparing Resnet34 with original MXNet version](#comparing-resnet34-with-original-mxnet-version)
   - [Usage](#usage)
+  	- [Environment](#environment)
   	- [Beforehand Data Prepare](#beforehand-data-prepare)
   	- [Training scripts](#training-scripts)
   	- [Learning rate](#learning-rate)
   	- [Other backbones](#other-backbones)
   	- [Optimizer with weight decay](#optimizer-with-weight-decay)
-    - [Multi GPU train using horovod or distribute strategy](#multi-gpu-train-using-horovod-or-distribute-strategy)
+  	- [Multi GPU train using horovod or distribute strategy](#multi-gpu-train-using-horovod-or-distribute-strategy)
   - [TFLite model inference time test on ARM32](#tflite-model-inference-time-test-on-arm32)
   - [Sub Center ArcFace](#sub-center-arcface)
   - [Knowledge distillation](#knowledge-distillation)
@@ -126,6 +97,41 @@
 ***
 
 # Usage
+## Environment
+  - **python and tensorflow version**
+    ```py
+    # $ ipython
+    Python 3.7.6 | packaged by conda-forge | (default, Mar 23 2020, 23:03:20)
+    In [1]: tf.__version__
+    Out[1]: '2.3.1'
+    ```
+    Or `tf-nightly`
+    ```py
+    In [1]: tf.__version__
+    Out[1]: '2.4.0-dev20200806'
+    ```
+  - **Default import**
+    ```py
+    import os
+    import sys
+    import pandas as pd
+    import numpy as np
+    import tensorflow as tf
+    from tensorflow import keras
+
+    gpus = tf.config.experimental.list_physical_devices("GPU")
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+    ```
+  - **Conda install `tf-nightly`**
+    ```sh
+    conda create -n tf-nightly
+    conda activate tf-nightly
+    pip install tf-nightly glob2 pandas tqdm scikit-image scikit-learn ipython
+
+    # Install cuda 10.1 if not installed
+    conda install cudnn=7.6.5=cuda10.1_0
+    ```
 ## Beforehand Data Prepare
   - **Training Data** in this project is downloaded from [Insightface Dataset Zoo](https://github.com/deepinsight/insightface/wiki/Dataset-Zoo)
   - **Evaluating data** is `LFW` `CFP-FP` `AgeDB-30` bin files included in `MS1M-ArcFace` dataset
