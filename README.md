@@ -36,7 +36,7 @@
   | ---------------- | ------- | -------- | -------- | -------- | ------ |
   | [Mobilenet](checkpoints/mobilenet_adamw_BS256_E80_arc_tripD_basic_agedb_30_epoch_123_0.955333.h5)        | Emore |0.996167 | 0.948429 | 0.955333 | 120    |
   | [se_mobilefacenet](checkpoints/keras_se_mobile_facenet_emore_triplet_basic_agedb_30_epoch_100_0.958333.h5) | Emore | 0.996333 | 0.964714 | 0.958833 | 100    |
-  | [Resnet34](https://drive.google.com/file/d/1EoYQytka3w7EeTh1v9WioBNxolGnPWp6/view?usp=sharing) | CASIA | 0.994000 | 0.965429 | 0.942333 | 40     |
+  | Resnet34         | CASIA | 0.9935 | 0.9549 | 0.9458 | 40     |
   | ResNet101V2      | Emore | 0.997333 | 0.976714 | 0.971000 | 110    |
   | ResNeSt101       | Emore | 0.997667 | 0.981000 | 0.973333 | 100    |
 ***
