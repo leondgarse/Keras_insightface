@@ -4,13 +4,14 @@ import sys
 import os
 
 
-def MXnet_record_to_folder(dataset_dir):
+def MXnet_record_to_folder(dataset_dir, save_dir=None):
     import os
     import numpy as np
     import mxnet as mx
     from tqdm import tqdm
 
-    save_dir = (dataset_dir[:-1] if dataset_dir.endswith("/") else dataset_dir) + "_112x112_folders"
+    if save_dir == None:
+        save_dir = (dataset_dir[:-1] if dataset_dir.endswith("/") else dataset_dir) + "_112x112_folders"
     idx_path = os.path.join(dataset_dir, "train.idx")
     bin_path = os.path.join(dataset_dir, "train.rec")
 
@@ -57,9 +58,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-D", "--dataset_dir", type=str, required=True, help="MXnet record dataset directory")
     parser.add_argument("-T", "--test_bins", nargs="*", type=None, help="Test bin files in dataset_dir be converted")
+    parser.add_argument("-S", "--save_dir", default=None, help="Folder path for saving dataset images")
 
     args = parser.parse_known_args(sys.argv[1:])[0]
     if args.test_bins != None and len(args.test_bins) != 0:
         args.test_bins = [os.path.join(args.dataset_dir, ii) for ii in args.test_bins]
         MXnet_bin_files_to_tf(args.test_bins)
-    MXnet_record_to_folder(args.dataset_dir)
+    MXnet_record_to_folder(args.dataset_dir, args.save_dir)
