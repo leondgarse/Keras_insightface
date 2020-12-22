@@ -34,11 +34,11 @@
 
   | Model backbone   | Dataset | lfw      | cfp_fp   | agedb_30 | Epochs |
   | ---------------- | ------- | -------- | -------- | -------- | ------ |
-  | [Mobilenet](checkpoints/mobilenet_adamw_BS256_E80_arc_tripD_basic_agedb_30_epoch_123_0.955333.h5)        | Emore |0.996167 | 0.948429 | 0.955333 | 120    |
-  | [se_mobilefacenet](checkpoints/keras_se_mobile_facenet_emore_triplet_basic_agedb_30_epoch_100_0.958333.h5) | Emore | 0.996333 | 0.964714 | 0.958833 | 100    |
-  | [Resnet34(scale=True, softmax warmup)](https://drive.google.com/file/d/1EoYQytka3w7EeTh1v9WioBNxolGnPWp6/view?usp=sharing) | CASIA | 0.994000 | 0.965429 | 0.942333 | 40     |
-  | ResNet101V2      | Emore | 0.997333 | 0.976714 | 0.971000 | 110    |
-  | ResNeSt101       | Emore | 0.997667 | 0.981000 | 0.973333 | 100    |
+  | [Mobilenet](https://drive.google.com/file/d/1Sumc1LvVKJ4j1adD4zLEMw_XZgv9akFp/view?usp=sharing)        | Emore |0.996167 | 0.948429 | 0.955333 | 120    |
+  | [se_mobilefacenet](https://drive.google.com/file/d/1AjoIxOkiKIzAGml5Jdpq05Y4vM4Ke-Kj/view?usp=sharing) | Emore | 0.996333 | 0.964714 | 0.958833 | 100    |
+  | [Resnet34](https://drive.google.com/file/d/1qmUcSDyftp7TScJHQQXm33wEwDfuTc4l/view?usp=sharing) | CASIA | 0.993667 | 0.949143 | 0.946333 | 40     |
+  | [ResNet101V2](https://drive.google.com/file/d/1-5YHQmT1iNI5-jKogJ1-sh94CS7ptHgb/view?usp=sharing)      | Emore | 0.997833 | 0.946 | 0.972833 | 40    |
+  | [ResNeSt101](https://drive.google.com/file/d/1RVjTRhE8Evqyjl83EVBMOjInxtDtxGyH/view?usp=sharing)       | Emore | 0.997667 | 0.981000 | 0.973333 | 100    |
 ***
 
 # Comparing Resnet34 with original MXNet version
@@ -70,7 +70,7 @@
 
     basic_model = train.buildin_models("r34", dropout=0.4, emb_shape=512, output_layer='E', bn_momentum=0.9, bn_epsilon=2e-5)
     basic_model = train.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=True)
-    tt = train.Train(data_path, save_path='NNNN_resnet34_MXNET_E_SGD_REG_1e3_lr1e1_random0_arc_S32_E1_BS512_casia.h5',
+    tt = train.Train(data_path, save_path='resnet34_MXNET_E_SGD_REG_1e3_lr1e1_random0_arc_S32_E1_BS512_casia.h5',
         eval_paths=eval_paths, basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
         batch_size=512, random_status=0, output_weight_decay=1)
 
@@ -91,24 +91,31 @@
     | TF resnet34 | SGDW      | 5e-4 | None   | 0.9927, 0.9476, 0.9388, E32     |
     | TF resnet34 | SGDW      | 1e-3 | None   | 0.9935, **0.9549**, 0.9458, E35 |
     | TF resnet34 | SGD       | None | 5e-4   | **0.9940**, 0.9466, 0.9415, E31 |
-    | TF resnet34 | SGD       | None | 1e-3   | 0.9935, 0.9484, **0.9485**, E31 |
+    | TF resnet34 | SGD       | None | 1e-3   | 0.9937, 0.9491, **0.9463**, E31 |
 
-    ![](checkpoints/resnet34.svg)
+    ![](checkpoints/resnet34_casia.svg)
 ***
 
 # Usage
 ## Environment
+  - **Nvidia CUDA and cudnn** `Tensorflow 2.4.0` now using `cuda==11.0` `cudnn==8.0`
+    - [Install cuda-toolkit](https://developer.nvidia.com/cuda-toolkit)
+    - [Install cudnn](https://developer.nvidia.com/rdp/cudnn-download)
   - **python and tensorflow version**
     ```py
     # $ ipython
     Python 3.7.6 | packaged by conda-forge | (default, Mar 23 2020, 23:03:20)
     In [1]: tf.__version__
-    Out[1]: '2.3.1'
+    Out[1]: '2.4.0'
+
+    In [2]: import tensorflow_addons as tfa
+    In [3]: tfa.__version__
+    Out[3]: '0.12.0-dev'
     ```
     Or `tf-nightly`
     ```py
     In [1]: tf.__version__
-    Out[1]: '2.4.0-dev20200806'
+    Out[1]: '2.5.0-dev20201218'
     ```
   - **Default import**
     ```py
@@ -127,10 +134,7 @@
     ```sh
     conda create -n tf-nightly
     conda activate tf-nightly
-    pip install tf-nightly glob2 pandas tqdm scikit-image scikit-learn ipython
-
-    # Install cuda 10.1 if not installed
-    conda install cudnn=7.6.5=cuda10.1_0
+    pip install tf-nightly tfa-nightly glob2 pandas tqdm scikit-image scikit-learn ipython
     ```
 ## Beforehand Data Prepare
   - **Training Data** in this project is downloaded from [Insightface Dataset Zoo](https://github.com/deepinsight/insightface/wiki/Dataset-Zoo)
@@ -421,9 +425,6 @@
   - **Horovod** usage is still under test. [Tensorflow multi GPU training using distribute strategies vs Horovod](https://github.com/leondgarse/Keras_insightface/discussions/17)
   - Add an overall `tf.distribute.MirroredStrategy().scope()` `with` block. This is just working in my case... The `batch_size` will be multiplied by `count of GPUs`.
     ```py
-    tf.__version__
-    # 2.3.0-dev20200523
-
     with tf.distribute.MirroredStrategy().scope():
         basic_model = ...
         tt = train.Train(..., batch_size=1024, ...) # With 2 GPUs, `batch_size` will be 2048
