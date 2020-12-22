@@ -31,6 +31,7 @@
 ***
 
 # Current accuracy
+  - Model structures may change due to changing default behavior of building models.
 
   | Model backbone   | Dataset | lfw      | cfp_fp   | agedb_30 | Epochs |
   | ---------------- | ------- | -------- | -------- | -------- | ------ |

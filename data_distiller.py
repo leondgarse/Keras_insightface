@@ -10,38 +10,34 @@ gpus = tf.config.experimental.list_physical_devices("GPU")
 for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
 
-try:
+class Mxnet_model_interf:
     import mxnet as mx
-except:
-    pass
 
+    def __init__(self, model_file, layer="fc1", image_size=(112, 112)):
+        cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+        if len(cvd) > 0 and int(cvd) != -1:
+            ctx = [self.mx.gpu(ii) for ii in range(len(cvd.split(",")))]
+        else:
+            ctx = [self.mx.cpu()]
 
-def get_mxnet_model(model, layer="fc1", image_size=(112, 112)):
-    cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
-    if len(cvd) > 0 and int(cvd) != -1:
-        ctx = [mx.gpu(ii) for ii in range(len(cvd.split(",")))]
-    else:
-        ctx = [mx.cpu()]
+        prefix, epoch = model_file.split(",")
+        print(">>>> loading mxnet model:", prefix, epoch, ctx)
+        sym, arg_params, aux_params = self.mx.model.load_checkpoint(prefix, int(epoch))
+        all_layers = sym.get_internals()
+        sym = all_layers[layer + "_output"]
+        model = self.mx.mod.Module(symbol=sym, context=ctx, label_names=None)
+        model.bind(data_shapes=[("data", (1, 3, image_size[0], image_size[1]))])
+        model.set_params(arg_params, aux_params)
+        self.model = model
 
-    prefix, epoch = model.split(",")
-    print(">>>> loading mxnet model:", prefix, epoch, ctx)
-    sym, arg_params, aux_params = mx.model.load_checkpoint(prefix, int(epoch))
-    all_layers = sym.get_internals()
-    sym = all_layers[layer + "_output"]
-    model = mx.mod.Module(symbol=sym, context=ctx, label_names=None)
-    model.bind(data_shapes=[("data", (1, 3, image_size[0], image_size[1]))])
-    model.set_params(arg_params, aux_params)
-    return model
-
-
-def mxnet_model_infer(model, imgs):
-    # print(imgs.shape, imgs[0])
-    imgs = imgs.transpose(0, 3, 1, 2)
-    data = mx.nd.array(imgs)
-    db = mx.io.DataBatch(data=(data,))
-    model.forward(db, is_train=False)
-    emb = model.get_outputs()[0].asnumpy()
-    return emb
+    def __call__(self, imgs):
+        # print(imgs.shape, imgs[0])
+        imgs = imgs.transpose(0, 3, 1, 2)
+        data = self.mx.nd.array(imgs)
+        db = self.mx.io.DataBatch(data=(data,))
+        self.model.forward(db, is_train=False)
+        emb = self.model.get_outputs()[0].asnumpy()
+        return emb
 
 
 def data_distiller(data_path, model, dest_file=None, batch_size=256, limit=-1):
@@ -61,20 +57,21 @@ def data_distiller(data_path, model, dest_file=None, batch_size=256, limit=-1):
         if model.endswith(".h5"):
             # Keras model file
             basic_model = tf.keras.models.load_model(model, compile=False)
-            infer = lambda imgs: basic_model((imgs - 127.5) * 0.0078125).numpy()
+            interpreter = lambda imgs: basic_model((imgs - 127.5) * 0.0078125).numpy()
         else:
             # MXNet model file, like models/r50-arcface-emore/model,1
-            basic_model = get_mxnet_model(model)
-            infer = lambda imgs: mxnet_model_infer(basic_model, imgs.numpy().astype("uint8"))
+            basic_model = Mxnet_model_interf(model)
+            interpreter = lambda imgs: basic_model(imgs.numpy().astype("uint8"))
     else:
         # TF model
-        infer = lambda imgs: model((imgs - 127.5) * 0.0078125).numpy()
+        interpreter = lambda imgs: model((imgs - 127.5) * 0.0078125).numpy()
 
     """ Extract embeddings """
     new_image_names, new_image_classes, embeddings = [], [], []
     for imm, label in tqdm(ds, "Embedding", total=total):
         imgs = tf.stack([tf_imread(ii) for ii in imm])
-        emb = normalize(infer(imgs), axis=1)
+        # emb = normalize(interpreter(imgs), axis=1)
+        emb = interpreter(imgs)
 
         new_image_names.extend(imm.numpy())
         new_image_classes.extend(label.numpy())
@@ -88,8 +85,6 @@ def data_distiller(data_path, model, dest_file=None, batch_size=256, limit=-1):
         dest_file = src_name + "_label_embs_normed_{}.npz".format(embeddings[0].shape[0])
     dest_file = dest_file if dest_file.endswith(".npz") else dest_file + ".npz"
     np.savez_compressed(dest_file, image_names=new_image_names, image_classes=new_image_classes, embeddings=embeddings)
-    # with open(dest_file, "wb") as ff:
-    #     pickle.dump({"image_names": new_image_names, "image_classes": new_image_classes, "embeddings": embeddings}, ff)
     print(">>>> Output:", dest_file)
 
     return dest_file

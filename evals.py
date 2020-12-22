@@ -29,7 +29,7 @@ class eval_callback(tf.keras.callbacks.Callback):
         self.test_names = os.path.splitext(os.path.basename(test_bin_file))[0]
         self.steps = int(np.ceil(len(bins) / batch_size))
         self.basic_model = basic_model
-        self.max_accuracy, self.cur_acc = 0.0, 0.0
+        self.max_accuracy, self.cur_acc, self.acc_thresh = 0.0, 0.0, 0.0
         self.save_model, self.eval_freq, self.flip, self.PCA_acc = save_model, eval_freq, flip, PCA_acc
         if eval_freq > 1:
             # If eval_freq > 1, do evaluation on batch, and also on epoch.
@@ -109,7 +109,7 @@ class eval_callback(tf.keras.callbacks.Callback):
         acc_count = np.array([(tt > vv).sum() + (ff <= vv).sum() for vv in ff[-t_steps:]])
         acc_max_indx = np.argmax(acc_count)
         acc_max = acc_count[acc_max_indx] / dists.shape[0]
-        acc_thresh = ff[acc_max_indx - t_steps]
+        self.acc_thresh = ff[acc_max_indx - t_steps]
         self.cur_acc = acc_max
 
         if self.PCA_acc:
@@ -117,12 +117,12 @@ class eval_callback(tf.keras.callbacks.Callback):
             acc2, std2 = np.mean(accuracy), np.std(accuracy)
             tf.print(
                 "\n>>>> %s evaluation max accuracy: %f, thresh: %f, previous max accuracy: %f, PCA accuray = %f ± %f"
-                % (self.test_names, acc_max, acc_thresh, self.max_accuracy, acc2, std2)
+                % (self.test_names, acc_max, self.acc_thresh, self.max_accuracy, acc2, std2)
             )
         else:
             tf.print(
                 "\n>>>> %s evaluation max accuracy: %f, thresh: %f, previous max accuracy: %f"
-                % (self.test_names, acc_max, acc_thresh, self.max_accuracy)
+                % (self.test_names, acc_max, self.acc_thresh, self.max_accuracy)
             )
 
         if acc_max > self.max_accuracy:

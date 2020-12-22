@@ -45,6 +45,7 @@ class My_history(keras.callbacks.Callback):
             self.history.setdefault(k, []).append(float(v))
         for ee in self.evals:
             self.history.setdefault(ee.test_names, []).append(float(ee.cur_acc))
+            self.history.setdefault(ee.test_names + "_thresh", []).append(float(ee.acc_thresh))
         for kk, vv in self.custom_obj.items():
             tt = losses_utils.compute_weighted_loss(vv())
             self.history.setdefault(kk, []).append(tt)
@@ -179,4 +180,4 @@ def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_de
         )
     my_history = My_history(os.path.splitext(checkpoint)[0] + "_hist.json", evals=evals)
     # tensor_board_log = keras.callbacks.TensorBoard(log_dir=os.path.splitext(checkpoint)[0] + '_logs')
-    return [model_checkpoint, lr_scheduler, my_history, Gently_stop_callback()]
+    return [my_history, model_checkpoint, lr_scheduler, Gently_stop_callback()]

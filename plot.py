@@ -115,7 +115,7 @@ def hist_plot(
     init_epoch=0,
     pre_item={},
     fig_label=None,
-    eval_split=False,
+    eval_split=True,
     limit_loss_max=1e9,
 ):
     if axes is None:
@@ -131,8 +131,7 @@ def hist_plot(
         # Empty titles
         for ax in axes:
             ax.set_title("")
-        if len(axes) == 6:
-            eval_split = True
+        eval_split = True if len(axes) == 6 else False
     axes = axes.tolist()
     if loss_names == None:
         loss_names = [""] * len(loss_lists)
@@ -179,13 +178,13 @@ def hist_plot(
 
     # Keep the same color, but different from line styles.
     eval_id, other_custom_id = 0, 0
+    cur_color = axes[0].lines[-1].get_color()
     for kk, vv in customs_dict.items():
         if kk in EVALS_NAME:
             ax = axes[eval_ax]
             title = kk if len(ax.get_title()) == 0 else ax.get_title() + ", " + kk
             ax.set_title(title)
             linestyle = EVALS_LINE_STYLE[eval_id]
-            cur_color = ax.lines[-1].get_color() if eval_id != 0 else None
             eval_id += 0 if eval_split else 1
             eval_ax += eval_ax_step
         else:
@@ -193,7 +192,6 @@ def hist_plot(
             title = kk if len(ax.get_title()) == 0 else ax.get_title() + ", " + kk
             ax.set_title(title)
             linestyle = EVALS_LINE_STYLE[other_custom_id + 0 if eval_split else 1]
-            cur_color = ax.lines[-1].get_color() if other_custom_id != 0 else None
             other_custom_id += 1
         label = kk + " - " + fig_label if fig_label else kk
         arrays_plot(
@@ -208,14 +206,17 @@ def hist_plot(
     if len(axes) > 3 and other_custom_id > 0:
         axes[other_custom_ax].legend(loc="lower right", fontsize=Default_legend_font_size)
 
+    # cur_color = "k" if len(axes[0].lines) == 1 else axes[0].lines[-1].get_color()
     for ax in axes:
         ymin, ymax = ax.get_ylim()
         mm = (ymax - ymin) * 0.05
         start = init_epoch + 1
         for nn, loss in zip(loss_names, loss_lists):
-            ax.plot([start, start], [ymin + mm, ymax - mm], color="k", linestyle="--")
-            # ax.text(xx[ss[0]], np.mean(ax.get_ylim()), nn)
-            ax.text(start + len(loss) * 0.05, ymin + mm * 4, nn, va="bottom", rotation=-90, fontweight="roman")
+            # ax.plot([start, start], [ymin + mm, ymax - mm], color="k", linestyle="--")
+            ax.plot([start, start], [ymin + mm, ymax - mm], color=cur_color, linestyle="--")
+            # ax.text(start + len(loss) * 0.05, np.mean(ax.get_ylim()), nn, va="top", rotation=-90, fontweight="roman", c=cur_color)
+            # ax.text(start + len(loss) * 0.05, ymax - mm * 4, nn, va="top", rotation=-90, fontweight="roman", c=cur_color)
+            ax.text(start + len(loss) * 0.05, ymin + mm * 4, nn, va="bottom", rotation=-90, fontweight="roman", c=cur_color)
             start += len(loss)
 
     fig.tight_layout()
