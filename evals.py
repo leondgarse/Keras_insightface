@@ -23,8 +23,6 @@ class eval_callback(tf.keras.callbacks.Callback):
         _imread = lambda xx: (tf.cast(tf.image.decode_jpeg(xx, channels=3), "float32") - 127.5) * 0.0078125
         ds = ds.map(_imread)
         self.ds = ds.batch(batch_size)
-        if flip:
-            self.ds_flip = self.ds.map(lambda xx: tf.image.flip_left_right(xx))
         self.test_issame = np.array(issame_list)
         self.test_names = os.path.splitext(os.path.basename(test_bin_file))[0]
         self.steps = int(np.ceil(len(bins) / batch_size))
@@ -39,8 +37,11 @@ class eval_callback(tf.keras.callbacks.Callback):
         self.is_distribute = False
         if tf.distribute.has_strategy():
             self.is_distribute = True
-            strategy = tf.distribute.get_strategy()
-            self.num_replicas = strategy.num_replicas_in_sync
+            self.strategy = tf.distribute.get_strategy()
+            self.num_replicas = self.strategy.num_replicas_in_sync
+            options = tf.data.Options()
+            options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+            self.ds = self.strategy.experimental_distribute_dataset(self.ds.with_options(options))
 
     def __do_predict__(self):
         embs = []
@@ -54,17 +55,14 @@ class eval_callback(tf.keras.callbacks.Callback):
 
     def __do_predict_distribute__(self):
         embs = []
-        pp = self.basic_model.make_predict_function()
-        aa = iter(self.ds)
-        if self.flip:
-            bb = iter(self.ds_flip)
-        for _ in tqdm(range(self.steps), "Evaluating " + self.test_names, total=self.steps):
-            emb = pp(aa)
+        for img_batch in tqdm(self.ds, "Evaluating " + self.test_names, total=self.steps):
+            emb = self.strategy.run(self.basic_model, args=(img_batch,)).values
+            emb = tf.concat(emb, axis=0)
             if self.flip:
-                emb_f = pp(bb)
+                emb_f = self.strategy.run(lambda xx: self.basic_model(tf.image.flip_left_right(xx)), args=(img_batch,)).values
+                emb_f = tf.concat(emb_f, axis=0)
                 emb = emb + emb_f
-            # Dont know how to handle this, for multi GPU, emb is calculated multi times...
-            embs.extend(emb[: emb.shape[0] // self.num_replicas].numpy())
+            embs.extend(emb.numpy())
         return np.array(embs)
 
     def __eval_func__(self, cur_step=0, logs=None, eval_freq=1):

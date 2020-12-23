@@ -63,14 +63,14 @@
     - The difference in training accuracy is that the MXNet version calculating accuracy **after** applying `arcface` conversion, mine is before.
     ```py
     # import tensorflow_addons as tfa
-    import train, losses
+    import train, losses, models
 
     data_basic_path = '/datasets/'
     data_path = data_basic_path + 'faces_casia_112x112_folders'
     eval_paths = [data_basic_path + ii for ii in ['faces_casia/lfw.bin', 'faces_casia/cfp_fp.bin', 'faces_casia/agedb_30.bin']]
 
-    basic_model = train.buildin_models("r34", dropout=0.4, emb_shape=512, output_layer='E', bn_momentum=0.9, bn_epsilon=2e-5)
-    basic_model = train.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=True)
+    basic_model = models.buildin_models("r34", dropout=0.4, emb_shape=512, output_layer='E', bn_momentum=0.9, bn_epsilon=2e-5)
+    basic_model = models.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=True)
     tt = train.Train(data_path, save_path='resnet34_MXNET_E_SGD_REG_1e3_lr1e1_random0_arc_S32_E1_BS512_casia.h5',
         eval_paths=eval_paths, basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
         batch_size=512, random_status=0, output_weight_decay=1)
@@ -185,6 +185,7 @@
     - [evals.py](evals.py) contains evaluating callback using `bin` files.
     - [losses.py](losses.py) contains `softmax` / `arcface` / `centerloss` / `triplet` loss functions.
     - [myCallbacks.py](myCallbacks.py) contains my other callbacks, like saving model / learning rate adjusting / save history.
+    - [models.py](models.py) contains model build related functions, like `buildin_models` / `add_l2_regularizer_2_model` / `replace_ReLU_with_PReLU`.
     - [train.py](train.py) contains a `Train` class. It uses a `scheduler` to connect different `loss` / `optimizer` / `epochs`. The basic function is simply `basic_model` --> `build dataset` --> `add output layer` --> `add callbacks` --> `compile` --> `fit`.
   - **Other Scripts**
     - [IJB_evals.py](IJB_evals.py) evaluates model accuracy using [insightface/evaluation/IJB/](https://github.com/deepinsight/insightface/tree/master/evaluation/IJB) datasets.
@@ -198,16 +199,15 @@
   - **Training example** `train.Train` is mostly functioned as a scheduler.
     ```py
     from tensorflow import keras
-    import losses
-    import train
+    import losses, train, models
     import tensorflow_addons as tfa
 
-    # basic_model = train.buildin_models("ResNet101V2", dropout=0.4, emb_shape=512, output_layer="E")
-    # basic_model = train.buildin_models("ResNest50", dropout=0.4, emb_shape=512, output_layer="E")
-    # basic_model = train.buildin_models('EfficientNetB4', dropout=0, emb_shape=256, output_layer="GDC")
+    # basic_model = models.buildin_models("ResNet101V2", dropout=0.4, emb_shape=512, output_layer="E")
+    # basic_model = models.buildin_models("ResNest50", dropout=0.4, emb_shape=512, output_layer="E")
+    # basic_model = models.buildin_models('EfficientNetB4', dropout=0, emb_shape=256, output_layer="GDC")
     # basic_model = mobile_facenet.mobile_facenet(256, dropout=0, name="mobile_facenet_256")
     # basic_model = mobile_facenet.mobile_facenet(256, dropout=0, name="se_mobile_facenet_256", use_se=True)
-    basic_model = train.buildin_models("MobileNet", dropout=0, emb_shape=256, output_layer="GDC")
+    basic_model = models.buildin_models("MobileNet", dropout=0, emb_shape=256, output_layer="GDC")
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
 
@@ -217,14 +217,14 @@
     sch = [
       {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.01, "optimizer": optimizer, "epoch": 20},
       {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.1, "epoch": 20},
-      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 1, "epoch": 20},
+      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.5, "epoch": 20},
       {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.3},
       {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.25},
       {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.2},
     ]
     tt.train(sch, 0)
     ```
-  - **train.print_buildin_models** is used to print build-in model names in `train.py`.
+  - **models.print_buildin_models** is used to print build-in model names in `models.py`.
     ```py
     >>>> buildin_models
     MXNet version resnet: r34, r50, r100, r101,
@@ -233,10 +233,10 @@
     Custom: se_resnext, resnest50, resnest101, mobilenetv3_small, mobilenetv3_large, mobilefacenet, se_mobilefacenet,
     Or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
     ```
-  - **train.add_l2_regularizer_2_model** will add `l2_regularizer` to model layers. The actual added `l2` value is divided by `2`.
+  - **models.add_l2_regularizer_2_model** will add `l2_regularizer` to model layers. The actual added `l2` value is divided by `2`.
     ```py
     # Will add keras.regularizers.L2(5e-4) to all layers
-    basic_model = train.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=True)
+    basic_model = models.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=True)
     ```
   - **train.Train model parameters** including `basic_model` / `model`. Combine them to initialize model from different sources. Sometimes may need `custom_objects` to load model.
     | basic_model                                                     | model           | Used for                                   |
@@ -409,7 +409,8 @@
   - [PDF DECOUPLED WEIGHT DECAY REGULARIZATION](https://arxiv.org/pdf/1711.05101.pdf)
   - [tensorflow_addons](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/AdamW) provides `SGDW` / `AdamW`.
     ```py
-    !pip install tensorflow-addons
+    # !pip install tensorflow-addons
+    !pip install tfa-nightly
 
     import tensorflow_addons as tfa
     optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
@@ -504,14 +505,14 @@
   - **Keras version train mobilenet on CASIA test**
     ```py
     import tensorflow_addons as tfa
-    import train, losses
+    import train, losses, models
 
     data_basic_path = '/datasets/faces_casia'
     data_path = data_basic_path + '_112x112_folders'
     eval_paths = [os.path.join(data_basic_path, ii) for ii in ['lfw.bin', 'cfp_fp.bin', 'agedb_30.bin']]
 
     """ First, Train with `lossTopK = 3` """
-    basic_model = train.buildin_models("mobilenet", dropout=0, emb_shape=256, output_layer='E')
+    basic_model = models.buildin_models("mobilenet", dropout=0, emb_shape=256, output_layer='E')
     tt = train.Train(data_path, save_path='TT_mobilenet_topk_bs256.h5', eval_paths=eval_paths,
         basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
         batch_size=256, random_status=0, output_wd_multiply=1)
@@ -608,14 +609,14 @@
     - A new loss `distiller_loss` will be added to match this `embeddings` data, default `loss_weights = [1, 7]`. Parameter `distill` in `scheduler` set this loss weight.
     - The `emb_shape` should be same with `teacher`.
     ```py
-    import train, losses
+    import train, losses, models
     import tensorflow_addons as tfa
 
     data_basic_path = '/datasets/'
     data_path = 'faces_casia_112x112_folders_shuffle_label_embs_normed_512.npz'
     eval_paths = [data_basic_path + ii for ii in ['faces_casia/lfw.bin', 'faces_casia/cfp_fp.bin', 'faces_casia/agedb_30.bin']]
 
-    basic_model = train.buildin_models("mobilenet", dropout=0.4, emb_shape=512, output_layer='E')
+    basic_model = models.buildin_models("mobilenet", dropout=0.4, emb_shape=512, output_layer='E')
     tt = train.Train(data_path, save_path='TT_mobilenet_distill_bs400.h5', eval_paths=eval_paths,
         basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
         batch_size=400, random_status=0, output_wd_multiply=1)

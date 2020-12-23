@@ -2,10 +2,10 @@ import os
 import data
 import evals
 import losses
+import models
 import myCallbacks
 import tensorflow as tf
 from tensorflow import keras
-import tensorflow.keras.backend as K
 import multiprocessing as mp
 
 if mp.get_start_method() != "forkserver":
@@ -16,223 +16,6 @@ for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
 # strategy = tf.distribute.MirroredStrategy()
 # strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
-
-
-def print_buildin_models():
-    print(
-        """
-    >>>> buildin_models
-    MXNet version resnet: r34, r50, r100, r101,
-    Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
-    EfficientNet: efficientnetb[0-7], efficientnetl2,
-    Custom: se_resnext, resnest50, resnest101, mobilenetv3_small, mobilenetv3_large, mobilefacenet, se_mobilefacenet,
-    Or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
-    """,
-        end="",
-    )
-
-
-# MXNET: bn_momentum=0.9, bn_epsilon=2e-5, TF default: bn_momentum=0.99, bn_epsilon=0.001
-def buildin_models(
-    name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), output_layer="GDC", bn_momentum=0.99, bn_epsilon=0.001, add_pointwise_conv=False, **kwargs
-):
-    name_lower = name.lower()
-    """ Basic model """
-    if name_lower == "mobilenet":
-        xx = keras.applications.MobileNet(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
-    elif name_lower == "mobilenetv2":
-        xx = keras.applications.MobileNetV2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
-    elif name_lower == "r34" or name_lower == "r50" or name_lower == "r100" or name_lower == "r101":
-        from backbones import resnet  # MXNet insightface version resnet
-
-        model_name = "ResNet" + name_lower[1:]
-        model_class = getattr(resnet, model_name)
-        xx = model_class(input_shape=input_shape, include_top=False, weights=None, **kwargs)
-    elif name_lower.startswith("resnet"):  # keras.applications.ResNetxxx
-        if name_lower.endswith("v2"):
-            model_name = "ResNet" + name_lower[len("resnet") : -2] + "V2"
-        else:
-            model_name = "ResNet" + name_lower[len("resnet") :]
-        model_class = getattr(keras.applications, model_name)
-        xx = model_class(weights="imagenet", include_top=False, input_shape=input_shape)
-    elif name_lower.startswith("efficientnet"):
-        # import tensorflow.keras.applications.efficientnet as efficientnet
-        from backbones import efficientnet
-
-        model_name = "EfficientNet" + name_lower[-2:].upper()
-        model_class = getattr(efficientnet, model_name)
-        xx = model_class(weights="imagenet", include_top=False, input_shape=input_shape)  # or weights='imagenet'
-    elif name_lower.startswith("se_resnext"):
-        from keras_squeeze_excite_network import se_resnext
-
-        if name_lower.endswith("101"):  # se_resnext101
-            depth = [3, 4, 23, 3]
-        else:  # se_resnext50
-            depth = [3, 4, 6, 3]
-        xx = se_resnext.SEResNextImageNet(weights="imagenet", input_shape=input_shape, include_top=False, depth=depth)
-    elif name_lower.startswith("resnest"):
-        from backbones import resnest
-
-        if name_lower == "resnest50":
-            xx = resnest.ResNest50(input_shape=input_shape)
-        else:
-            xx = resnest.ResNest101(input_shape=input_shape)
-    elif name_lower.startswith("mobilenetv3"):
-        from backbones import mobilenet_v3
-
-        if "small" in name_lower:
-            xx = mobilenet_v3.MobileNetV3Small(input_shape=input_shape, include_top=False, weights="imagenet")
-        else:
-            xx = mobilenet_v3.MobileNetV3Large(input_shape=input_shape, include_top=False, weights="imagenet")
-    elif "mobilefacenet" in name_lower or "mobile_facenet" in name_lower:
-        from backbones import mobile_facenet
-
-        use_se = True if "se" in name_lower else False
-        xx = mobile_facenet.mobile_facenet(input_shape=input_shape, include_top=False, name=name, use_se=use_se)
-    elif hasattr(keras.applications, name):
-        model_class = getattr(keras.applications, name)
-        xx = model_class(weights="imagenet", include_top=False, input_shape=input_shape)
-    else:
-        return None
-    xx.trainable = True
-
-    inputs = xx.inputs[0]
-    nn = xx.outputs[0]
-
-    if add_pointwise_conv:  # Model using `pointwise_conv + GDC` is smaller than `E`
-        nn = keras.layers.Conv2D(512, 1, use_bias=False, padding="same")(nn)
-        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
-        nn = keras.layers.PReLU(shared_axes=[1, 2])(nn)
-
-    if output_layer == "E":
-        """ Fully Connected """
-        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
-        if dropout > 0 and dropout < 1:
-            nn = keras.layers.Dropout(dropout)(nn)
-        nn = keras.layers.Flatten()(nn)
-        nn = keras.layers.Dense(emb_shape, activation=None, use_bias=True, kernel_initializer="glorot_normal")(nn)
-    else:
-        """ GDC """
-        nn = keras.layers.DepthwiseConv2D(int(nn.shape[1]), depth_multiplier=1, use_bias=False)(nn)
-        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
-        if dropout > 0 and dropout < 1:
-            nn = keras.layers.Dropout(dropout)(nn)
-        nn = keras.layers.Conv2D(emb_shape, 1, use_bias=True, activation=None, kernel_initializer="glorot_normal")(nn)
-        nn = keras.layers.Flatten()(nn)
-        # nn = keras.layers.Dense(emb_shape, activation=None, use_bias=True, kernel_initializer="glorot_normal")(nn)
-    # `fix_gamma=True` in MXNet means `scale=False` in Keras
-    embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="embedding", scale=False)(nn)
-    basic_model = keras.models.Model(inputs, embedding, name=xx.name)
-    return basic_model
-
-
-def add_l2_regularizer_2_model(model, weight_decay, custom_objects={}, apply_to_batch_normal=True):
-    # https://github.com/keras-team/keras/issues/2717#issuecomment-456254176
-    if 0:
-        regularizers_type = {}
-        for layer in model.layers:
-            rrs = [kk for kk in layer.__dict__.keys() if "regularizer" in kk and not kk.startswith("_")]
-            if len(rrs) != 0:
-                # print(layer.name, layer.__class__.__name__, rrs)
-                if layer.__class__.__name__ not in regularizers_type:
-                    regularizers_type[layer.__class__.__name__] = rrs
-        print(regularizers_type)
-
-    for layer in model.layers:
-        attrs = []
-        if isinstance(layer, keras.layers.Dense) or isinstance(layer, keras.layers.Conv2D):
-            # print(">>>> Dense or Conv2D", layer.name, "use_bias:", layer.use_bias)
-            attrs = ["kernel_regularizer"]
-            if layer.use_bias:
-                attrs.append("bias_regularizer")
-        elif isinstance(layer, keras.layers.DepthwiseConv2D):
-            # print(">>>> DepthwiseConv2D", layer.name, "use_bias:", layer.use_bias)
-            attrs = ["depthwise_regularizer"]
-            if layer.use_bias:
-                attrs.append("bias_regularizer")
-        elif isinstance(layer, keras.layers.SeparableConv2D):
-            # print(">>>> SeparableConv2D", layer.name, "use_bias:", layer.use_bias)
-            attrs = ["pointwise_regularizer", "depthwise_regularizer"]
-            if layer.use_bias:
-                attrs.append("bias_regularizer")
-        elif apply_to_batch_normal and isinstance(layer, keras.layers.BatchNormalization):
-            # print(">>>> BatchNormalization", layer.name, "scale:", layer.scale, ", center:", layer.center)
-            if layer.center:
-                attrs.append("beta_regularizer")
-            if layer.scale:
-                attrs.append("gamma_regularizer")
-        elif apply_to_batch_normal and isinstance(layer, keras.layers.PReLU):
-            # print(">>>> PReLU", layer.name)
-            attrs = ["alpha_regularizer"]
-
-        for attr in attrs:
-            if hasattr(layer, attr) and layer.trainable:
-                setattr(layer, attr, keras.regularizers.L2(weight_decay / 2))
-
-    # So far, the regularizers only exist in the model config. We need to
-    # reload the model so that Keras adds them to each layer's losses.
-    # temp_weight_file = "tmp_weights.h5"
-    # model.save_weights(temp_weight_file)
-    # out_model = keras.models.model_from_json(model.to_json(), custom_objects=custom_objects)
-    # out_model.load_weights(temp_weight_file, by_name=True)
-    # os.remove(temp_weight_file)
-    # return out_model
-    return keras.models.clone_model(model)
-
-
-def replace_ReLU_with_PReLU(model):
-    from tensorflow.keras.layers import ReLU, PReLU, Activation
-
-    def convert_ReLU(layer):
-        # print(layer.name)
-        if isinstance(layer, ReLU) or (isinstance(layer, Activation) and layer.activation == keras.activations.relu):
-            print(">>>> Convert ReLU:", layer.name)
-            return PReLU(shared_axes=[1, 2], name=layer.name)
-        return layer
-
-    return keras.models.clone_model(model, clone_function=convert_ReLU)
-
-
-class NormDense(keras.layers.Layer):
-    def __init__(self, units=1000, kernel_regularizer=None, loss_top_k=1, **kwargs):
-        super(NormDense, self).__init__(**kwargs)
-        self.init = keras.initializers.glorot_normal()
-        self.units, self.loss_top_k = units, loss_top_k
-        self.kernel_regularizer = keras.regularizers.get(kernel_regularizer)
-        self.supports_masking = True
-
-    def build(self, input_shape):
-        self.w = self.add_weight(
-            name="norm_dense_w",
-            shape=(input_shape[-1], self.units * self.loss_top_k),
-            initializer=self.init,
-            trainable=True,
-            regularizer=self.kernel_regularizer,
-        )
-        super(NormDense, self).build(input_shape)
-
-    def call(self, inputs, **kwargs):
-        norm_w = K.l2_normalize(self.w, axis=0)
-        inputs = K.l2_normalize(inputs, axis=1)
-        output = K.dot(inputs, norm_w)
-        if self.loss_top_k > 1:
-            output = K.reshape(output, (-1, self.units, self.loss_top_k))
-            output = K.max(output, axis=2)
-        return output
-
-    def compute_output_shape(self, input_shape):
-        return (input_shape[0], self.units)
-
-    def get_config(self):
-        config = super(NormDense, self).get_config()
-        config.update(
-            {"units": self.units, "loss_top_k": self.loss_top_k, "kernel_regularizer": keras.regularizers.serialize(self.kernel_regularizer),}
-        )
-        return config
-
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)
 
 
 class Train:
@@ -255,22 +38,11 @@ class Train:
         random_status=0,
         image_per_class=0,  # For triplet, image_per_class will be `4` if it's `< 4`
     ):
-        custom_objects.update(
-            {
-                "NormDense": NormDense,
-                "margin_softmax": losses.margin_softmax,
-                "MarginSoftmax": losses.MarginSoftmax,
-                "arcface_loss": losses.arcface_loss,
-                "ArcfaceLossT4": losses.ArcfaceLossT4,
-                "ArcfaceLoss": losses.ArcfaceLoss,
-                "CenterLoss": losses.CenterLoss,
-                "batch_hard_triplet_loss": losses.batch_hard_triplet_loss,
-                "batch_all_triplet_loss": losses.batch_all_triplet_loss,
-                "BatchHardTripletLoss": losses.BatchHardTripletLoss,
-                "BatchAllTripletLoss": losses.BatchAllTripletLoss,
-            }
-        )
-        self.model, self.basic_model, self.save_path = None, None, save_path
+        from inspect import getmembers, isfunction, isclass
+        custom_objects.update(dict([ii for ii in getmembers(losses) if isfunction(ii[1]) or isclass(ii[1])]))
+        custom_objects.update({"NormDense": models.NormDense})
+
+        self.model, self.basic_model, self.save_path, self.default_type = None, None, save_path, None
         if isinstance(model, str):
             if model.endswith(".h5") and os.path.exists(model):
                 print(">>>> Load model from h5 file: %s..." % model)
@@ -283,6 +55,8 @@ class Train:
             self.model = model
             embedding_layer = basic_model if basic_model is not None else self.__search_embedding_layer__(self.model)
             self.basic_model = keras.models.Model(self.model.inputs[0], self.model.layers[embedding_layer].output)
+            self.default_type = "MODEL"
+            print(">>>> Specified model structure, output layer will keep from changing")
         elif isinstance(basic_model, str):
             if basic_model.endswith(".h5") and os.path.exists(basic_model):
                 print(">>>> Load basic_model from h5 file: %s..." % basic_model)
@@ -319,6 +93,8 @@ class Train:
             strategy = tf.distribute.get_strategy()
             self.batch_size = batch_size * strategy.num_replicas_in_sync
             print(">>>> num_replicas_in_sync: %d, batch_size: %d" % (strategy.num_replicas_in_sync, self.batch_size))
+            self.data_options = tf.data.Options()
+            self.data_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
 
         my_evals = [evals.eval_callback(self.basic_model, ii, batch_size=batch_size, eval_freq=eval_freq) for ii in eval_paths]
         if len(my_evals) != 0:
@@ -351,6 +127,8 @@ class Train:
                 self.data_path, batch_size=batch_size, random_status=self.random_status, random_crop=(100, 100, 3), image_per_class=self.image_per_class
             )
             self.train_ds = tt.train_dataset
+            if tf.distribute.has_strategy():
+                self.train_ds = self.train_ds.with_options(self.data_options)
             self.classes = self.train_ds.element_spec[-1].shape[-1]
             self.is_triplet_dataset = True
 
@@ -360,6 +138,8 @@ class Train:
             self.train_ds = data.prepare_dataset(
                 self.data_path, batch_size=self.batch_size, random_status=self.random_status, random_crop=(100, 100, 3), image_per_class=self.image_per_class,
             )
+            if tf.distribute.has_strategy():
+                self.train_ds = self.train_ds.with_options(self.data_options)
             label_spec = self.train_ds.element_spec[-1]
             if isinstance(label_spec, tuple):
                 # dataset with embedding values
@@ -374,7 +154,9 @@ class Train:
         if optimizer == None:
             if self.model != None and self.model.optimizer != None:
                 # Model loaded from .h5 file already compiled
-                self.optimizer = self.model.optimizer
+                # self.optimizer = self.model.optimizer
+                # Have to build a new optimizer, or will meet Error: OSError: Unable to create link (name already exists)
+                self.optimizer = self.model.optimizer.__class__(**self.model.optimizer.get_config())
             else:
                 self.optimizer = self.default_optimizer
         else:
@@ -417,7 +199,7 @@ class Train:
             self.model = keras.models.Model(inputs, output)
         elif type == self.arcface:
             print(">>>> Add arcface layer, loss_top_k=%d..." % (loss_top_k))
-            output_layer = NormDense(self.classes, name=self.arcface, loss_top_k=loss_top_k, kernel_regularizer=output_kernel_regularizer)
+            output_layer = models.NormDense(self.classes, name=self.arcface, loss_top_k=loss_top_k, kernel_regularizer=output_kernel_regularizer)
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
                 output_layer.build(embedding.shape)
                 weight_cur = output_layer.get_weights()
@@ -431,7 +213,7 @@ class Train:
             self.model = self.basic_model
             self.model.output_names[0] = type + "_embedding"
         else:
-            print("What do you want!!!")
+            print(">>>> Will NOT change model output layer.")
 
     def __init_type_by_loss__(self, loss):
         print(">>>> Init type by loss function name...")
@@ -458,6 +240,24 @@ class Train:
                 return self.softmax
         return self.softmax
 
+    def __init_emb_losses__(self, embLossTypes=None, embLossWeights=1):
+        emb_loss_names, emb_loss_weights = {}, {}
+        if embLossTypes is not None:
+            embLossTypes = embLossTypes if isinstance(embLossTypes, list) else [embLossTypes]
+            for id, ee in enumerate(embLossTypes):
+                emb_loss_name = ee.lower() if isinstance(ee, str) else ee.__name__.lower()
+                emb_loss_weight = float(embLossWeights[id] if isinstance(embLossWeights, list) else embLossWeights)
+                if "centerloss" in emb_loss_name:
+                    emb_loss_names["centerloss"] = losses.CenterLoss if isinstance(ee, str) else ee
+                    emb_loss_weights["centerloss"] = emb_loss_weight
+                elif "triplet" in emb_loss_name:
+                    emb_loss_names["triplet"] = losses.BatchHardTripletLoss if isinstance(ee, str) else ee
+                    emb_loss_weights["triplet"] = emb_loss_weight
+                elif "distill" in emb_loss_name:
+                    emb_loss_names["distill"] = losses.distiller_loss if ee == None or isinstance(ee, str) else ee
+                    emb_loss_weights["distill"] = emb_loss_weight
+        return emb_loss_names, emb_loss_weights
+
     def __basic_train__(self, loss, epochs, initial_epoch=0, loss_weights=None):
         self.model.compile(optimizer=self.optimizer, loss=loss, metrics=self.metrics, loss_weights=loss_weights)
         self.model.fit(
@@ -476,90 +276,107 @@ class Train:
         if data_path != None:
             self.data_path = data_path
 
+    def train_single_scheduler(self, loss, epoch, initial_epoch=0, optimizer=None, bottleneckOnly=False, lossTopK=1, type=None, embLossTypes=None, embLossWeights=1, tripletAlpha=0.35):
+        cur_loss = loss
+        emb_loss_names, emb_loss_weights = self.__init_emb_losses__(embLossTypes, embLossWeights)
+
+        if type is None:
+            type = self.default_type or self.__init_type_by_loss__(cur_loss)
+        print(">>>> Train %s..." % type)
+        if "triplet" in emb_loss_names or type == self.triplet:
+            self.__init_dataset_triplet__()
+        else:
+            self.__init_dataset_softmax__()
+
+        self.basic_model.trainable = True
+        self.__init_optimizer__(optimizer)
+        self.__init_model__(type, lossTopK)
+
+        # loss_weights
+        cur_loss, loss_weights = [cur_loss], None
+        self.callbacks = self.my_evals + self.custom_callbacks + self.basic_callbacks
+        if "centerloss" in emb_loss_names and type != self.center:
+            loss_class = emb_loss_names["centerloss"]
+            print(">>>> Attach centerloss:", loss_class.__name__)
+            emb_shape = self.basic_model.output_shape[-1]
+            initial_file = os.path.splitext(self.save_path)[0] + "_centers.npy"
+            center_loss = loss_class(self.classes, emb_shape=emb_shape, initial_file=initial_file)
+            cur_loss = [center_loss, *cur_loss]
+            loss_weights = {ii: 1.0 for ii in self.model.output_names}
+            nns = self.model.output_names
+            self.model = keras.models.Model(self.model.inputs[0], self.basic_model.outputs + self.model.outputs)
+            self.model.output_names[0] = self.center + "_embedding"
+            for id, nn in enumerate(nns):
+                self.model.output_names[id + 1] = nn
+            self.callbacks = self.my_evals + self.custom_callbacks + [center_loss.save_centers_callback] + self.basic_callbacks
+            loss_weights.update({self.model.output_names[0]: emb_loss_weights["centerloss"]})
+
+        if "triplet" in emb_loss_names and type != self.triplet:
+            loss_class = emb_loss_names["triplet"]
+            print(">>>> Attach tripletloss: %s, alpha = %f..." % (loss_class.__name__, tripletAlpha))
+            triplet_loss = loss_class(alpha=tripletAlpha)
+
+            cur_loss = [triplet_loss, *cur_loss]
+            loss_weights = loss_weights if loss_weights is not None else {ii: 1.0 for ii in self.model.output_names}
+            nns = self.model.output_names
+            self.model = keras.models.Model(self.model.inputs[0], self.basic_model.outputs + self.model.outputs)
+            self.model.output_names[0] = self.triplet + "_embedding"
+            for id, nn in enumerate(nns):
+                self.model.output_names[id + 1] = nn
+            loss_weights.update({self.model.output_names[0]: emb_loss_weights["triplet"]})
+
+        if "distill" in emb_loss_names or self.is_distiller:
+            loss_func = emb_loss_names.get("distill", losses.distiller_loss)
+            print(">>>> Train distiller model:", loss_func.__name__)
+
+            loss_weights = [1, emb_loss_weights.get("distill", 1)]   # Will not combine with others
+            self.model = keras.models.Model(self.model.inputs[0], [self.model.outputs[-1], self.basic_model.outputs[0]])
+            cur_loss = [cur_loss[-1], loss_func]
+
+        print(">>>> loss_weights:", loss_weights)
+        self.metrics = {ii: None if "embedding" in ii else "accuracy" for ii in self.model.output_names}
+
+        try:
+            import tensorflow_addons as tfa
+        except:
+            pass
+        else:
+            if isinstance(self.optimizer, tfa.optimizers.weight_decay_optimizers.DecoupledWeightDecayExtension):
+                print(">>>> Insert weight decay callback...")
+                lr_base, wd_base = self.optimizer.lr.numpy(), self.optimizer.weight_decay.numpy()
+                wd_callback = myCallbacks.OptimizerWeightDecay(lr_base, wd_base)
+                self.callbacks.insert(-1, wd_callback)  # should be after lr_scheduler
+
+        if bottleneckOnly:
+            print(">>>> Train bottleneckOnly...")
+            self.basic_model.trainable = False
+            self.callbacks = self.callbacks[len(self.my_evals) :]  # Exclude evaluation callbacks
+            self.__basic_train__(cur_loss, epoch, initial_epoch=0, loss_weights=loss_weights)
+            self.basic_model.trainable = True
+        else:
+            self.__basic_train__(cur_loss, initial_epoch + epoch, initial_epoch=initial_epoch, loss_weights=loss_weights)
+
+        print(">>>> Train %s DONE!!! epochs = %s, model.stop_training = %s" % (type, self.model.history.epoch, self.model.stop_training))
+        print(">>>> My history:")
+        self.my_hist.print_hist()
+        print()
+
+
     def train(self, train_schedule, initial_epoch=0):
         train_schedule = [train_schedule] if isinstance(train_schedule, dict) else train_schedule
         for sch in train_schedule:
             if sch.get("loss", None) is None:
                 continue
-            cur_loss = sch["loss"]
-            type = sch.get("type", None) or self.__init_type_by_loss__(cur_loss)
-            print(">>>> Train %s..." % type)
+            for ii in ["centerloss", "triplet", "distill"]:
+                if ii in sch:
+                    sch.setdefault("embLossTypes", []).append(ii)
+                    sch.setdefault("embLossWeights", []).append(sch.pop(ii))
+            if "alpha" in sch:
+                sch["tripletAlpha"] = sch.pop("alpha")
 
-            if sch.get("triplet", False) or sch.get("tripletAll", False) or type == self.triplet:
-                self.__init_dataset_triplet__()
-            else:
-                self.__init_dataset_softmax__()
+            self.train_single_scheduler(**sch, initial_epoch=initial_epoch)
+            initial_epoch += 0 if sch.get("bottleneckOnly", False) else sch["epoch"]
 
-            self.basic_model.trainable = True
-            self.__init_optimizer__(sch.get("optimizer", None))
-            self.__init_model__(type, sch.get("lossTopK", 1))
-
-            # loss_weights
-            cur_loss, loss_weights = [cur_loss], None
-            self.callbacks = self.my_evals + self.custom_callbacks + self.basic_callbacks
-            if sch.get("centerloss", False) and type != self.center:
-                print(">>>> Attach centerloss...")
-                emb_shape = self.basic_model.output_shape[-1]
-                initial_file = os.path.splitext(self.save_path)[0] + "_centers.npy"
-                center_loss = losses.CenterLoss(self.classes, emb_shape=emb_shape, initial_file=initial_file)
-                cur_loss = [center_loss, *cur_loss]
-                loss_weights = {ii: 1.0 for ii in self.model.output_names}
-                nns = self.model.output_names
-                self.model = keras.models.Model(self.model.inputs[0], self.basic_model.outputs + self.model.outputs)
-                self.model.output_names[0] = self.center + "_embedding"
-                for id, nn in enumerate(nns):
-                    self.model.output_names[id + 1] = nn
-                self.callbacks = self.my_evals + self.custom_callbacks + [center_loss.save_centers_callback] + self.basic_callbacks
-                loss_weights.update({self.model.output_names[0]: float(sch["centerloss"])})
-
-            if (sch.get("triplet", False) or sch.get("tripletAll", False)) and type != self.triplet:
-                alpha = sch.get("alpha", 0.35)
-                triplet_loss = losses.BatchHardTripletLoss(alpha=alpha) if sch.get("triplet", False) else losses.BatchAllTripletLoss(alpha=alpha)
-                print(">>>> Attach tripletloss: %s, alpha = %f..." % (triplet_loss.__class__.__name__, alpha))
-
-                cur_loss = [triplet_loss, *cur_loss]
-                loss_weights = loss_weights if loss_weights is not None else {ii: 1.0 for ii in self.model.output_names}
-                nns = self.model.output_names
-                self.model = keras.models.Model(self.model.inputs[0], self.basic_model.outputs + self.model.outputs)
-                self.model.output_names[0] = self.triplet + "_embedding"
-                for id, nn in enumerate(nns):
-                    self.model.output_names[id + 1] = nn
-                loss_weights.update({self.model.output_names[0]: float(sch.get("triplet", False) or sch.get("tripletAll", False))})
-
-            if self.is_distiller:
-                loss_weights = [1, sch.get("distill", 7)]
-                print(">>>> Train distiller model...")
-                self.model = keras.models.Model(self.model.inputs[0], [self.model.outputs[-1], self.basic_model.outputs[0]])
-                cur_loss = [cur_loss[-1], losses.distiller_loss]
-
-            print(">>>> loss_weights:", loss_weights)
-            self.metrics = {ii: None if "embedding" in ii else "accuracy" for ii in self.model.output_names}
-
-            try:
-                import tensorflow_addons as tfa
-            except:
-                pass
-            else:
-                if isinstance(self.optimizer, tfa.optimizers.weight_decay_optimizers.DecoupledWeightDecayExtension):
-                    print(">>>> Insert weight decay callback...")
-                    lr_base, wd_base = self.optimizer.lr.numpy(), self.optimizer.weight_decay.numpy()
-                    wd_callback = myCallbacks.OptimizerWeightDecay(lr_base, wd_base)
-                    self.callbacks.insert(-2, wd_callback)  # should be after lr_scheduler
-
-            if sch.get("bottleneckOnly", False):
-                print(">>>> Train bottleneckOnly...")
-                self.basic_model.trainable = False
-                self.callbacks = self.callbacks[len(self.my_evals) :]  # Exclude evaluation callbacks
-                self.__basic_train__(cur_loss, sch["epoch"], initial_epoch=0, loss_weights=loss_weights)
-                self.basic_model.trainable = True
-            else:
-                self.__basic_train__(cur_loss, initial_epoch + sch["epoch"], initial_epoch=initial_epoch, loss_weights=loss_weights)
-                initial_epoch += sch["epoch"]
-
-            print(">>>> Train %s DONE!!! epochs = %s, model.stop_training = %s" % (type, self.model.history.epoch, self.model.stop_training))
-            print(">>>> My history:")
-            self.my_hist.print_hist()
             if self.model.stop_training == True:
                 print(">>>> But it's an early stop, break...")
                 break
-            print()
