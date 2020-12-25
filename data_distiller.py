@@ -10,6 +10,7 @@ gpus = tf.config.experimental.list_physical_devices("GPU")
 for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
 
+
 class Mxnet_model_interf:
     import mxnet as mx
 
@@ -64,7 +65,7 @@ def data_distiller(data_path, model, dest_file=None, batch_size=256, limit=-1):
             interpreter = lambda imgs: basic_model(imgs.numpy().astype("uint8"))
     else:
         # TF model
-        interpreter = lambda imgs: model((imgs - 127.5) * 0.0078125).numpy()
+        interpreter = tf.function(lambda imgs: model((imgs - 127.5) * 0.0078125).numpy())
 
     """ Extract embeddings """
     new_image_names, new_image_classes, embeddings = [], [], []

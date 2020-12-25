@@ -404,8 +404,7 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
             score_dict[name] = np.load(score)
         elif isinstance(score, str) and score.endswith(".txt"):
             # IJB meta data like ijbb_template_pair_label.txt
-            pairs = np.loadtxt(score, dtype=str)
-            label = pairs[:, 2].astype(np.int)
+            label = pd.read_csv(score, sep=" ").values[:, 2]
         else:
             name = name if name is not None else str(id)
             score_dict[name] = score

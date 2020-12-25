@@ -67,10 +67,12 @@ def random_process_image(img, img_shape=(112, 112), random_status=2, random_crop
         img = tf.clip_by_value(img, 0.0, 255.0)
     return img
 
+
 def pick_by_image_per_class(image_classes, image_per_class):
     cc = pd.value_counts(image_classes)
     class_pick = cc[cc >= image_per_class].index
     return np.array([ii in class_pick for ii in image_classes]), class_pick
+
 
 def prepare_dataset(
     data_path,
@@ -94,7 +96,7 @@ def prepare_dataset(
         image_names, image_classes = image_names[pick], image_classes[pick]
         if len(embeddings) != 0:
             embeddings = embeddings[pick]
-        print(">>>> After pick[%d], image length: %d, valid classes: %d" % (image_per_class, len(image_names), class_pick.shape[0]))
+        print(">>>> After pick[%d], images: %d, valid classes: %d" % (image_per_class, len(image_names), class_pick.shape[0]))
 
     if len(embeddings) == 0:
         ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes))
@@ -102,8 +104,8 @@ def prepare_dataset(
     else:
         # dataset with embedding values
         print(">>>> embeddings: %s. This takes some time..." % (np.shape(embeddings),))
-        ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes, embeddings))
-        process_func = lambda imm, label, emb: (tf_imread(imm), (tf.one_hot(label, depth=classes, dtype=tf.int32), emb))
+        ds = tf.data.Dataset.from_tensor_slices((image_names, embeddings, image_classes))
+        process_func = lambda imm, emb, label: (tf_imread(imm), (emb, tf.one_hot(label, depth=classes, dtype=tf.int32)))
 
     AUTOTUNE = tf.data.experimental.AUTOTUNE
     ds = ds.shuffle(buffer_size=len(image_names))

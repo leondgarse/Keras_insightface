@@ -39,6 +39,7 @@ class Train:
         image_per_class=0,  # For triplet, image_per_class will be `4` if it's `< 4`
     ):
         from inspect import getmembers, isfunction, isclass
+
         custom_objects.update(dict([ii for ii in getmembers(losses) if isfunction(ii[1]) or isclass(ii[1])]))
         custom_objects.update({"NormDense": models.NormDense})
 
@@ -77,7 +78,7 @@ class Train:
             )
             return
 
-        self.softmax, self.arcface, self.triplet, self.center = "softmax", "arcface", "triplet", "center"
+        self.softmax, self.arcface, self.triplet, self.center, self.distill = "softmax", "arcface", "triplet", "center", "distill"
         if output_weight_decay >= 1:
             l2_weight_decay = 0
             for ii in self.basic_model.layers:
@@ -118,8 +119,22 @@ class Train:
             if model.layers[-ii].name == "embedding":
                 return -ii
 
+    def __init_dataset__(self, type, emb_loss_names):
+        if self.triplet in emb_loss_names or type == self.triplet:
+            self.__init_dataset_triplet__()
+        else:
+            self.__init_dataset_softmax__()
+
+        if self.is_distiller and (type == self.distill or len(emb_loss_names) != 1):
+            if type == self.distill:
+                # Loss is distill type, [label * n, embedding]
+                self.train_ds = self.train_ds.map(lambda xx, yy: (xx, yy[1:] * len(emb_loss_names) + yy[:1]))
+            else:
+                # Will attach distill loss as embedding loss, [embedding, label * n]
+                self.train_ds = self.train_ds.map(lambda xx, yy: (xx, yy[:1] + yy[1:] * len(emb_loss_names)))
+
     def __init_dataset_triplet__(self):
-        if self.train_ds == None or self.is_triplet_dataset == False:
+        if self.train_ds == None or self.is_triplet_dataset == False or self.is_distiller == True:
             print(">>>> Init triplet dataset...")
             # batch_size = int(self.batch_size / 4 * 1.5)
             batch_size = self.batch_size // 4
@@ -131,9 +146,10 @@ class Train:
                 self.train_ds = self.train_ds.with_options(self.data_options)
             self.classes = self.train_ds.element_spec[-1].shape[-1]
             self.is_triplet_dataset = True
+            self.is_distiller = False
 
     def __init_dataset_softmax__(self):
-        if self.train_ds == None or self.is_triplet_dataset == True:
+        if self.train_ds == None or self.is_triplet_dataset == True or self.is_distiller == True:
             print(">>>> Init softmax dataset...")
             self.train_ds = data.prepare_dataset(
                 self.data_path, batch_size=self.batch_size, random_status=self.random_status, random_crop=(100, 100, 3), image_per_class=self.image_per_class,
@@ -144,7 +160,8 @@ class Train:
             if isinstance(label_spec, tuple):
                 # dataset with embedding values
                 self.is_distiller = True
-                self.classes = label_spec[0].shape[-1]
+                self.teacher_emb_size = label_spec[0].shape[-1]
+                self.classes = label_spec[1].shape[-1]
             else:
                 self.is_distiller = False
                 self.classes = label_spec.shape[-1]
@@ -161,6 +178,17 @@ class Train:
                 self.optimizer = self.default_optimizer
         else:
             self.optimizer = optimizer
+
+        try:
+            import tensorflow_addons as tfa
+        except:
+            pass
+        else:
+            if isinstance(self.optimizer, tfa.optimizers.weight_decay_optimizers.DecoupledWeightDecayExtension):
+                print(">>>> Insert weight decay callback...")
+                lr_base, wd_base = self.optimizer.lr.numpy(), self.optimizer.weight_decay.numpy()
+                wd_callback = myCallbacks.OptimizerWeightDecay(lr_base, wd_base)
+                self.callbacks.insert(-1, wd_callback)  # should be after lr_scheduler
 
     def __init_model__(self, type, loss_top_k=1):
         inputs = self.basic_model.inputs[0]
@@ -209,11 +237,29 @@ class Train:
                     output_layer.set_weights(self.model.layers[-1].get_weights())
             output = output_layer(embedding)
             self.model = keras.models.Model(inputs, output)
-        elif type == self.triplet or type == self.center:
+        elif type in [self.triplet, self.center, self.distill]:
             self.model = self.basic_model
             self.model.output_names[0] = type + "_embedding"
         else:
             print(">>>> Will NOT change model output layer.")
+
+    def __add_emb_output_to_model__(self, emb_type, emb_loss, emb_loss_weight):
+        nns = self.model.output_names
+        emb_shape = self.basic_model.output_shape[-1]
+        if emb_type == self.distill and self.teacher_emb_size != emb_shape:
+            print(">>>> Add a dense layer to map embedding: student %d --> teacher %d" % (emb_shape, self.teacher_emb_size))
+            inputs = self.basic_model.inputs[0]
+            embedding = self.basic_model.outputs[0]
+            emb_map_layer = keras.layers.Dense(self.teacher_emb_size, use_bias=False, name="distill_map")(embedding)
+            self.model = keras.models.Model(self.model.inputs[0], [emb_map_layer] + self.model.outputs)
+        else:
+            self.model = keras.models.Model(self.model.inputs[0], self.basic_model.outputs + self.model.outputs)
+
+        self.model.output_names[0] = emb_type + "_embedding"
+        for id, nn in enumerate(nns):
+            self.model.output_names[id + 1] = nn
+        self.cur_loss = [emb_loss, *self.cur_loss]
+        self.loss_weights.update({self.model.output_names[0]: emb_loss_weight})
 
     def __init_type_by_loss__(self, loss):
         print(">>>> Init type by loss function name...")
@@ -228,6 +274,8 @@ class Train:
                 return self.arcface
             if self.triplet in ss:
                 return self.triplet
+            if self.distill in ss:
+                return self.distill
         else:
             ss = loss.__class__.__name__.lower()
             if isinstance(loss, losses.TripletLossWapper) or self.triplet in ss:
@@ -248,18 +296,18 @@ class Train:
                 emb_loss_name = ee.lower() if isinstance(ee, str) else ee.__name__.lower()
                 emb_loss_weight = float(embLossWeights[id] if isinstance(embLossWeights, list) else embLossWeights)
                 if "centerloss" in emb_loss_name:
-                    emb_loss_names["centerloss"] = losses.CenterLoss if isinstance(ee, str) else ee
-                    emb_loss_weights["centerloss"] = emb_loss_weight
+                    emb_loss_names[self.center] = losses.CenterLoss if isinstance(ee, str) else ee
+                    emb_loss_weights[self.center] = emb_loss_weight
                 elif "triplet" in emb_loss_name:
-                    emb_loss_names["triplet"] = losses.BatchHardTripletLoss if isinstance(ee, str) else ee
-                    emb_loss_weights["triplet"] = emb_loss_weight
+                    emb_loss_names[self.triplet] = losses.BatchHardTripletLoss if isinstance(ee, str) else ee
+                    emb_loss_weights[self.triplet] = emb_loss_weight
                 elif "distill" in emb_loss_name:
-                    emb_loss_names["distill"] = losses.distiller_loss if ee == None or isinstance(ee, str) else ee
-                    emb_loss_weights["distill"] = emb_loss_weight
+                    emb_loss_names[self.distill] = losses.distiller_loss if ee == None or isinstance(ee, str) else ee
+                    emb_loss_weights[self.distill] = emb_loss_weight
         return emb_loss_names, emb_loss_weights
 
-    def __basic_train__(self, loss, epochs, initial_epoch=0, loss_weights=None):
-        self.model.compile(optimizer=self.optimizer, loss=loss, metrics=self.metrics, loss_weights=loss_weights)
+    def __basic_train__(self, epochs, initial_epoch=0):
+        self.model.compile(optimizer=self.optimizer, loss=self.cur_loss, metrics=self.metrics, loss_weights=self.loss_weights)
         self.model.fit(
             self.train_ds,
             epochs=epochs,
@@ -276,91 +324,63 @@ class Train:
         if data_path != None:
             self.data_path = data_path
 
-    def train_single_scheduler(self, loss, epoch, initial_epoch=0, optimizer=None, bottleneckOnly=False, lossTopK=1, type=None, embLossTypes=None, embLossWeights=1, tripletAlpha=0.35):
-        cur_loss = loss
+    def train_single_scheduler(
+        self, loss, epoch, initial_epoch=0, optimizer=None, bottleneckOnly=False, lossTopK=1, type=None, embLossTypes=None, embLossWeights=1, tripletAlpha=0.35
+    ):
         emb_loss_names, emb_loss_weights = self.__init_emb_losses__(embLossTypes, embLossWeights)
 
         if type is None:
-            type = self.default_type or self.__init_type_by_loss__(cur_loss)
+            type = self.default_type or self.__init_type_by_loss__(loss)
         print(">>>> Train %s..." % type)
-        if "triplet" in emb_loss_names or type == self.triplet:
-            self.__init_dataset_triplet__()
-        else:
-            self.__init_dataset_softmax__()
+        self.__init_dataset__(type, emb_loss_names)
+        if self.is_distiller == False and type == self.distill:
+            print(">>>> Error: Dataset doesn't contain embedding data.")
+            self.model.stop_training = True
+            return
 
+        self.callbacks = self.my_evals + self.custom_callbacks + self.basic_callbacks
         self.basic_model.trainable = True
         self.__init_optimizer__(optimizer)
         self.__init_model__(type, lossTopK)
 
         # loss_weights
-        cur_loss, loss_weights = [cur_loss], None
-        self.callbacks = self.my_evals + self.custom_callbacks + self.basic_callbacks
-        if "centerloss" in emb_loss_names and type != self.center:
-            loss_class = emb_loss_names["centerloss"]
-            print(">>>> Attach centerloss:", loss_class.__name__)
+        self.cur_loss, self.loss_weights = [loss], {ii: 1.0 for ii in self.model.output_names}
+        if self.center in emb_loss_names and type != self.center:
+            loss_class = emb_loss_names[self.center]
+            print(">>>> Attach center loss:", loss_class.__name__)
             emb_shape = self.basic_model.output_shape[-1]
             initial_file = os.path.splitext(self.save_path)[0] + "_centers.npy"
             center_loss = loss_class(self.classes, emb_shape=emb_shape, initial_file=initial_file)
-            cur_loss = [center_loss, *cur_loss]
-            loss_weights = {ii: 1.0 for ii in self.model.output_names}
-            nns = self.model.output_names
-            self.model = keras.models.Model(self.model.inputs[0], self.basic_model.outputs + self.model.outputs)
-            self.model.output_names[0] = self.center + "_embedding"
-            for id, nn in enumerate(nns):
-                self.model.output_names[id + 1] = nn
             self.callbacks = self.my_evals + self.custom_callbacks + [center_loss.save_centers_callback] + self.basic_callbacks
-            loss_weights.update({self.model.output_names[0]: emb_loss_weights["centerloss"]})
+            self.__add_emb_output_to_model__(self.center, center_loss, emb_loss_weights[self.center])
 
-        if "triplet" in emb_loss_names and type != self.triplet:
-            loss_class = emb_loss_names["triplet"]
-            print(">>>> Attach tripletloss: %s, alpha = %f..." % (loss_class.__name__, tripletAlpha))
+        if self.triplet in emb_loss_names and type != self.triplet:
+            loss_class = emb_loss_names[self.triplet]
+            print(">>>> Attach triplet loss: %s, alpha = %f..." % (loss_class.__name__, tripletAlpha))
             triplet_loss = loss_class(alpha=tripletAlpha)
+            self.__add_emb_output_to_model__(self.triplet, triplet_loss, emb_loss_weights[self.triplet])
 
-            cur_loss = [triplet_loss, *cur_loss]
-            loss_weights = loss_weights if loss_weights is not None else {ii: 1.0 for ii in self.model.output_names}
-            nns = self.model.output_names
-            self.model = keras.models.Model(self.model.inputs[0], self.basic_model.outputs + self.model.outputs)
-            self.model.output_names[0] = self.triplet + "_embedding"
-            for id, nn in enumerate(nns):
-                self.model.output_names[id + 1] = nn
-            loss_weights.update({self.model.output_names[0]: emb_loss_weights["triplet"]})
+        if self.is_distiller and type != self.distill:
+            distill_loss = emb_loss_names.get(self.distill, losses.distiller_loss)
+            print(">>>> Attach disill loss:", distill_loss.__name__)
+            self.__add_emb_output_to_model__(self.distill, distill_loss, emb_loss_weights[self.distill])
 
-        if "distill" in emb_loss_names or self.is_distiller:
-            loss_func = emb_loss_names.get("distill", losses.distiller_loss)
-            print(">>>> Train distiller model:", loss_func.__name__)
-
-            loss_weights = [1, emb_loss_weights.get("distill", 1)]   # Will not combine with others
-            self.model = keras.models.Model(self.model.inputs[0], [self.model.outputs[-1], self.basic_model.outputs[0]])
-            cur_loss = [cur_loss[-1], loss_func]
-
-        print(">>>> loss_weights:", loss_weights)
+        print(">>>> loss_weights:", self.loss_weights)
         self.metrics = {ii: None if "embedding" in ii else "accuracy" for ii in self.model.output_names}
-
-        try:
-            import tensorflow_addons as tfa
-        except:
-            pass
-        else:
-            if isinstance(self.optimizer, tfa.optimizers.weight_decay_optimizers.DecoupledWeightDecayExtension):
-                print(">>>> Insert weight decay callback...")
-                lr_base, wd_base = self.optimizer.lr.numpy(), self.optimizer.weight_decay.numpy()
-                wd_callback = myCallbacks.OptimizerWeightDecay(lr_base, wd_base)
-                self.callbacks.insert(-1, wd_callback)  # should be after lr_scheduler
 
         if bottleneckOnly:
             print(">>>> Train bottleneckOnly...")
             self.basic_model.trainable = False
             self.callbacks = self.callbacks[len(self.my_evals) :]  # Exclude evaluation callbacks
-            self.__basic_train__(cur_loss, epoch, initial_epoch=0, loss_weights=loss_weights)
+            self.__basic_train__(epoch, initial_epoch=0)
             self.basic_model.trainable = True
         else:
-            self.__basic_train__(cur_loss, initial_epoch + epoch, initial_epoch=initial_epoch, loss_weights=loss_weights)
+            self.__basic_train__(initial_epoch + epoch, initial_epoch=initial_epoch)
 
         print(">>>> Train %s DONE!!! epochs = %s, model.stop_training = %s" % (type, self.model.history.epoch, self.model.stop_training))
         print(">>>> My history:")
         self.my_hist.print_hist()
         print()
-
 
     def train(self, train_schedule, initial_epoch=0):
         train_schedule = [train_schedule] if isinstance(train_schedule, dict) else train_schedule
