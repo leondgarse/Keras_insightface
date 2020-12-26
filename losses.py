@@ -371,7 +371,7 @@ class BatchAllTripletLoss(TripletLossWapper):
         return pos_dists_loss + neg_dists_loss
 
 
-def distiller_loss(true_emb, pred_emb):
+def distiller_loss_euclidean(true_emb, pred_emb):
     return tf.reduce_sum(tf.square(pred_emb - true_emb), axis=-1)
 
 

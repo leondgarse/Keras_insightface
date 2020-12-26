@@ -37,6 +37,7 @@ class Train:
         eval_freq=1,
         random_status=0,
         image_per_class=0,  # For triplet, image_per_class will be `4` if it's `< 4`
+        teacher_model_interf=None,  # Teacher model to generate embedding data, used for distilling training.
     ):
         from inspect import getmembers, isfunction, isclass
 
@@ -107,12 +108,18 @@ class Train:
         self.basic_callbacks = basic_callbacks
         self.my_hist = [ii for ii in self.basic_callbacks if isinstance(ii, myCallbacks.My_history)][0]
         self.custom_callbacks = []
-
-        self.data_path, self.random_status, self.image_per_class = data_path, random_status, image_per_class
-        self.train_ds, self.steps_per_epoch, self.classes, self.is_triplet_dataset = None, None, 0, False
-        self.default_optimizer = "adam"
         self.metrics = ["accuracy"]
-        self.is_distiller = False
+        self.default_optimizer = "adam"
+
+        self.data_path, self.random_status, self.image_per_class, self.teacher_model_interf = data_path, random_status, image_per_class, teacher_model_interf
+        self.dataset_params = {
+            "data_path": self.data_path,
+            "random_status": self.random_status,
+            "image_per_class": self.image_per_class,
+            "teacher_model_interf": self.teacher_model_interf,
+        }
+        self.train_ds, self.steps_per_epoch, self.classes, self.is_triplet_dataset, self.is_distill_ds = None, None, 0, False, False
+        self.distill_emb_map_layer = None
 
     def __search_embedding_layer__(self, model):
         for ii in range(1, 6):
@@ -120,52 +127,41 @@ class Train:
                 return -ii
 
     def __init_dataset__(self, type, emb_loss_names):
-        if self.triplet in emb_loss_names or type == self.triplet:
-            self.__init_dataset_triplet__()
-        else:
-            self.__init_dataset_softmax__()
+        init_as_triplet = self.triplet in emb_loss_names or type == self.triplet
+        if self.train_ds is not None and init_as_triplet == self.is_triplet_dataset and self.is_distill_ds == False:
+            return
 
-        if self.is_distiller and (type == self.distill or len(emb_loss_names) != 1):
-            if type == self.distill:
-                # Loss is distill type, [label * n, embedding]
-                self.train_ds = self.train_ds.map(lambda xx, yy: (xx, yy[1:] * len(emb_loss_names) + yy[:1]))
-            else:
-                # Will attach distill loss as embedding loss, [embedding, label * n]
-                self.train_ds = self.train_ds.map(lambda xx, yy: (xx, yy[:1] + yy[1:] * len(emb_loss_names)))
-
-    def __init_dataset_triplet__(self):
-        if self.train_ds == None or self.is_triplet_dataset == False or self.is_distiller == True:
+        if init_as_triplet:
             print(">>>> Init triplet dataset...")
             # batch_size = int(self.batch_size / 4 * 1.5)
             batch_size = self.batch_size // 4
-            tt = data.Triplet_dataset(
-                self.data_path, batch_size=batch_size, random_status=self.random_status, random_crop=(100, 100, 3), image_per_class=self.image_per_class
-            )
+            tt = data.Triplet_dataset(batch_size=batch_size, **self.dataset_params)
             self.train_ds = tt.train_dataset
-            if tf.distribute.has_strategy():
-                self.train_ds = self.train_ds.with_options(self.data_options)
-            self.classes = self.train_ds.element_spec[-1].shape[-1]
             self.is_triplet_dataset = True
-            self.is_distiller = False
-
-    def __init_dataset_softmax__(self):
-        if self.train_ds == None or self.is_triplet_dataset == True or self.is_distiller == True:
+        else:
             print(">>>> Init softmax dataset...")
-            self.train_ds = data.prepare_dataset(
-                self.data_path, batch_size=self.batch_size, random_status=self.random_status, random_crop=(100, 100, 3), image_per_class=self.image_per_class,
-            )
-            if tf.distribute.has_strategy():
-                self.train_ds = self.train_ds.with_options(self.data_options)
-            label_spec = self.train_ds.element_spec[-1]
-            if isinstance(label_spec, tuple):
-                # dataset with embedding values
-                self.is_distiller = True
-                self.teacher_emb_size = label_spec[0].shape[-1]
-                self.classes = label_spec[1].shape[-1]
-            else:
-                self.is_distiller = False
-                self.classes = label_spec.shape[-1]
+            self.train_ds = data.prepare_dataset(batch_size=self.batch_size, **self.dataset_params)
             self.is_triplet_dataset = False
+
+        if tf.distribute.has_strategy():
+            self.train_ds = self.train_ds.with_options(self.data_options)
+
+        label_spec = self.train_ds.element_spec[-1]
+        if isinstance(label_spec, tuple):
+            # dataset with embedding values
+            self.is_distill_ds = True
+            self.teacher_emb_size = label_spec[0].shape[-1]
+            self.classes = label_spec[1].shape[-1]
+            if type == self.distill:
+                # Loss is distill type: [label * n, embedding]
+                self.train_ds = self.train_ds.map(lambda xx, yy: (xx, yy[1:] * len(emb_loss_names) + yy[:1]))
+            elif (self.distill in emb_loss_names and len(emb_loss_names) != 1) or (self.distill not in emb_loss_names and len(emb_loss_names) != 0):
+                # Will attach distill loss as embedding loss, and there are other embedding losses: [embedding, label * n]
+                label_data_len = len(emb_loss_names) if self.distill in emb_loss_names else len(emb_loss_names) + 1
+                self.train_ds = self.train_ds.map(lambda xx, yy: (xx, yy[:1] + yy[1:] * label_data_len))
+        else:
+            self.is_distill_ds = False
+            self.classes = label_spec.shape[-1]
 
     def __init_optimizer__(self, optimizer):
         if optimizer == None:
@@ -204,14 +200,7 @@ class Train:
         else:
             output_kernel_regularizer = None
 
-        # if self.output_weight_decay != 0:
-        #     l2 = self.optimizer.weight_decay.numpy() / self.optimizer.lr.numpy() * (self.output_wd_multiply - 1) / 2
-        #     output_kernel_regularizer = keras.regularizers.L2(l2)
-        #     print(">>>> Output weight decay multiplier: %f, l2: %f" % (self.output_wd_multiply, l2))
-        # else:
-        #     output_kernel_regularizer = None
-
-        if type == self.softmax:
+        if type == self.softmax and (self.model == None or self.model.output_names[-1] != self.softmax):
             print(">>>> Add softmax layer...")
             output_layer = keras.layers.Dense(
                 self.classes, use_bias=False, name=self.softmax, activation="softmax", kernel_regularizer=output_kernel_regularizer,
@@ -225,7 +214,7 @@ class Train:
                     output_layer.set_weights(self.model.layers[-1].get_weights())
             output = output_layer(embedding)
             self.model = keras.models.Model(inputs, output)
-        elif type == self.arcface:
+        elif type == self.arcface and (self.model == None or self.model.output_names[-1] != self.arcface):
             print(">>>> Add arcface layer, loss_top_k=%d..." % (loss_top_k))
             output_layer = models.NormDense(self.classes, name=self.arcface, loss_top_k=loss_top_k, kernel_regularizer=output_kernel_regularizer)
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
@@ -248,10 +237,11 @@ class Train:
         emb_shape = self.basic_model.output_shape[-1]
         if emb_type == self.distill and self.teacher_emb_size != emb_shape:
             print(">>>> Add a dense layer to map embedding: student %d --> teacher %d" % (emb_shape, self.teacher_emb_size))
-            inputs = self.basic_model.inputs[0]
             embedding = self.basic_model.outputs[0]
-            emb_map_layer = keras.layers.Dense(self.teacher_emb_size, use_bias=False, name="distill_map")(embedding)
-            self.model = keras.models.Model(self.model.inputs[0], [emb_map_layer] + self.model.outputs)
+            if self.distill_emb_map_layer is None:
+                self.distill_emb_map_layer = keras.layers.Dense(self.teacher_emb_size, use_bias=False, name="distill_map")
+            emb_map_output = self.distill_emb_map_layer(embedding)
+            self.model = keras.models.Model(self.model.inputs[0], [emb_map_output] + self.model.outputs)
         else:
             self.model = keras.models.Model(self.model.inputs[0], self.basic_model.outputs + self.model.outputs)
 
@@ -302,7 +292,7 @@ class Train:
                     emb_loss_names[self.triplet] = losses.BatchHardTripletLoss if isinstance(ee, str) else ee
                     emb_loss_weights[self.triplet] = emb_loss_weight
                 elif "distill" in emb_loss_name:
-                    emb_loss_names[self.distill] = losses.distiller_loss if ee == None or isinstance(ee, str) else ee
+                    emb_loss_names[self.distill] = losses.distiller_loss_cosine if ee == None or isinstance(ee, str) else ee
                     emb_loss_weights[self.distill] = emb_loss_weight
         return emb_loss_names, emb_loss_weights
 
@@ -323,6 +313,7 @@ class Train:
         self.train_ds = None
         if data_path != None:
             self.data_path = data_path
+            self.dataset_params["data_path"] = self.data_path
 
     def train_single_scheduler(
         self, loss, epoch, initial_epoch=0, optimizer=None, bottleneckOnly=False, lossTopK=1, type=None, embLossTypes=None, embLossWeights=1, tripletAlpha=0.35
@@ -333,7 +324,7 @@ class Train:
             type = self.default_type or self.__init_type_by_loss__(loss)
         print(">>>> Train %s..." % type)
         self.__init_dataset__(type, emb_loss_names)
-        if self.is_distiller == False and type == self.distill:
+        if self.is_distill_ds == False and type == self.distill:
             print(">>>> Error: Dataset doesn't contain embedding data.")
             self.model.stop_training = True
             return
@@ -360,10 +351,10 @@ class Train:
             triplet_loss = loss_class(alpha=tripletAlpha)
             self.__add_emb_output_to_model__(self.triplet, triplet_loss, emb_loss_weights[self.triplet])
 
-        if self.is_distiller and type != self.distill:
-            distill_loss = emb_loss_names.get(self.distill, losses.distiller_loss)
+        if self.is_distill_ds and type != self.distill:
+            distill_loss = emb_loss_names.get(self.distill, losses.distiller_loss_cosine)
             print(">>>> Attach disill loss:", distill_loss.__name__)
-            self.__add_emb_output_to_model__(self.distill, distill_loss, emb_loss_weights[self.distill])
+            self.__add_emb_output_to_model__(self.distill, distill_loss, emb_loss_weights.get(self.distill, 1))
 
         print(">>>> loss_weights:", self.loss_weights)
         self.metrics = {ii: None if "embedding" in ii else "accuracy" for ii in self.model.output_names}

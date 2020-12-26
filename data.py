@@ -81,11 +81,12 @@ def prepare_dataset(
     batch_size=128,
     img_shape=(112, 112),
     random_status=2,
-    random_crop=None,
+    random_crop=(100, 100, 3),
     image_per_class=0,
     cache=False,
     shuffle_buffer_size=None,
     is_train=True,
+    teacher_model_interf=None,
 ):
     image_names, image_classes, embeddings, classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)
     if len(image_names) == 0:
@@ -98,14 +99,14 @@ def prepare_dataset(
             embeddings = embeddings[pick]
         print(">>>> After pick[%d], images: %d, valid classes: %d" % (image_per_class, len(image_names), class_pick.shape[0]))
 
-    if len(embeddings) == 0:
-        ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes))
-        process_func = lambda imm, label: (tf_imread(imm), tf.one_hot(label, depth=classes, dtype=tf.int32))
-    else:
+    if len(embeddings) != 0 and teacher_model_interf is None:
         # dataset with embedding values
         print(">>>> embeddings: %s. This takes some time..." % (np.shape(embeddings),))
         ds = tf.data.Dataset.from_tensor_slices((image_names, embeddings, image_classes))
         process_func = lambda imm, emb, label: (tf_imread(imm), (emb, tf.one_hot(label, depth=classes, dtype=tf.int32)))
+    else:
+        ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes))
+        process_func = lambda imm, label: (tf_imread(imm), tf.one_hot(label, depth=classes, dtype=tf.int32))
 
     AUTOTUNE = tf.data.experimental.AUTOTUNE
     ds = ds.shuffle(buffer_size=len(image_names))
@@ -116,6 +117,11 @@ def prepare_dataset(
         ds = ds.map(random_process_func, num_parallel_calls=AUTOTUNE)
 
     ds = ds.batch(batch_size)  # Use batch --> map has slightly effect on dataset reading time, but harm the randomness
+    if teacher_model_interf is not None:
+        print(">>>> Teacher model interference provided.")
+        emb_func = lambda imm, label: (imm, (teacher_model_interf(imm), label))
+        ds = ds.map(emb_func, num_parallel_calls=AUTOTUNE)
+
     ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
     ds = ds.prefetch(buffer_size=AUTOTUNE)
     return ds
@@ -131,9 +137,10 @@ class Triplet_dataset:
         image_per_class=4,
         img_shape=(112, 112, 3),
         random_status=3,
-        random_crop=None,
+        random_crop=(100, 100, 3),
+        teacher_model_interf=None,
     ):
-        self.AUTOTUNE = tf.data.experimental.AUTOTUNE
+        AUTOTUNE = tf.data.experimental.AUTOTUNE
         image_names, image_classes, _, classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)
         image_per_class = max(4, image_per_class)
         pick, _ = pick_by_image_per_class(image_classes, image_per_class)
@@ -168,11 +175,16 @@ class Triplet_dataset:
         train_dataset = train_dataset.batch(self.batch_size)
         if "-dev" in tf.__version__ or int(tf.__version__.split(".")[1]) > 2:
             # tf-nightly or tf >= 2.3.0
-            train_dataset = train_dataset.map(self.process_batch_path_2, num_parallel_calls=self.AUTOTUNE)
+            train_dataset = train_dataset.map(self.process_batch_path_2, num_parallel_calls=AUTOTUNE)
         else:
-            train_dataset = train_dataset.map(self.process_batch_path_1, num_parallel_calls=self.AUTOTUNE)
+            train_dataset = train_dataset.map(self.process_batch_path_1, num_parallel_calls=AUTOTUNE)
+
+        if teacher_model_interf is not None:
+            print(">>>> Teacher model interference provided.")
+            emb_func = lambda imm, label: (imm, (teacher_model_interf(imm), label))
+            train_dataset = train_dataset.map(emb_func, num_parallel_calls=AUTOTUNE)
         train_dataset = train_dataset.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
-        self.train_dataset = train_dataset.prefetch(buffer_size=self.AUTOTUNE)
+        self.train_dataset = train_dataset.prefetch(buffer_size=AUTOTUNE)
         self.classes = classes
 
     def image_data_shuffle_gen(self):
