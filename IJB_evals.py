@@ -39,6 +39,23 @@ class Mxnet_model_interf:
         return emb
 
 
+class Torch_model_interf:
+    import torch
+
+    def __init__(self, model_file, image_size=(112, 112)):
+        cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+        device_name = "cuda:0" if len(cvd) > 0 and int(cvd) != -1 else "cpu"
+        self.device = self.torch.device(device_name)
+        self.model = self.torch.jit.load(model_file, map_location=device_name)
+
+    def __call__(self, imgs):
+        # print(imgs.shape, imgs[0])
+        imgs = imgs.transpose(0, 3, 1, 2).copy().astype("float32")
+        imgs = (imgs - 127.5) * 0.0078125
+        output = self.model(self.torch.from_numpy(imgs).to(self.device).float())
+        return output.cpu().detach().numpy()
+
+
 def keras_model_interf(model_file):
     import tensorflow as tf
 
@@ -320,7 +337,12 @@ class IJB_test:
             data_path, subset, force_reload=force_reload
         )
         if model_file != None:
-            interf_func = keras_model_interf(model_file) if model_file.endswith(".h5") else Mxnet_model_interf(model_file)
+            if model_file.endswith(".h5"):
+                interf_func = keras_model_interf(model_file)
+            elif model_file.endswith(".pth") or model_file.endswith(".pt"):
+                interf_func = Torch_model_interf(model_file)
+            else:
+                interf_func = Mxnet_model_interf(model_file)
             self.embs, self.embs_f = get_embeddings(interf_func, img_names, landmarks, batch_size=batch_size)
         elif restore_embs != None:
             print(">>>> Reload embeddings from:", restore_embs)
@@ -330,6 +352,7 @@ class IJB_test:
             else:
                 print("ERROR: %s NOT containing embs / embs_f" % restore_embs)
                 exit(1)
+            print(">>>> Done.")
         self.data_path, self.subset, self.force_reload = data_path, subset, force_reload
         self.templates, self.medias, self.p1, self.p2, self.face_scores = templates, medias, p1, p2, face_scores
         self.label = label
@@ -483,8 +506,8 @@ def parse_arguments(argv):
         print("Please provide -m MODEL_FILE, see `--help` for usage.")
         exit(1)
     elif args.model_file != None:
-        if args.model_file.endswith(".h5"):
-            # Keras model file "model.h5"
+        if args.model_file.endswith(".h5") or args.model_file.endswith(".pth") or args.model_file.endswith(".pt"):
+            # Keras model file "model.h5", pytorch model ends with `.pth` or `.pt`
             model_name = os.path.splitext(os.path.basename(args.model_file))[0]
         else:
             # MXNet model file "models/r50-arcface-emore/model,1"

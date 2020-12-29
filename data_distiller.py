@@ -41,6 +41,23 @@ class Mxnet_model_interf:
         return emb
 
 
+class Torch_model_interf:
+    import torch
+
+    def __init__(self, model_file, image_size=(112, 112)):
+        cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+        device_name = "cuda:0" if len(cvd) > 0 and int(cvd) != -1 else "cpu"
+        self.device = self.torch.device(device_name)
+        self.model = self.torch.jit.load(model_file, map_location=device_name)
+
+    def __call__(self, imgs):
+        # print(imgs.shape, imgs[0])
+        imgs = imgs.transpose(0, 3, 1, 2).copy().astype("float32")
+        imgs = (imgs - 127.5) * 0.0078125
+        output = self.model(self.torch.from_numpy(imgs).to(self.device).float())
+        return output.cpu().detach().numpy()
+
+
 def data_distiller(data_path, model, dest_file=None, batch_size=256, limit=-1):
     """ Init dataset """
     image_names, image_classes, _, classes, dataset_pickle_file_src = pre_process_folder(data_path)
@@ -59,6 +76,10 @@ def data_distiller(data_path, model, dest_file=None, batch_size=256, limit=-1):
             # Keras model file
             basic_model = tf.keras.models.load_model(model, compile=False)
             interpreter = lambda imgs: basic_model((imgs - 127.5) * 0.0078125).numpy()
+        elif model.endswith("pth") or model.endswith("pt"):
+            # Try pytorch
+            basic_model = Torch_model_interf(model)
+            interpreter = lambda imgs: basic_model(imgs.numpy())
         else:
             # MXNet model file, like models/r50-arcface-emore/model,1
             basic_model = Mxnet_model_interf(model)
@@ -83,7 +104,7 @@ def data_distiller(data_path, model, dest_file=None, batch_size=256, limit=-1):
     print(">>>> Saving locally...")
     if dest_file is None:
         src_name = os.path.splitext(os.path.basename(dataset_pickle_file_src))[0]
-        dest_file = src_name + "_label_embs_normed_{}.npz".format(embeddings[0].shape[0])
+        dest_file = src_name + "_label_embs_{}.npz".format(embeddings[0].shape[0])
     dest_file = dest_file if dest_file.endswith(".npz") else dest_file + ".npz"
     np.savez_compressed(dest_file, image_names=new_image_names, image_classes=new_image_classes, embeddings=embeddings)
     print(">>>> Output:", dest_file)
