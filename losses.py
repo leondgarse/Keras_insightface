@@ -60,7 +60,9 @@ class ArcfaceLoss(tf.keras.losses.Loss):
         # norm_logits = y_pred
         pick_cond = tf.cast(y_true, dtype=tf.bool)
         y_pred_vals = norm_logits[pick_cond]
-        if self.margin1 == 1.0 and self.margin3 == 0.0:
+        if self.margin1 == 1.0 and self.margin2 == 0.0 and self.margin3 == 0.0:
+            theta = y_pred_vals
+        elif self.margin1 == 1.0 and self.margin3 == 0.0:
             theta = tf.cos(tf.acos(y_pred_vals) + self.margin2)
         else:
             theta = tf.cos(tf.acos(y_pred_vals) * self.margin1 + self.margin2) - self.margin3
@@ -308,6 +310,7 @@ class CenterLossCosine(CenterLoss):
 
 
 # TripletLoss helper class definitions
+# [Triplet Loss and Online Triplet Mining in TensorFlow](https://omoindrot.github.io/triplet-loss)
 class TripletLossWapper(tf.keras.losses.Loss):
     def __init__(self, alpha=0.35, **kwargs):
         # reduction = tf.keras.losses.Reduction.NONE if tf.distribute.has_strategy() else tf.keras.losses.Reduction.AUTO
@@ -348,6 +351,83 @@ class BatchHardTripletLoss(TripletLossWapper):
         basic_loss = hardest_neg_dist - hardest_pos_dist + alpha
         # ==> pos - neg > alpha
         # ==> neg + alpha - pos < 0
+        # return tf.reduce_mean(tf.maximum(basic_loss, 0.0))
+        return tf.maximum(basic_loss, 0.0)
+
+
+class BatchHardTripletLossEuclidean(TripletLossWapper):
+    def __calculate_triplet_loss__(self, labels, embeddings, alpha):
+        labels = tf.argmax(labels, axis=1)
+        pos_mask = tf.equal(tf.expand_dims(labels, 0), tf.expand_dims(labels, 1))
+        # dense_mse_func = lambda xx: tf.reduce_sum(tf.square((embeddings - xx)), axis=-1)
+        # dense_mse_func = tf.function(dense_mse_func, input_signature=(tf.TensorSpec(shape=[None], dtype=tf.float32),))
+        # dists = tf.vectorized_map(dense_mse_func, embeddings)
+
+        # Euclidean_dists = aa ** 2 + bb ** 2 - 2 * aa * bb, where aa = embeddings, bb = embeddings
+        embeddings_sqaure_sum = tf.reduce_sum(tf.square(embeddings), axis=-1)
+        ab = tf.matmul(embeddings, tf.transpose(embeddings))
+        dists = tf.reshape(embeddings_sqaure_sum, (-1, 1)) + embeddings_sqaure_sum - 2 * ab
+        # pos_dists = tf.ragged.boolean_mask(dists, pos_mask)
+        pos_dists = tf.where(pos_mask, dists, tf.zeros_like(dists))
+        hardest_pos_dist = tf.reduce_max(pos_dists, -1)
+        # neg_dists = tf.ragged.boolean_mask(dists, tf.logical_not(pos_mask))
+        neg_dists = tf.where(pos_mask, tf.ones_like(dists) * tf.reduce_max(dists), dists)
+        hardest_neg_dist = tf.reduce_min(neg_dists, -1)
+        tf.print(
+            " - triplet_dists_mean:",
+            tf.reduce_mean(dists),
+            "pos:",
+            tf.reduce_mean(hardest_pos_dist),
+            "neg:",
+            tf.reduce_mean(hardest_neg_dist),
+            end="",
+        )
+        basic_loss = hardest_pos_dist + alpha - hardest_neg_dist
+        # ==> neg - pos > alpha
+        # ==> pos + alpha - neg < 0
+        # return tf.reduce_mean(tf.maximum(basic_loss, 0.0))
+        return tf.maximum(basic_loss, 0.0)
+
+
+class BatchHardTripletLossEuclideanAutoAlpha(TripletLossWapper):
+    def __init__(self, alpha=0.1, init_auto_alpha=1, **kwargs):
+        # reduction = tf.keras.losses.Reduction.NONE if tf.distribute.has_strategy() else tf.keras.losses.Reduction.AUTO
+        # super(TripletLossWapper, self).__init__(**kwargs, reduction=reduction)
+        super(BatchHardTripletLossMSEAutoAlpha, self).__init__(alpha=alpha, **kwargs)
+        self.auto_alpha = tf.Variable(init_auto_alpha, dtype="float", trainable=False)
+
+    def __calculate_triplet_loss__(self, labels, embeddings, alpha):
+        labels = tf.argmax(labels, axis=1)
+        pos_mask = tf.equal(tf.expand_dims(labels, 0), tf.expand_dims(labels, 1))
+        # dense_mse_func = lambda xx: tf.reduce_sum(tf.square((embeddings - xx)), axis=-1)
+        # dense_mse_func = tf.function(dense_mse_func, input_signature=(tf.TensorSpec(shape=[None], dtype=tf.float32),))
+        # dists = tf.vectorized_map(dense_mse_func, embeddings)
+
+        # Euclidean_dists = aa ** 2 + bb ** 2 - 2 * aa * bb, where aa = embeddings, bb = embeddings
+        embeddings_sqaure_sum = tf.reduce_sum(tf.square(embeddings), axis=-1)
+        ab = tf.matmul(embeddings, tf.transpose(embeddings))
+        dists = tf.reshape(embeddings_sqaure_sum, (-1, 1)) + embeddings_sqaure_sum - 2 * ab
+        # pos_dists = tf.ragged.boolean_mask(dists, pos_mask)
+        pos_dists = tf.where(pos_mask, dists, tf.zeros_like(dists))
+        hardest_pos_dist = tf.reduce_max(pos_dists, -1)
+        # neg_dists = tf.ragged.boolean_mask(dists, tf.logical_not(pos_mask))
+        neg_dists = tf.where(pos_mask, tf.ones_like(dists) * tf.reduce_max(dists), dists)
+        hardest_neg_dist = tf.reduce_min(neg_dists, -1)
+        basic_loss = hardest_pos_dist + self.auto_alpha - hardest_neg_dist
+        self.auto_alpha.assign(tf.reduce_mean(dists) * alpha)
+        tf.print(
+            " - triplet_dists_mean:",
+            tf.reduce_mean(dists),
+            "pos:",
+            tf.reduce_mean(hardest_pos_dist),
+            "neg:",
+            tf.reduce_mean(hardest_neg_dist),
+            "auto_alpha:",
+            self.auto_alpha,
+            end="",
+        )
+        # ==> neg - pos > alpha
+        # ==> pos + alpha - neg < 0
         # return tf.reduce_mean(tf.maximum(basic_loss, 0.0))
         return tf.maximum(basic_loss, 0.0)
 
