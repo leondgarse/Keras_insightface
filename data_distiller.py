@@ -93,16 +93,17 @@ class Data_distiller:
             image_names, image_classes, embeddings = self.__init_from_saved_npz__()
             self.emb_gen = ([image_names, image_classes, embeddings],)
             self.save_npz = False
+            self.tqdm_desc = "Converting"
         elif self.model_file != None:
             self.__init_ds_model_dest__()
             self.emb_gen = self.__extract_emb_gen__()
+            self.tqdm_desc = "Embedding"
         else:
             return
 
         if save_npz:
             self.__save_to_npz__()
         else:
-            self.__init_tfrecord_encoder__()
             self.__save_to_tfrecord_by_batch__()
         print(">>>> Output:", self.dest_file)
 
@@ -144,13 +145,31 @@ class Data_distiller:
 
         if self.dest_file is None:
             self.dest_file = os.path.splitext(self.data_path)[0]
-            if self.use_fp16 and "fp16" not in self.data_path:
+            if self.use_fp16 and "_fp16" not in self.data_path:
                 self.dest_file += "_fp16"
         self.dest_file = self.dest_file if self.dest_file.endswith(".tfrecord") else self.dest_file + ".tfrecord"
         self.classes, self.total, self.emb_shape = classes, total, emb_shape
         return image_names, image_classes, embeddings
 
-    def __init_tfrecord_encoder__(self):
+    def __extract_emb_gen__(self):
+        for imm, label in self.ds:
+            imgs = tf.stack([tf_imread(ii) for ii in imm])
+            emb = self.interf_func(imgs)
+            emb = np.array(emb, dtype="float16") if self.use_fp16 else np.array(emb, dtype="float32")
+            yield imm.numpy(), label.numpy(), emb
+
+    def __save_to_npz__(self):
+        """ Extract embeddings """
+        steps = int(np.ceil(self.total // self.batch_size)) + 1
+        image_names, image_classes, embeddings = [], [], []
+        for imm, label, emb in tqdm(self.emb_gen, self.tqdm_desc, total=steps):
+            image_names.extend(imm)
+            image_classes.extend(label)
+            embeddings.extend(emb)
+        # imms, labels, embeddings = np.array(imms), np.array(labels), np.array(embeddings)
+        np.savez_compressed(self.dest_file, image_names=image_names, image_classes=image_classes, embeddings=embeddings)
+
+    def __save_to_tfrecord_by_batch__(self):
         """ Encode feature definations, save also `classes` and `emb_shape` """
         self.encode_base_info = {
             "classes": tf.train.Feature(int64_list=tf.train.Int64List(value=[self.classes])),
@@ -165,39 +184,19 @@ class Data_distiller:
             "embeddings": lambda vv: tf.train.Feature(bytes_list=tf.train.BytesList(value=[vv.tobytes()])),
         }
 
-    def __extract_emb_gen__(self):
-        for imm, label in self.ds:
-            imgs = tf.stack([tf_imread(ii) for ii in imm])
-            emb = self.interf_func(imgs)
-            emb = np.array(emb, dtype="float16") if self.use_fp16 else np.array(emb, dtype="float32")
-            yield imm.numpy(), label.numpy(), emb
-
-    def __save_to_npz__(self):
-        """ Extract embeddings """
-        steps = int(np.ceil(self.total // self.batch_size)) + 1
-        image_names, image_classes, embeddings = [], [], []
-        for imm, label, emb in tqdm(self.emb_gen, "Embedding", total=steps):
-            image_names.extend(imm)
-            image_classes.extend(label)
-            embeddings.extend(emb)
-        # imms, labels, embeddings = np.array(imms), np.array(labels), np.array(embeddings)
-        np.savez_compressed(self.dest_file, image_names=image_names, image_classes=image_classes, embeddings=embeddings)
-
-    def __save_to_tfrecord_by_batch__(self):
         is_first_line = True
-        with tf.io.TFRecordWriter(self.dest_file) as file_writer:
-            with tqdm(desc="Embedding", total=self.total) as pbar:
-                for imm, label, emb in self.emb_gen:
-                    data = {"image_names": imm, "image_classes": label, "embeddings": emb}
-                    batch_steps = range(len(data["image_names"]))
-                    for ii in batch_steps:
-                        feature = {kk: self.encode_feature[kk](data[kk][ii]) for kk in data}
-                        if is_first_line:  # Save base_info in the first line
-                            is_first_line = False
-                            feature.update(self.encode_base_info)
-                        record_bytes = tf.train.Example(features=tf.train.Features(feature=feature)).SerializeToString()
-                        file_writer.write(record_bytes)
-                        pbar.update(1)
+        with tf.io.TFRecordWriter(self.dest_file) as file_writer, tqdm(desc=self.tqdm_desc, total=self.total) as pbar:
+            for imm, label, emb in self.emb_gen:
+                data = {"image_names": imm, "image_classes": label, "embeddings": emb}
+                batch_steps = range(len(data["image_names"]))
+                for ii in batch_steps:
+                    feature = {kk: self.encode_feature[kk](data[kk][ii]) for kk in data}
+                    if is_first_line:  # Save base_info in the first line
+                        is_first_line = False
+                        feature.update(self.encode_base_info)
+                    record_bytes = tf.train.Example(features=tf.train.Features(feature=feature)).SerializeToString()
+                    file_writer.write(record_bytes)
+                    pbar.update(1)
 
 
 if __name__ == "__main__":
@@ -205,7 +204,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-D", "--data_path", type=str, required=True, help="Original data path, or npz path for converting to tfrecord")
+    parser.add_argument("-D", "--data_path", type=str, required=True, help="Data path, or npz file converting to tfrecord")
     parser.add_argument("-M", "--model_file", type=str, default=None, help="Model file, keras h5 / pytorch pth / mxnet")
     parser.add_argument("-d", "--dest_file", type=str, default=None, help="Dest file path to save the processed dataset npz")
     parser.add_argument("-b", "--batch_size", type=int, default=256, help="Batch size")
