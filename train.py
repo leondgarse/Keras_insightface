@@ -114,6 +114,7 @@ class Train:
         self.data_path, self.random_status, self.image_per_class, self.teacher_model_interf = data_path, random_status, image_per_class, teacher_model_interf
         self.dataset_params = {
             "data_path": self.data_path,
+            "batch_size": self.batch_size,
             "random_status": self.random_status,
             "image_per_class": self.image_per_class,
             "teacher_model_interf": self.teacher_model_interf,
@@ -133,14 +134,18 @@ class Train:
 
         if init_as_triplet:
             print(">>>> Init triplet dataset...")
-            # batch_size = int(self.batch_size / 4 * 1.5)
-            batch_size = self.batch_size // 4
-            tt = data.Triplet_dataset(batch_size=batch_size, **self.dataset_params)
-            self.train_ds = tt.train_dataset
+            if self.data_path.endswith(".tfrecord"):
+                print(">>>> Combining tfrecord dataset with triplet is NOT recommended.")
+                self.train_ds = data.prepare_distill_dataset_tfrecord(**self.dataset_params)
+            else:
+                self.train_ds = data.Triplet_dataset( **self.dataset_params).ds
             self.is_triplet_dataset = True
         else:
             print(">>>> Init softmax dataset...")
-            self.train_ds = data.prepare_dataset(batch_size=self.batch_size, **self.dataset_params)
+            if self.data_path.endswith(".tfrecord"):
+                self.train_ds = data.prepare_distill_dataset_tfrecord(**self.dataset_params)
+            else:
+                self.train_ds = data.prepare_dataset(**self.dataset_params)
             self.is_triplet_dataset = False
 
         if tf.distribute.has_strategy():
@@ -316,7 +321,7 @@ class Train:
             self.dataset_params["data_path"] = self.data_path
 
     def train_single_scheduler(
-        self, loss, epoch, initial_epoch=0, optimizer=None, bottleneckOnly=False, lossTopK=1, type=None, embLossTypes=None, embLossWeights=1, tripletAlpha=0.35
+        self, loss, epoch, initial_epoch=0, lossWeight=1, optimizer=None, bottleneckOnly=False, lossTopK=1, type=None, embLossTypes=None, embLossWeights=1, tripletAlpha=0.35
     ):
         emb_loss_names, emb_loss_weights = self.__init_emb_losses__(embLossTypes, embLossWeights)
 
@@ -335,7 +340,7 @@ class Train:
         self.__init_model__(type, lossTopK)
 
         # loss_weights
-        self.cur_loss, self.loss_weights = [loss], {ii: 1.0 for ii in self.model.output_names}
+        self.cur_loss, self.loss_weights = [loss], {ii: lossWeight for ii in self.model.output_names}
         if self.center in emb_loss_names and type != self.center:
             loss_class = emb_loss_names[self.center]
             print(">>>> Attach center loss:", loss_class.__name__)

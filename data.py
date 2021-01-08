@@ -3,6 +3,7 @@ import glob2
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from skimage.io import imread
 
 # /datasets/faces_emore_112x112_folders/*/*.jpg'
 default_image_names_reg = "*/*.jpg"
@@ -19,13 +20,12 @@ def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None)
 
     if os.path.exists(dest_pickle):
         aa = np.load(dest_pickle)
-        # with open(dest_pickle, "rb") as ff:
-        #     aa = pickle.load(ff)
         if len(aa.keys()) == 2:
             image_names, image_classes, embeddings = aa["image_names"], aa["image_classes"], []
         else:
             # dataset with embedding values
             image_names, image_classes, embeddings = aa["image_names"], aa["image_classes"], aa["embeddings"]
+        print(">>>> reloaded from dataset backup:", dest_pickle)
     else:
         if not os.path.exists(data_path):
             return [], [], [], 0, None
@@ -34,18 +34,16 @@ def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None)
         image_names = glob2.glob(os.path.join(data_path, image_names_reg))
         image_names = np.random.permutation(image_names).tolist()
         image_classes = [image_classes_rule(ii) for ii in image_names]
-        embeddings = []
+        embeddings = np.array([])
         np.savez_compressed(dest_pickle, image_names=image_names, image_classes=image_classes)
-        # with open(dest_pickle, "wb") as ff:
-        #     pickle.dump({"image_names": image_names, "image_classes": image_classes}, ff)
     classes = np.max(image_classes) + 1
     return image_names, image_classes, embeddings, classes, dest_pickle
 
 
 def tf_imread(file_path):
+    # tf.print('Reading file:', file_path)
     img = tf.io.read_file(file_path)
     img = tf.image.decode_jpeg(img, channels=3)  # [0, 255]
-    # img = tf.image.convert_image_dtype(img, tf.float32)  # [0, 1]
     img = tf.cast(img, "float32")  # [0, 255]
     return img
 
@@ -118,10 +116,50 @@ def prepare_dataset(
 
     ds = ds.batch(batch_size)  # Use batch --> map has slightly effect on dataset reading time, but harm the randomness
     if teacher_model_interf is not None:
-        print(">>>> Teacher model interference provided.")
+        print(">>>> Teacher model interface provided.")
         emb_func = lambda imm, label: (imm, (teacher_model_interf(imm), label))
         ds = ds.map(emb_func, num_parallel_calls=AUTOTUNE)
 
+    ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
+    ds = ds.prefetch(buffer_size=AUTOTUNE)
+    return ds
+
+
+def prepare_distill_dataset_tfrecord(data_path, batch_size=128, img_shape=(112, 112), random_status=2, random_crop=(100, 100, 3), **kw):
+    AUTOTUNE = tf.data.experimental.AUTOTUNE
+    decode_base_info = {
+        "classes": tf.io.FixedLenFeature([], dtype=tf.int64),
+        "emb_shape": tf.io.FixedLenFeature([], dtype=tf.int64),
+        "total": tf.io.FixedLenFeature([], dtype=tf.int64),
+        "use_fp16": tf.io.FixedLenFeature([], dtype=tf.int64),
+    }
+    decode_feature = {
+        "image_names": tf.io.FixedLenFeature([], dtype=tf.string),
+        "image_classes": tf.io.FixedLenFeature([], dtype=tf.int64),
+        # "embeddings": tf.io.FixedLenFeature([emb_shape], dtype=tf.float32),
+        "embeddings": tf.io.FixedLenFeature([], dtype=tf.string),
+    }
+
+    # base info saved in the first data line
+    header = tf.data.TFRecordDataset([data_path]).as_numpy_iterator().next()
+    hh = tf.io.parse_single_example(header, decode_base_info)
+    classes, emb_shape, total, use_fp16 = hh["classes"].numpy(), hh["emb_shape"].numpy(), hh["total"].numpy(), hh["use_fp16"].numpy()
+    emb_dtype = tf.float16 if use_fp16 else tf.float32
+    print(">>>> [Base info] total:", total, "classes:", classes, "emb_shape:", emb_shape, "use_fp16:", use_fp16)
+
+    def decode_fn(record_bytes):
+        ff = tf.io.parse_single_example(record_bytes, decode_feature)
+        image_name, image_classe, embedding = ff["image_names"], ff["image_classes"], ff["embeddings"]
+        img = random_process_image(tf_imread(image_name), img_shape, random_status, random_crop)
+        label = tf.one_hot(image_classe, depth=classes, dtype=tf.int32)
+        embedding = tf.io.decode_raw(embedding, emb_dtype)
+        embedding.set_shape([emb_shape])
+        return img, (embedding, label)
+
+    ds = tf.data.TFRecordDataset([data_path])
+    ds = ds.shuffle(buffer_size=batch_size * 1000)
+    ds = ds.map(decode_fn, num_parallel_calls=AUTOTUNE)
+    ds = ds.batch(batch_size)
     ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
     ds = ds.prefetch(buffer_size=AUTOTUNE)
     return ds
@@ -141,64 +179,54 @@ class Triplet_dataset:
         teacher_model_interf=None,
     ):
         AUTOTUNE = tf.data.experimental.AUTOTUNE
-        image_names, image_classes, _, classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)
+        image_names, image_classes, embeddings, classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)
         image_per_class = max(4, image_per_class)
         pick, _ = pick_by_image_per_class(image_classes, image_per_class)
+        image_names, image_classes = image_names[pick].astype(str), image_classes[pick]
+        self.classes = classes
 
-        image_dataframe = pd.DataFrame({"image_names": image_names[pick], "image_classes": image_classes[pick]})
+        image_dataframe = pd.DataFrame({"image_names": image_names, "image_classes": image_classes})
         self.image_dataframe = image_dataframe.groupby("image_classes").apply(lambda xx: xx.image_names.values)
-        # aa = image_dataframe.map(len)
-        # self.image_dataframe = image_dataframe[aa > image_per_class]
         self.split_func = lambda xx: np.array(
             np.split(np.random.permutation(xx)[: len(xx) // image_per_class * image_per_class], len(xx) // image_per_class)
         )
         self.image_per_class = image_per_class
-        self.batch_size = batch_size
+        self.batch_size = batch_size // image_per_class * image_per_class
         self.img_shape = img_shape[:2]
         self.channels = img_shape[2] if len(img_shape) > 2 else 3
-        print("The final train_dataset batch will be %s" % ([batch_size * image_per_class, *self.img_shape, self.channels]))
+        print("The final train_dataset batch will be %s" % ([self.batch_size, *self.img_shape, self.channels]))
 
-        get_label = lambda xx: tf.one_hot(
-            tf.cast(tf.strings.to_number(tf.strings.split(xx, os.path.sep)[-2]), tf.int32), depth=classes, dtype=tf.int32
-        )
-        self.process_path = lambda img_name: (
-            random_process_image(tf_imread(img_name), self.img_shape, random_status, random_crop),
-            get_label(img_name),
-        )
-        # image_data = self.image_data_shuffle()
-        # self.steps_per_epoch = np.ceil(image_data.shape[0] / self.batch_size)
-
-        train_dataset = tf.data.Dataset.from_generator(
-            self.image_data_shuffle_gen, output_types=tf.string, output_shapes=(image_per_class,)
-        )
-        # train_dataset = train_dataset.shuffle(total)
-        train_dataset = train_dataset.batch(self.batch_size)
-        if "-dev" in tf.__version__ or int(tf.__version__.split(".")[1]) > 2:
-            # tf-nightly or tf >= 2.3.0
-            train_dataset = train_dataset.map(self.process_batch_path_2, num_parallel_calls=AUTOTUNE)
+        one_hot_label = lambda label: tf.one_hot(label, depth=classes, dtype=tf.int32)
+        random_imread = lambda imm: random_process_image(tf_imread(imm), self.img_shape, random_status, random_crop)
+        if len(embeddings) != 0 and teacher_model_interf is None:
+            self.teacher_embeddings = dict(zip(image_names, embeddings[pick]))
+            emb_spec = tf.TensorSpec(shape=(embeddings.shape[-1],), dtype=tf.float32)
+            output_signature = (tf.TensorSpec(shape=(), dtype=tf.string), emb_spec, tf.TensorSpec(shape=(), dtype=tf.int64))
+            ds = tf.data.Dataset.from_generator(self.image_shuffle_gen_with_emb, output_signature=output_signature)
+            process_func = lambda imm, emb, label: (random_imread(imm), (emb, one_hot_label(label)))
         else:
-            train_dataset = train_dataset.map(self.process_batch_path_1, num_parallel_calls=AUTOTUNE)
+            output_signature = (tf.TensorSpec(shape=(), dtype=tf.string), tf.TensorSpec(shape=(), dtype=tf.int64))
+            ds = tf.data.Dataset.from_generator(self.image_shuffle_gen, output_signature=output_signature)
+            process_func = lambda imm, label: (random_imread(imm), one_hot_label(label))
+        ds = ds.map(process_func, num_parallel_calls=AUTOTUNE)
 
+        ds = ds.batch(self.batch_size)
         if teacher_model_interf is not None:
             print(">>>> Teacher model interference provided.")
             emb_func = lambda imm, label: (imm, (teacher_model_interf(imm), label))
-            train_dataset = train_dataset.map(emb_func, num_parallel_calls=AUTOTUNE)
-        train_dataset = train_dataset.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
-        self.train_dataset = train_dataset.prefetch(buffer_size=AUTOTUNE)
-        self.classes = classes
+            ds = ds.map(emb_func, num_parallel_calls=AUTOTUNE)
 
-    def image_data_shuffle_gen(self):
+        ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
+        self.ds = ds.prefetch(buffer_size=AUTOTUNE)
+
+    def image_shuffle_gen(self):
         tf.print("Shuffle image data...")
         shuffle_dataset = self.image_dataframe.map(self.split_func)
-        image_data = np.random.permutation(np.vstack(shuffle_dataset.values))
-        return (ii for ii in image_data)
+        image_data = np.random.permutation(np.vstack(shuffle_dataset.values)).flatten()
+        return ((ii, int(ii.split(os.path.sep)[-2])) for ii in image_data)
 
-    def process_batch_path_1(self, image_name_batch):
-        image_names = tf.reshape(image_name_batch, [-1])
-        images, labels = tf.map_fn(self.process_path, image_names, dtype=(tf.float32, tf.int32))
-        return images, labels
-
-    def process_batch_path_2(self, image_name_batch):
-        image_names = tf.reshape(image_name_batch, [-1])
-        images, labels = tf.map_fn(self.process_path, image_names, fn_output_signature=(tf.float32, tf.int32))
-        return images, labels
+    def image_shuffle_gen_with_emb(self):
+        tf.print("Shuffle image with embedding data...")
+        shuffle_dataset = self.image_dataframe.map(self.split_func)
+        image_data = np.random.permutation(np.vstack(shuffle_dataset.values)).flatten()
+        return ((ii, self.teacher_embeddings[ii], int(ii.split(os.path.sep)[-2])) for ii in image_data)
