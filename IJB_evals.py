@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 import os
+import cv2
 import numpy as np
+import pandas as pd
 from tqdm import tqdm
 from skimage import transform
 from sklearn.preprocessing import normalize
 from sklearn.metrics import roc_curve, auc
-import pandas as pd
-import cv2
 
 
 class Mxnet_model_interf:
-    import mxnet as mx
-
     def __init__(self, model_file, layer="fc1", image_size=(112, 112)):
+        import mxnet as mx
+
+        self.mx = mx
         cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
         if len(cvd) > 0 and int(cvd) != -1:
             ctx = [self.mx.gpu(ii) for ii in range(len(cvd.split(",")))]
@@ -40,13 +41,18 @@ class Mxnet_model_interf:
 
 
 class Torch_model_interf:
-    import torch
-
     def __init__(self, model_file, image_size=(112, 112)):
+        import torch
+
+        self.torch = torch
         cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
         device_name = "cuda:0" if len(cvd) > 0 and int(cvd) != -1 else "cpu"
         self.device = self.torch.device(device_name)
-        self.model = self.torch.jit.load(model_file, map_location=device_name)
+        try:
+            self.model = self.torch.jit.load(model_file, map_location=device_name)
+        except:
+            print("Error: %s is weights only, please load and save the entire model by `torch.jit.save`" % model_file)
+            self.model = None
 
     def __call__(self, imgs):
         # print(imgs.shape, imgs[0])
@@ -58,6 +64,8 @@ class Torch_model_interf:
 
 def keras_model_interf(model_file):
     import tensorflow as tf
+    for gpu in tf.config.experimental.list_physical_devices("GPU"):
+        tf.config.experimental.set_memory_growth(gpu, True)
 
     mm = tf.keras.models.load_model(model_file, compile=False)
     return lambda imgs: mm((tf.cast(imgs, "float32") - 127.5) * 0.0078125).numpy()
@@ -242,6 +250,7 @@ def image2template_feature(img_feats=None, templates=None, medias=None, choose_t
         unique_templates = np.unique(templates)
         unique_subjectids = None
 
+    # template_feats = np.zeros((len(unique_templates), img_feats.shape[1]), dtype=img_feats.dtype)
     template_feats = np.zeros((len(unique_templates), img_feats.shape[1]))
     for count_template, uqt in tqdm(enumerate(unique_templates), "Extract template feature", total=len(unique_templates)):
         (ind_t,) = np.where(templates == uqt)
@@ -263,16 +272,24 @@ def image2template_feature(img_feats=None, templates=None, medias=None, choose_t
 
 
 def verification_11(template_norm_feats=None, unique_templates=None, p1=None, p2=None, batch_size=100000):
-    template2id = np.zeros((max(unique_templates) + 1, 1), dtype=int)
+    try:
+        import cupy as cp
+        template_norm_feats = cp.array(template_norm_feats)
+        score_func = lambda feat1, feat2: cp.sum(feat1 * feat2, axis=-1).get()
+        print(">>>> Using cupy.")
+    except:
+        score_func = lambda feat1, feat2: np.sum(feat1 * feat2, -1)
+
+    template2id = np.zeros(max(unique_templates) + 1, dtype=int)
     for count_template, uqt in enumerate(unique_templates):
         template2id[uqt] = count_template
 
     steps = int(np.ceil(len(p1) / batch_size))
     score = []
     for id in tqdm(range(steps), "Verification"):
-        feat1 = template_norm_feats[template2id[p1[id * batch_size : (id + 1) * batch_size]].flatten()]
-        feat2 = template_norm_feats[template2id[p2[id * batch_size : (id + 1) * batch_size]].flatten()]
-        score.extend(np.sum(feat1 * feat2, -1))
+        feat1 = template_norm_feats[template2id[p1[id * batch_size : (id + 1) * batch_size]]]
+        feat2 = template_norm_feats[template2id[p2[id * batch_size : (id + 1) * batch_size]]]
+        score.extend(score_func(feat1, feat2))
     return np.array(score)
 
 
@@ -326,9 +343,13 @@ def evaluation_1N(query_feats, gallery_feats, query_ids, reg_ids):
     neg_sims_sorted = heapq.nlargest(max(required_topk), neg_sims)  # heap sort
     print("pos_sims: %s, neg_sims: %s, neg_sims_sorted: %d" % (pos_sims.shape, neg_sims.shape, len(neg_sims_sorted)))
     for far, pos in zip(Fars, required_topk):
-        th = neg_sims[pos - 1]
+        th = neg_sims_sorted[pos - 1]
         recall = np.sum(pos_sims > th) / query_num
         print("far = {:.10f} pr = {:.10f} th = {:.10f}".format(far, recall, th))
+
+    score = np.concatenate([pos_sims, neg_sims])
+    label = np.concatenate([np.ones_like(pos_sims),np.zeros_like(neg_sims)])
+    return score, label
 
 
 class IJB_test:
@@ -354,8 +375,8 @@ class IJB_test:
                 exit(1)
             print(">>>> Done.")
         self.data_path, self.subset, self.force_reload = data_path, subset, force_reload
-        self.templates, self.medias, self.p1, self.p2, self.face_scores = templates, medias, p1, p2, face_scores
-        self.label = label
+        self.templates, self.medias, self.p1, self.p2, self.label = templates, medias, p1, p2, label
+        self.face_scores = face_scores.astype(self.embs.dtype)
 
     def run_model_test_single(self, use_flip_test=True, use_norm_score=False, use_detector_score=True):
         img_input_feats = process_embeddings(
@@ -405,9 +426,10 @@ class IJB_test:
         print("probe_mixed_templates_feature:", probe_mixed_templates_feature.shape)
         print("probe_mixed_unique_subject_ids:", probe_mixed_unique_subject_ids.shape)
 
-        evaluation_1N(
+        score, label = evaluation_1N(
             probe_mixed_templates_feature, gallery_templates_feature, probe_mixed_unique_subject_ids, gallery_unique_subject_ids
         )
+        return score, label
 
 
 def plot_roc_and_calculate_tpr(scores, names=None, label=None):
@@ -427,7 +449,7 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
             score_dict[name] = np.load(score)
         elif isinstance(score, str) and score.endswith(".txt"):
             # IJB meta data like ijbb_template_pair_label.txt
-            label = pd.read_csv(score, sep=" ").values[:, 2]
+            label = pd.read_csv(score, sep=" ", header=None).values[:, 2]
         else:
             name = name if name is not None else str(id)
             score_dict[name] = score
@@ -454,21 +476,23 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
         fig = plt.figure()
         for name in score_dict:
             plt.plot(fpr_dict[name], tpr_dict[name], lw=1, label="[%s (AUC = %0.4f%%)]" % (name, roc_auc_dict[name] * 100))
+        title = "ROC on IJB" + name.split("IJB")[-1][0] if "IJB" in name else "ROC on IJB"
 
         plt.xlim([10 ** -6, 0.1])
-        plt.ylim([0.3, 1.0])
-        plt.grid(linestyle="--", linewidth=1)
-        plt.xticks(x_labels)
-        plt.yticks(np.linspace(0.3, 1.0, 8, endpoint=True))
         plt.xscale("log")
+        plt.xticks(x_labels)
         plt.xlabel("False Positive Rate")
+        plt.ylim([0.3, 1.0])
+        plt.yticks(np.linspace(0.3, 1.0, 8, endpoint=True))
         plt.ylabel("True Positive Rate")
-        plt.title("ROC on IJB")
+
+        plt.grid(linestyle="--", linewidth=1)
+        plt.title(title)
         plt.legend(loc="lower right")
         plt.tight_layout()
         plt.show()
     except:
-        print("Missing matplotlib")
+        print("matplotlib plot failed")
         fig = None
 
     return tpr_result_df, fig
@@ -477,9 +501,9 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
 def parse_arguments(argv):
     import argparse
 
-    default_save_result_name = "IJB_result/{model_name}_{subset}.npz"
+    default_save_result_name = "IJB_result/{model_name}_{subset}_{type}.npz"
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-m", "--model_file", type=str, default=None, help="Saved model file path, could be keras / mxnet one")
+    parser.add_argument("-m", "--model_file", type=str, default=None, help="Saved model file, could be keras h5 / pytorch jit pth / mxnet")
     parser.add_argument("-d", "--data_path", type=str, default="./", help="Dataset path")
     parser.add_argument("-s", "--subset", type=str, default="IJBB", help="Subset test target, could be IJBB / IJBC")
     parser.add_argument("-b", "--batch_size", type=int, default=64, help="Batch size for get_embeddings")
@@ -514,7 +538,8 @@ def parse_arguments(argv):
             model_name = os.path.basename(os.path.dirname(args.model_file))
 
         if args.save_result == default_save_result_name:
-            args.save_result = default_save_result_name.format(model_name=model_name, subset=args.subset)
+            type = "1N" if args.is_one_2_N else "11"
+            args.save_result = default_save_result_name.format(model_name=model_name, subset=args.subset, type=type)
     return args
 
 
@@ -525,30 +550,36 @@ if __name__ == "__main__":
     if args.plot_only != None and len(args.plot_only) != 0:
         plot_roc_and_calculate_tpr(args.plot_only)
     else:
-        save_name = os.path.splitext(args.save_result)[0]
+        save_name = os.path.splitext(os.path.basename(args.save_result))[0]
         save_items = {}
+        save_path = os.path.dirname(args.save_result)
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+
         tt = IJB_test(args.model_file, args.data_path, args.subset, args.batch_size, args.force_reload, args.save_result)
+        if args.save_embeddings:    # Save embeddings first, in case of any error happens later...
+            np.savez(args.save_result, embs=tt.embs, embs_f=tt.embs_f)
+
         if args.is_one_2_N:  # 1:N test
-            tt.run_model_test_1N()
+            score, label = tt.run_model_test_1N()
+            scores, names = [score], [save_name]
+            save_items.update({"scores": scores, "names": names})
         elif args.is_bunch:  # All 8 tests N{0,1}D{0,1}F{0,1}
             scores, names = tt.run_model_test_bunch()
             names = [save_name + "_" + ii for ii in names]
+            label = tt.label
             save_items.update({"scores": scores, "names": names})
         else:  # Basic 1:1 N0D1F1 test
             score = tt.run_model_test_single()
-            scores, names = [score], [save_name]
+            scores, names, label = [score], [save_name], tt.label
             save_items.update({"scores": scores, "names": names})
 
         if args.save_embeddings:
             save_items.update({"embs": tt.embs, "embs_f": tt.embs_f})
         if args.save_label:
-            save_items.update({"label": tt.label})
+            save_items.update({"label": label})
 
         if args.model_file != None or args.save_embeddings:  # embeddings not restored from file or should save_embeddings again
-            save_path = os.path.dirname(args.save_result)
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
             np.savez(args.save_result, **save_items)
 
-        if not args.is_one_2_N:
-            plot_roc_and_calculate_tpr(scores, names=names, label=tt.label)
+        plot_roc_and_calculate_tpr(scores, names=names, label=label)

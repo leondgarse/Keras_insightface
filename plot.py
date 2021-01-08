@@ -150,8 +150,9 @@ def hist_plot(
     if fig_label:
         axes[0].legend(loc="upper right", fontsize=Default_legend_font_size)
 
+    cur_color = axes[0].lines[-1].get_color()
     if len(accuracy_lists) != 0:
-        arrays_plot(axes[1], accuracy_lists, label=fig_label, init_epoch=init_epoch, pre_value=pre_item.get("accuracy", 0))
+        arrays_plot(axes[1], accuracy_lists, color=cur_color, label=fig_label, init_epoch=init_epoch, pre_value=pre_item.get("accuracy", 0))
         peak_scatter(axes[1], accuracy_lists, np.argmax, init_epoch=init_epoch)
     axes[1].set_title("accuracy")
     if fig_label:
@@ -178,7 +179,6 @@ def hist_plot(
 
     # Keep the same color, but different from line styles.
     eval_id, other_custom_id = 0, 0
-    cur_color = axes[0].lines[-1].get_color()
     for kk, vv in customs_dict.items():
         if kk in EVALS_NAME:
             ax = axes[eval_ax]
