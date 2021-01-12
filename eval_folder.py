@@ -56,7 +56,7 @@ class Face_detection:
 
 def detection_in_folder(data_path):
     imms = glob(os.path.join(data_path, '*/*'))
-    dest_path = data_path + "_aligned"
+    dest_path = data_path + "_aligned_112_112"
     det = Face_detection()
 
     for imm in tqdm(imms, "Detecting"):
