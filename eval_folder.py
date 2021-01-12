@@ -55,6 +55,8 @@ class Face_detection:
 
 
 def detection_in_folder(data_path):
+    while data_path.endswith("/"):
+        data_path = data_path[:-1]
     imms = glob(os.path.join(data_path, '*/*'))
     dest_path = data_path + "_aligned_112_112"
     det = Face_detection()
@@ -128,12 +130,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-d", "--data_path", type=str, required=True, help="Data path, containing images in class folders")
-    parser.add_argument("-m", "--model_file", type=str, default=None, help="Model file, keras h5")
+    parser.add_argument("-m", "--model_file", type=str, required=True, help="Model file, keras h5")
     parser.add_argument("-b", "--batch_size", type=int, default=64, help="Batch size")
     parser.add_argument("-D", "--detection", action="store_true", help="Run face detection before embedding")
     args = parser.parse_known_args(sys.argv[1:])[0]
 
-    data_path = args.data_path
     if args.detection:
         data_path = detection_in_folder(args.data_path)
     eval_folder(args.model_file, data_path, args.batch_size)
