@@ -50,7 +50,6 @@ class Face_detection:
         if len(bboxes) != 0:
             return self.face_align_landmark(imm_BGR, pps[0])
         else:
-            print(">>>> None face detected in image:", image)
             return np.array([])
 
 
@@ -70,6 +69,8 @@ def detection_in_folder(data_path):
             if not os.path.exists(save_dir):
                 os.makedirs(save_dir)
             imsave(os.path.join(save_dir, file_name), nimage)
+        else:
+            print(">>>> None face detected in image:", imm)
     print(">>>> Saved aligned face images in:", dest_path)
     return dest_path
 
@@ -135,6 +136,7 @@ if __name__ == "__main__":
     parser.add_argument("-D", "--detection", action="store_true", help="Run face detection before embedding")
     args = parser.parse_known_args(sys.argv[1:])[0]
 
+    data_path = args.data_path
     if args.detection:
         data_path = detection_in_folder(args.data_path)
     eval_folder(args.model_file, data_path, args.batch_size)
