@@ -75,35 +75,57 @@ def detection_in_folder(data_path):
     return dest_path
 
 
-def eval_folder(model_file, data_path, batch_size=128):
-    img_shape = (112, 112)
-    mm = tf.keras.models.load_model(model_file)
-    img_gen = ImageDataGenerator().flow_from_directory(data_path, class_mode='binary', target_size=img_shape, batch_size=batch_size, shuffle=False)
-    steps = int(np.ceil(img_gen.classes.shape[0] / img_gen.batch_size))
+def eval_folder(model_file, data_path, batch_size=128, save_embeddings=None):
+    if save_embeddings and os.path.exists(save_embeddings):
+        print(">>>> Reloading from backup:", save_embeddings)
+        aa = np.load(save_embeddings)
+        embs, imm_classes, filenames = aa["embs"], aa["imm_classes"], aa["filenames"]
+        embs, imm_classes = embs.astype("float32"), imm_classes.astype("int")
 
-    embs, imm_classes = [], []
-    for _ in tqdm(range(steps), "Embedding"):
-        imm, imm_class = img_gen.next()
-        emb = mm((imm - 127.5) * 0.0078125)
-        embs.extend(emb)
-        imm_classes.extend(imm_class)
-    embs, imm_classes = normalize(np.array(embs)), np.array(imm_classes).astype("int")
+    else:
+        img_shape = (112, 112)
+        mm = tf.keras.models.load_model(model_file)
+        img_gen = ImageDataGenerator().flow_from_directory(data_path, class_mode='binary', target_size=img_shape, batch_size=batch_size, shuffle=False)
+        steps = int(np.ceil(img_gen.classes.shape[0] / img_gen.batch_size))
+        filenames = np.array(img_gen.filenames)
+
+        embs, imm_classes = [], []
+        for _ in tqdm(range(steps), "Embedding"):
+            imm, imm_class = img_gen.next()
+            emb = mm((imm - 127.5) * 0.0078125)
+            embs.extend(emb)
+            imm_classes.extend(imm_class)
+        embs, imm_classes = normalize(np.array(embs).astype("float32")), np.array(imm_classes).astype("int")
+        if save_embeddings:
+            print(">>>> Saving embeddings to:", save_embeddings)
+            np.savez(save_embeddings, embs=embs, imm_classes=imm_classes, filenames=filenames)
+    if save_embeddings:
+        result_name = os.path.splitext(os.path.basename(save_embeddings))[0]
+    else:
+        result_name = os.path.splitext(os.path.basename(model_file))[0]
+
+
     register_ids = np.unique(imm_classes)
     print(">>>> [base info] embs:", embs.shape, "imm_classes:", imm_classes.shape, "register_ids:", register_ids.shape)
+    try:
+        import cupy as cp
+        embs = cp.array(embs)
+        dist_func = lambda aa, bb: cp.dot(aa, bb).get()
+        print(">>>> Using cupy.")
+    except:
+        dist_func = lambda aa, bb: np.dot(aa, bb)
 
-    # dists = np.dot(embs, embs.T)
     pos_dists, neg_dists, register_base_dists = [], [], []
-    filenames = np.array(img_gen.filenames)
-    for register_id in register_ids:
+    for register_id in tqdm(register_ids, "Evaluating"):
         pick_cond = imm_classes == register_id
         pos_embs = embs[pick_cond]
-        dists = np.dot(pos_embs, pos_embs.T)
+        dists = dist_func(pos_embs, pos_embs.T)
         register_base = dists.sum(0).argmax()
         register_base_dist = dists[register_base]
         register_base_emb = embs[pick_cond][register_base]
         pos_dist = register_base_dist[np.arange(dists.shape[0]) != register_base]
 
-        register_base_dist = np.dot(embs, register_base_emb)
+        register_base_dist = dist_func(embs, register_base_emb)
         neg_dist = register_base_dist[imm_classes != register_id]
 
         pos_dists.extend(pos_dist)
@@ -118,29 +140,49 @@ def eval_folder(model_file, data_path, batch_size=128):
     accuracy = (register_base_dists.argmax(1) == imm_classes).sum() / register_base_dists.shape[0]
     print(">>>> top1 accuracy:", accuracy)
 
-    FARs = [0.001, 0.01, 0.1]
-    neg_dists_sorted = np.sort(neg_dists)[::-1]
-    for far in FARs:
-        thresh = neg_dists_sorted[int(np.ceil(neg_dists_sorted.shape[0] * far)) - 1]
-        recall = np.sum(pos_dists > thresh) / pos_dists.shape[0]
-        print(">>>> FAR = {:.10f} TPR = {:.10f} thresh = {:.10f}".format(far, recall, thresh))
+    label = np.concatenate([np.ones_like(pos_dists), np.zeros_like(neg_dists)])
+    score = np.concatenate([pos_dists, neg_dists])
+    fpr, tpr, _ = roc_curve(label, score)
+    roc_auc = auc(fpr, tpr)
+
+    plt.plot(fpr, tpr, lw=1, label="[%s (AUC = %0.4f%%)]" % (result_name, roc_auc * 100))
+    plt.xlim([10 ** -6, 0.1])
+    plt.xscale("log")
+    plt.xticks(x_labels)
+    plt.xlabel("False Positive Rate")
+    plt.ylim([0, 1.0])
+    plt.yticks(np.linspace(0, 1.0, 8, endpoint=True))
+    plt.ylabel("True Positive Rate")
+
+    plt.grid(linestyle="--", linewidth=1)
+    plt.title("ROC")
+    plt.legend(loc="lower right")
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
     import sys
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-d", "--data_path", type=str, required=True, help="Data path, containing images in class folders")
-    parser.add_argument("-m", "--model_file", type=str, required=True, help="Model file, keras h5")
+    parser.add_argument("-d", "--data_path", type=str, default=None, help="Data path, containing images in class folders")
+    parser.add_argument("-m", "--model_file", type=str, default=None, help="Model file, keras h5")
     parser.add_argument("-b", "--batch_size", type=int, default=64, help="Batch size")
     parser.add_argument("-D", "--detection", action="store_true", help="Run face detection before embedding")
+    parser.add_argument("-S", "--save_embeddings", type=str, default=None, help="Save / Reload embeddings data")
     args = parser.parse_known_args(sys.argv[1:])[0]
+
+    if args.model_file == None and args.data_path == None and args.save_embeddings == None:
+        print(">>>> Please seee `--help` for usage")
+        sys.exit(1)
 
     data_path = args.data_path
     if args.detection:
         data_path = detection_in_folder(args.data_path)
-    eval_folder(args.model_file, data_path, args.batch_size)
+        print()
+    eval_folder(args.model_file, data_path, args.batch_size, args.save_embeddings)
 elif __name__ == "__test__":
     data_path = 'temp_test/faces_emore_test/'
     model_file = "checkpoints/TT_mobilenet_pointwise_distill_128_emb512_dr04_arc_bs400_r100_emore_fp16_basic_agedb_30_epoch_49_0.972333.h5"
     batch_size = 64
+    save_embeddings = None
