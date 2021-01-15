@@ -104,21 +104,12 @@ class Train:
         basic_callbacks = myCallbacks.basic_callbacks(
             checkpoint=save_path, evals=my_evals, lr=lr_base, lr_decay=lr_decay, lr_min=lr_min, lr_decay_steps=lr_decay_steps
         )
-        self.my_evals = my_evals
-        self.basic_callbacks = basic_callbacks
+        self.my_evals, self.basic_callbacks, self.custom_callbacks = my_evals, basic_callbacks, []
         self.my_hist = [ii for ii in self.basic_callbacks if isinstance(ii, myCallbacks.My_history)][0]
-        self.custom_callbacks = []
         self.metrics = ["accuracy"]
         self.default_optimizer = "adam"
 
         self.data_path, self.random_status, self.image_per_class, self.teacher_model_interf = data_path, random_status, image_per_class, teacher_model_interf
-        self.dataset_params = {
-            "data_path": self.data_path,
-            "batch_size": self.batch_size,
-            "random_status": self.random_status,
-            "image_per_class": self.image_per_class,
-            "teacher_model_interf": self.teacher_model_interf,
-        }
         self.train_ds, self.steps_per_epoch, self.classes, self.is_triplet_dataset, self.is_distill_ds = None, None, 0, False, False
         self.distill_emb_map_layer = None
 
@@ -132,20 +123,27 @@ class Train:
         if self.train_ds is not None and init_as_triplet == self.is_triplet_dataset and self.is_distill_ds == False:
             return
 
+        dataset_params = {
+            "data_path": self.data_path,
+            "batch_size": self.batch_size,
+            "random_status": self.random_status,
+            "image_per_class": self.image_per_class,
+            "teacher_model_interf": self.teacher_model_interf,
+        }
         if init_as_triplet:
             print(">>>> Init triplet dataset...")
             if self.data_path.endswith(".tfrecord"):
                 print(">>>> Combining tfrecord dataset with triplet is NOT recommended.")
-                self.train_ds = data.prepare_distill_dataset_tfrecord(**self.dataset_params)
+                self.train_ds = data.prepare_distill_dataset_tfrecord(**dataset_params)
             else:
-                self.train_ds = data.Triplet_dataset( **self.dataset_params).ds
+                self.train_ds = data.Triplet_dataset( **dataset_params).ds
             self.is_triplet_dataset = True
         else:
             print(">>>> Init softmax dataset...")
             if self.data_path.endswith(".tfrecord"):
-                self.train_ds = data.prepare_distill_dataset_tfrecord(**self.dataset_params)
+                self.train_ds = data.prepare_distill_dataset_tfrecord(**dataset_params)
             else:
-                self.train_ds = data.prepare_dataset(**self.dataset_params)
+                self.train_ds = data.prepare_dataset(**dataset_params)
             self.is_triplet_dataset = False
 
         if tf.distribute.has_strategy():

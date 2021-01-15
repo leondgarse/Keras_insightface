@@ -80,12 +80,12 @@ class OptimizerWeightDecay(keras.callbacks.Callback):
 
 
 class ConstantDecayScheduler(keras.callbacks.Callback):
-    def __init__(self, sch, lr_base=1e-1, decay_rate=0.1):
+    def __init__(self, lr_decay_steps, lr_base=1e-1, decay_rate=0.1):
         super(ConstantDecayScheduler, self).__init__()
-        self.schedule = lambda step: self.constant_decay(step, lr_base, sch, decay_rate=decay_rate)
+        self.lr_decay_steps, self.lr_base, self.decay_rate = lr_decay_steps, lr_base, decay_rate
 
     def on_epoch_begin(self, step, log=None):
-        lr = self.schedule(step)
+        lr = self.constant_decay(step)
         if self.model is not None:
             K.set_value(self.model.optimizer.lr, lr)
         print("\nLearning rate for iter {} is {}".format(step + 1, lr))
@@ -95,11 +95,11 @@ class ConstantDecayScheduler(keras.callbacks.Callback):
         logs = logs or {}
         logs["lr"] = K.get_value(self.model.optimizer.lr)
 
-    def constant_decay(self, cur_step, lr_base, sch, decay_rate=0.1):
-        for id, ii in enumerate(sch):
+    def constant_decay(self, cur_step):
+        for id, ii in enumerate(self.lr_decay_steps):
             if cur_step < ii:
-                return lr_base * decay_rate ** id
-        return lr_base * decay_rate ** len(sch)
+                return self.lr_base * self.decay_rate ** id
+        return self.lr_base * self.decay_rate ** len(self.lr_decay_steps)
 
 
 class CosineLrScheduler(keras.callbacks.Callback):
@@ -168,7 +168,7 @@ def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_de
 
     if isinstance(lr_decay_steps, list):
         # Constant decay on epoch
-        lr_scheduler = ConstantDecayScheduler(sch=lr_decay_steps, lr_base=lr, decay_rate=lr_decay)
+        lr_scheduler = ConstantDecayScheduler(lr_decay_steps=lr_decay_steps, lr_base=lr, decay_rate=lr_decay)
     elif lr_decay < 1:
         # Exponential decay
         warmup = 10 if lr_decay_steps == 0 else lr_decay_steps

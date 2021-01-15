@@ -10,7 +10,7 @@ def print_buildin_models():
     MXNet version resnet: r34, r50, r100, r101,
     Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
     EfficientNet: efficientnetb[0-7], efficientnetl2,
-    Custom: se_resnext, resnest50, resnest101, mobilenetv3_small, mobilenetv3_large, mobilefacenet, se_mobilefacenet,
+    Custom: se_resnext, resnest50, resnest101, mobilenetv3_small, mobilenetv3_large, mobilefacenet, se_mobilefacenet, ghostnet
     Or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
     """,
         end="",
@@ -74,6 +74,10 @@ def buildin_models(
 
         use_se = True if "se" in name_lower else False
         xx = mobile_facenet.mobile_facenet(input_shape=input_shape, include_top=False, name=name, use_se=use_se)
+    elif name_lower == "ghostnet":
+        from backbones import ghost_model
+
+        xx = ghost_model.GhostNet(input_shape=input_shape, include_top=False, width=1.3)
     elif hasattr(keras.applications, name):
         model_class = getattr(keras.applications, name)
         xx = model_class(weights="imagenet", include_top=False, input_shape=input_shape)
