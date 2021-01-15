@@ -2,12 +2,14 @@
 
 import os
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from tqdm import tqdm
 from glob2 import glob
 from skimage import transform
-from sklearn.preprocessing import normalize
 from skimage.io import imread, imsave
+from sklearn.preprocessing import normalize
+from sklearn.metrics import roc_curve, auc
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 gpus = tf.config.experimental.list_physical_devices("GPU")
@@ -145,20 +147,33 @@ def eval_folder(model_file, data_path, batch_size=128, save_embeddings=None):
     fpr, tpr, _ = roc_curve(label, score)
     roc_auc = auc(fpr, tpr)
 
-    plt.plot(fpr, tpr, lw=1, label="[%s (AUC = %0.4f%%)]" % (result_name, roc_auc * 100))
-    plt.xlim([10 ** -6, 0.1])
-    plt.xscale("log")
-    plt.xticks(x_labels)
-    plt.xlabel("False Positive Rate")
-    plt.ylim([0, 1.0])
-    plt.yticks(np.linspace(0, 1.0, 8, endpoint=True))
-    plt.ylabel("True Positive Rate")
+    fpr_show = [10 ** (-ii) for ii in range(1, 7)[::-1]]
+    fpr_reverse, tpr_reverse = fpr[::-1], tpr[::-1]
+    tpr_show = [tpr_reverse[np.argmin(abs(fpr_reverse - ii))] for ii in fpr_show]
+    print(pd.DataFrame({"FPR": fpr_show, "TPR": tpr_show}).set_index("FPR").T.to_markdown())
 
-    plt.grid(linestyle="--", linewidth=1)
-    plt.title("ROC")
-    plt.legend(loc="lower right")
-    plt.tight_layout()
-    plt.show()
+    try:
+        import matplotlib.pyplot as plt
+
+        fig = plt.figure()
+        plt.plot(fpr, tpr, lw=1, label="[%s (AUC = %0.4f%%)]" % (result_name, roc_auc * 100))
+        plt.xlim([10 ** -6, 0.1])
+        plt.xscale("log")
+        plt.xticks(fpr_show)
+        plt.xlabel("False Positive Rate")
+        plt.ylim([0, 1.0])
+        plt.yticks(np.linspace(0, 1.0, 8, endpoint=True))
+        plt.ylabel("True Positive Rate")
+
+        plt.grid(linestyle="--", linewidth=1)
+        plt.title("ROC")
+        plt.legend(loc="lower right")
+        plt.tight_layout()
+        plt.show()
+    except:
+        print("matplotlib plot failed")
+        fig = None
+    return fig
 
 if __name__ == "__main__":
     import sys
