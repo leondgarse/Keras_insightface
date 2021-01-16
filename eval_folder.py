@@ -77,7 +77,7 @@ def detection_in_folder(data_path):
     return dest_path
 
 
-def eval_folder(model_file, data_path, batch_size=128, save_embeddings=None):
+def eval_folder(model_file, data_path, batch_size=128, save_embeddings=None, debug=True):
     if save_embeddings and os.path.exists(save_embeddings):
         print(">>>> Reloading from backup:", save_embeddings)
         aa = np.load(save_embeddings)
@@ -108,12 +108,14 @@ def eval_folder(model_file, data_path, batch_size=128, save_embeddings=None):
 
 
     register_ids = np.unique(imm_classes)
-    print(">>>> [base info] embs:", embs.shape, "imm_classes:", imm_classes.shape, "register_ids:", register_ids.shape)
+    if debug:
+        print(">>>> [base info] embs:", embs.shape, "imm_classes:", imm_classes.shape, "register_ids:", register_ids.shape)
     try:
         import cupy as cp
         embs = cp.array(embs)
         dist_func = lambda aa, bb: cp.dot(aa, bb).get()
-        print(">>>> Using cupy.")
+        if debug:
+            print(">>>> Using cupy.")
     except:
         dist_func = lambda aa, bb: np.dot(aa, bb)
 
@@ -137,13 +139,15 @@ def eval_folder(model_file, data_path, batch_size=128, save_embeddings=None):
     pos_dists = np.array(pos_dists).astype('float')
     neg_dists = np.array(neg_dists).astype('float')
     register_base_dists = np.array(register_base_dists).T
-    print(">>>> pos_dists:", pos_dists.shape, "neg_dists:", neg_dists.shape, "register_base_dists:", register_base_dists.shape)
+    if debug:
+        print(">>>> pos_dists:", pos_dists.shape, "neg_dists:", neg_dists.shape, "register_base_dists:", register_base_dists.shape)
 
     accuracy = (register_base_dists.argmax(1) == imm_classes).sum() / register_base_dists.shape[0]
-    print(">>>> top1 accuracy:", accuracy)
-
     label = np.concatenate([np.ones_like(pos_dists), np.zeros_like(neg_dists)])
     score = np.concatenate([pos_dists, neg_dists])
+    return accuracy, score, label
+
+def plot_tpr_far(score, label):
     fpr, tpr, _ = roc_curve(label, score)
     roc_auc = auc(fpr, tpr)
 
@@ -195,7 +199,9 @@ if __name__ == "__main__":
     if args.detection:
         data_path = detection_in_folder(args.data_path)
         print()
-    eval_folder(args.model_file, data_path, args.batch_size, args.save_embeddings)
+    accuracy, score, label = eval_folder(args.model_file, data_path, args.batch_size, args.save_embeddings, debug=True)
+    print(">>>> top1 accuracy:", accuracy)
+    plot_tpr_far(score, label)
 elif __name__ == "__test__":
     data_path = 'temp_test/faces_emore_test/'
     model_file = "checkpoints/TT_mobilenet_pointwise_distill_128_emb512_dr04_arc_bs400_r100_emore_fp16_basic_agedb_30_epoch_49_0.972333.h5"

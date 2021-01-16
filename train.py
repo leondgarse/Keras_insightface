@@ -333,7 +333,7 @@ class Train:
             return
 
         self.callbacks = self.my_evals + self.custom_callbacks + self.basic_callbacks
-        self.basic_model.trainable = True
+        # self.basic_model.trainable = True
         self.__init_optimizer__(optimizer)
         self.__init_model__(type, lossTopK)
 

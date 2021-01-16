@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import pickle
 import os
 import io
@@ -259,3 +261,20 @@ def evaluate(embeddings, actual_issame, nrof_folds=10, pca=0):
         thresholds, embeddings1, embeddings2, np.asarray(actual_issame), 1e-3, nrof_folds=nrof_folds
     )
     return tpr, fpr, accuracy, val, val_std, far
+
+if __name__ == "__main__":
+    import sys
+    import argparse
+
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("-m", "--basic_model", type=str, default=None, help="Model file, keras h5")
+    parser.add_argument("-b", "--batch_size", type=int, default=128, help="Batch size")
+    parser.add_argument("-t", "--test_bin_files", nargs="*", type=str, help="Test bin files")
+    parser.add_argument("-F", "--no_flip", action="store_true", help="Disable flip")
+    args = parser.parse_known_args(sys.argv[1:])[0]
+
+    basic_model = tf.keras.models.load_model(args.basic_model, compile=False)
+    flip = not args.no_flip
+    for test_bin_file in args.test_bin_files:
+        aa = eval_callback(basic_model, test_bin_file, batch_size=args.batch_size, flip=flip)
+        aa.on_epoch_end()
