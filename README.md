@@ -39,7 +39,7 @@
   | -------------- | ----- | -------- | -------- | -------- | -------- | -------- |
   | [Resnet34](https://drive.google.com/file/d/1qmUcSDyftp7TScJHQQXm33wEwDfuTc4l/view?usp=sharing) | [CASIA, E40](#comparing-resnet34-with-original-mxnet-version)  | 0.993667 | 0.949143 | 0.946333 |          |          |
   | [Mobilenet emb256](https://drive.google.com/file/d/1i0B6Hy1clGgfeOYtUXVPNveDEe2DTIBa/view?usp=sharing) | [Emore, E110](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-286398) | 0.996000 | 0.951714 | 0.959333 | 0.887147 | 0.911745 |
-  | [mobilenet_distill emb512](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/30) | 0.997    | 0.964    | 0.972833 | 0.9148   | 0.935573 |
+  | [Mobilenet_distill emb512](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/30) | 0.997    | 0.964    | 0.972833 | 0.9148   | 0.935573 |
 ***
 
 # Comparing Resnet34 with original MXNet version
@@ -225,13 +225,14 @@
     ]
     tt.train(sch, 0)
     ```
+    Using `tt.train_single_scheduler` can control the behavior more detail.
   - **models.print_buildin_models** is used to print build-in model names in `models.py`.
     ```py
     >>>> buildin_models
     MXNet version resnet: r34, r50, r100, r101,
     Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
     EfficientNet: efficientnetb[0-7], efficientnetl2,
-    Custom: se_resnext, resnest50, resnest101, mobilenetv3_small, mobilenetv3_large, mobilefacenet, se_mobilefacenet,
+    Custom: se_resnext, resnest50, resnest101, mobilenetv3_small, mobilenetv3_large, mobilefacenet, se_mobilefacenet, ghostnet
     Or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
     ```
   - **models.add_l2_regularizer_2_model** will add `l2_regularizer` to model layers. The actual added `l2` value is divided by `2`.
@@ -613,7 +614,8 @@
     ```
   - Then this dataset can be used to train a new model.
     - Just specify `data_path` as the new dataset path. If key `embeddings` is in, then it will be a `distiller train`.
-    - A new loss `distiller_loss` will be added to match this `embeddings` data, default `loss_weights = [1, 7]`. Parameter `distill` in `scheduler` set this loss weight.
+    - A new loss `distiller_loss_cosine` will be added to match this `embeddings` data, default `loss_weights = [1, 7]`. Parameter `distill` in `scheduler` set this loss weight.
+    - Distill loss can be used along or combined with `softmax` / `arcface` / `centerloss` / `triplet`.
     - The `emb_shape` can be differ from `teacher`, in this case, a dense layer `distill_emb_map_layer` will be added between `basic_model` embedding layer output and `teacher` embedding data.
     ```py
     import train, losses, models
