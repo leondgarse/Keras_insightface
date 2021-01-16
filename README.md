@@ -36,9 +36,9 @@
 
   | Model backbone | Train | lfw      | cfp_fp   | agedb_30 | IJBB     | IJBC     |
   | -------------- | ----- | -------- | -------- | -------- | -------- | -------- |
-  | [Resnet34](https://drive.google.com/file/d/1qmUcSDyftp7TScJHQQXm33wEwDfuTc4l/view?usp=sharing) | [CASIA, Epochs 40](#comparing-resnet34-with-original-mxnet-version)  | 0.993667 | 0.949143 | 0.946333 |          |          |
-  | [Mobilenet emb256](https://drive.google.com/file/d/1i0B6Hy1clGgfeOYtUXVPNveDEe2DTIBa/view?usp=sharing) | [Emore, Epochs 110](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-286398) | 0.996000 | 0.951714 | 0.959333 | 0.887147 | 0.911745 |
-  | [mobilenet_distillation emb512](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [MS1MV3, Epochs 50](https://github.com/leondgarse/Keras_insightface/discussions/30) | 0.997    | 0.964    | 0.972833 | 0.9148   | 0.935573 |
+  | [Resnet34](https://drive.google.com/file/d/1qmUcSDyftp7TScJHQQXm33wEwDfuTc4l/view?usp=sharing) | [CASIA, Epochs40](#comparing-resnet34-with-original-mxnet-version)  | 0.993667 | 0.949143 | 0.946333 |          |          |
+  | [Mobilenet emb256](https://drive.google.com/file/d/1i0B6Hy1clGgfeOYtUXVPNveDEe2DTIBa/view?usp=sharing) | [Emore, Epochs110](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-286398) | 0.996000 | 0.951714 | 0.959333 | 0.887147 | 0.911745 |
+  | [mobilenet_distillation emb512](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [MS1MV3, Epochs50](https://github.com/leondgarse/Keras_insightface/discussions/30) | 0.997    | 0.964    | 0.972833 | 0.9148   | 0.935573 |
 ***
 
 # Comparing Resnet34 with original MXNet version
@@ -577,68 +577,76 @@
 # Knowledge distillation
   - [PDF Improving Face Recognition from Hard Samples via Distribution Distillation Loss](https://arxiv.org/pdf/2002.03662.pdf)
   - [PDF VarGFaceNet: An Efficient Variable Group Convolutional Neural Network for Lightweight Face Recognition](https://arxiv.org/pdf/1910.04985.pdf)
-  - `data_distiller.py` works to extract `embedding` data from images and save locally. `MODEL_FILE` can be ether `Keras h5` / `MXNet model`.
+  - `data_distiller.py` works to extract `embedding` data from images and save locally. `MODEL_FILE` can be `Keras h5` / `pytorch jit pth` / `MXNet model`.
+    - **--save_npz** Default saving format is `.tfrecord`, which needs less memory while training.
+    - **-D xxx.npz** Convert `xxx.npz` to `xxx.tfrecord`.
+    - **--use_fp16** Save embedding data in `float16` format, which needs half less disk space than default `float32`.
     ```sh
     $ CUDA_VISIBLE_DEVICES='-1' ./data_distiller.py -h
-    # usage: data_distiller.py [-h] -M MODEL_FILE -D DATA_PATH [-d DEST_FILE]
-    #                          [-b BATCH_SIZE] [-L LIMIT]
+    # usage: data_distiller.py [-h] -D DATA_PATH [-M MODEL_FILE] [-d DEST_FILE]
+    #                          [-b BATCH_SIZE] [-L LIMIT] [--use_fp16] [--save_npz]
     #
     # optional arguments:
     #   -h, --help            show this help message and exit
-    #   -M MODEL_FILE, --model_file MODEL_FILE
-    #                         Saved basic_model file path, NOT model, could be keras
-    #                         / mxnet one (default: None)
     #   -D DATA_PATH, --data_path DATA_PATH
-    #                         Original dataset path (default: None)
-    #   -d DEST_FILE, --dest_file DEST_FILE
-    #                         Dest file path to save the processed dataset npz
+    #                         Data path, or npz file converting to tfrecord
     #                         (default: None)
+    #   -M MODEL_FILE, --model_file MODEL_FILE
+    #                         Model file, keras h5 / pytorch pth / mxnet (default:
+    #                         None)
+    #   -d DEST_FILE, --dest_file DEST_FILE
+    #                         Dest file path to save the processed dataset (default:
+    #                         None)
     #   -b BATCH_SIZE, --batch_size BATCH_SIZE
     #                         Batch size (default: 256)
     #   -L LIMIT, --limit LIMIT
     #                         Test parameter, limit converting only the first [NUM]
-    #                         ones (default: 0)
+    #                         (default: -1)
+    #   --use_fp16            Save using float16 (default: False)
+    #   --save_npz            Save as npz file, default is tfrecord (default: False)
     ```
     ```sh
-    $ CUDA_VISIBLE_DEVICES='0' ./data_distiller.py -M subcenter-arcface-logs/r100-arcface-msfdrop75/model,0 -D /datasets/faces_casia_112x112_folders/ -b 32
+    $ CUDA_VISIBLE_DEVICES='0' ./data_distiller.py -M subcenter-arcface-logs/r100-arcface-msfdrop75/model,0 -D /datasets/faces_casia_112x112_folders/ -b 32 --use_fp16
     # >>>> Output: faces_casia_112x112_folders_shuffle_label_embs_normed_512.npz
     ```
   - Then this dataset can be used to train a new model.
     - Just specify `data_path` as the new dataset path. If key `embeddings` is in, then it will be a `distiller train`.
     - A new loss `distiller_loss` will be added to match this `embeddings` data, default `loss_weights = [1, 7]`. Parameter `distill` in `scheduler` set this loss weight.
-    - The `emb_shape` should be same with `teacher`.
+    - The `emb_shape` can be differ from `teacher`, in this case, a dense layer `distill_emb_map_layer` will be added between `basic_model` embedding layer output and `teacher` embedding data.
     ```py
     import train, losses, models
     import tensorflow_addons as tfa
 
-    data_basic_path = '/datasets/'
-    data_path = 'faces_casia_112x112_folders_shuffle_label_embs_normed_512.npz'
-    eval_paths = [data_basic_path + ii for ii in ['faces_casia/lfw.bin', 'faces_casia/cfp_fp.bin', 'faces_casia/agedb_30.bin']]
+    data_basic_path = '/datasets/faces_casia'
+    data_path = 'faces_casia_112x112_folders_shuffle_label_embs_512_fp16.tfrecord'
+    eval_paths = [os.parh.join(data_basic_path, ii) for ii in ['lfw.bin', 'cfp_fp.bin', 'agedb_30.bin']]
 
     basic_model = models.buildin_models("mobilenet", dropout=0.4, emb_shape=512, output_layer='E')
     tt = train.Train(data_path, save_path='TT_mobilenet_distill_bs400.h5', eval_paths=eval_paths,
         basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
-        batch_size=400, random_status=0, output_wd_multiply=1)
+        batch_size=400, random_status=0)
 
     optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
     sch = [
-        {"loss": losses.ArcfaceLoss(scale=16), "epoch": 5, "optimizer": optimizer, "distill": 64},
-        {"loss": losses.ArcfaceLoss(scale=32), "epoch": 5, "distill": 64},
-        {"loss": losses.ArcfaceLoss(scale=64), "epoch": 40, "distill": 64},
+        {"loss": losses.ArcfaceLoss(scale=16), "epoch": 5, "optimizer": optimizer, "distill": 128},
+        {"loss": losses.ArcfaceLoss(scale=32), "epoch": 5, "distill": 128},
+        {"loss": losses.ArcfaceLoss(scale=64), "epoch": 40, "distill": 128},
     ]
     tt.train(sch, 0)
     ```
   - **[[Discussions] Knowledge_distillation_training_Mobilenet_on_CASIA](https://github.com/leondgarse/Keras_insightface/discussions/22)**
 
-    | Teacher | Dropout | Optimizer | Distill | Max lfw    | Max cfp_fp | Max agedb_30 |
-    | ------- | ------- | --------- | ------- | ---------- | ---------- | ------------ |
-    | None    | 0       | SGDW      | 7       | 0.9838     | 0.8730     | 0.8697       |
-    | None    | 0.4     | SGDW      | 7       | 0.9837     | 0.8491     | 0.8745       |
-    | r34     | 0       | SGDW      | 7       | 0.9890     | 0.9099     | 0.9058       |
-    | r100    | 0       | SGDW      | 7       | 0.9900     | 0.9111     | 0.9068       |
-    | r100    | 0.4     | SGDW      | 7       | 0.9905     | 0.9170     | 0.9112       |
-    | r100    | 0.4     | SGDW      | 64      | **0.9938** | 0.9333     | **0.9435**   |
-    | r100    | 0.4     | AdamW     | 64      | 0.9920     | **0.9346** | 0.9387       |
+    | Teacher | emb_shape | Dropout | Optimizer | Distill | Max lfw    | Max cfp_fp | Max agedb_30 |
+    | ------- | --------- | ------- | --------- | ------- | ---------- | ---------- | ------------ |
+    | None    | 512       | 0       | SGDW      | 0       | 0.9838     | 0.8730     | 0.8697       |
+    | None    | 512       | 0.4     | SGDW      | 0       | 0.9837     | 0.8491     | 0.8745       |
+    | r100    | 512       | 0       | SGDW      | 7       | 0.9900     | 0.9111     | 0.9068       |
+    | r100    | 512       | 0.4     | SGDW      | 7       | 0.9905     | 0.9170     | 0.9112       |
+    | r100    | 512       | 0.4     | SGDW      | 128     | **0.9955** | **0.9376** | **0.9465**   |
+    | r100    | 512       | 0.4     | AdamW     | 128     | 0.9920     | 0.9346     | 0.9387       |
+    | r100    | 512       | 0.4     | AdamW     | 128     | 0.9920     | 0.9346     | 0.9387       |
+    | r100    | 256       | 0       | SGDW      | 128     | 0.9937     | 0.9337     | 0.9427       |
+    | r100    | 256       | 0.4     | SGDW      | 128     | 0.9942     | 0.9369     | 0.9448       |
 ***
 
 # Evaluating on IJB datasets

@@ -206,7 +206,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-D", "--data_path", type=str, required=True, help="Data path, or npz file converting to tfrecord")
     parser.add_argument("-M", "--model_file", type=str, default=None, help="Model file, keras h5 / pytorch pth / mxnet")
-    parser.add_argument("-d", "--dest_file", type=str, default=None, help="Dest file path to save the processed dataset npz")
+    parser.add_argument("-d", "--dest_file", type=str, default=None, help="Dest file path to save the processed dataset")
     parser.add_argument("-b", "--batch_size", type=int, default=256, help="Batch size")
     parser.add_argument("-L", "--limit", type=int, default=-1, help="Test parameter, limit converting only the first [NUM]")
     parser.add_argument("--use_fp16", action="store_true", help="Save using float16")
