@@ -190,6 +190,7 @@
     - [IJB_evals.py](IJB_evals.py) evaluates model accuracy using [insightface/evaluation/IJB/](https://github.com/deepinsight/insightface/tree/master/evaluation/IJB) datasets.
     - [data_drop_top_k.py](data_drop_top_k.py) create dataset after trained with [Sub Center ArcFace](#sub-center-arcface) method.
     - [data_distiller.py](data_distiller.py) create dataset for [Knowledge distillation](#knowledge-distillation).
+    - [eval_folder.py](eval_folder.py) Run model evaluation on any custom dataset folder, which is in the same format with Training dataset.
     - [plot.py](plot.py) contains a history plot function.
     - [video_test.py](video_test.py) can be used to test model using video camera.
   - **Model** contains two part
@@ -634,7 +635,7 @@
     ]
     tt.train(sch, 0)
     ```
-  - **[[Discussions] Knowledge_distillation_training_Mobilenet_on_CASIA](https://github.com/leondgarse/Keras_insightface/discussions/22)**
+  - **Knowledge distillation result of training Mobilenet onCASIA**
 
     | Teacher | emb_shape | Dropout | Optimizer | Distill | Max lfw    | Max cfp_fp | Max agedb_30 |
     | ------- | --------- | ------- | --------- | ------- | ---------- | ---------- | ------------ |
@@ -647,6 +648,8 @@
     | r100    | 512       | 0.4     | AdamW     | 128     | 0.9920     | 0.9346     | 0.9387       |
     | r100    | 256       | 0       | SGDW      | 128     | 0.9937     | 0.9337     | 0.9427       |
     | r100    | 256       | 0.4     | SGDW      | 128     | 0.9942     | 0.9369     | 0.9448       |
+
+  - [Knowledge distillation using Mobilenet on MS1M dataset](https://github.com/leondgarse/Keras_insightface/discussions/30)
 ***
 
 # Evaluating on IJB datasets
