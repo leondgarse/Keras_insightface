@@ -232,7 +232,7 @@
     MXNet version resnet: r34, r50, r100, r101,
     Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
     EfficientNet: efficientnetb[0-7], efficientnetl2,
-    Custom: se_resnext, resnest50, resnest101, mobilenetv3_small, mobilenetv3_large, mobilefacenet, se_mobilefacenet, ghostnet
+    Custom: se_resnext, resnest50, resnest101, ghostnet, mobilefacenet, se_mobilefacenet, mobilenetv3_small, mobilenetv3_large
     Or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
     ```
   - **models.add_l2_regularizer_2_model** will add `l2_regularizer` to model layers. The actual added `l2` value is divided by `2`.
