@@ -651,6 +651,10 @@
     | r100    | 256       | 0.4     | SGDW      | 128     | 0.9942     | 0.9369     | 0.9448       |
 
   - [Knowledge distillation using Mobilenet on MS1M dataset](https://github.com/leondgarse/Keras_insightface/discussions/30)
+
+    | Teacher | emb_shape | Dropout | Optimizer | Distill | Max lfw | Max cfp_fp | Max agedb_30 |
+    | ------- | --------- | ------- | --------- | ------- | ------- | ---------- | ------------ |
+    | r100    | 512       | 0.4     | SGDW      | 128     | 0.997   | 0.964      | 0.972833     |
 ***
 
 # Evaluating on IJB datasets
