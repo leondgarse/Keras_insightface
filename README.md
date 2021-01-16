@@ -33,12 +33,13 @@
 # Current accuracy
   - Model structures may change due to changing default behavior of building models.
   - `IJBB` and `IJBC` is scored at `TAR@FAR=1e-4`
+  - Links in `Model backbone` is for `h5` models in Google drive. Links in `Training` is for training details.
 
-  | Model backbone | Dataset, Epochs | lfw      | cfp_fp   | agedb_30 | IJBB     | IJBC     |
+  | Model backbone | Training | lfw      | cfp_fp   | agedb_30 | IJBB     | IJBC     |
   | -------------- | ----- | -------- | -------- | -------- | -------- | -------- |
-  | [Resnet34](https://drive.google.com/file/d/1qmUcSDyftp7TScJHQQXm33wEwDfuTc4l/view?usp=sharing) | [CASIA, 40](#comparing-resnet34-with-original-mxnet-version)  | 0.993667 | 0.949143 | 0.946333 |          |          |
-  | [Mobilenet emb256](https://drive.google.com/file/d/1i0B6Hy1clGgfeOYtUXVPNveDEe2DTIBa/view?usp=sharing) | [Emore, 110](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-286398) | 0.996000 | 0.951714 | 0.959333 | 0.887147 | 0.911745 |
-  | [mobilenet_distill emb512](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [MS1MV3, 50](https://github.com/leondgarse/Keras_insightface/discussions/30) | 0.997    | 0.964    | 0.972833 | 0.9148   | 0.935573 |
+  | [Resnet34](https://drive.google.com/file/d/1qmUcSDyftp7TScJHQQXm33wEwDfuTc4l/view?usp=sharing) | [CASIA, E40](#comparing-resnet34-with-original-mxnet-version)  | 0.993667 | 0.949143 | 0.946333 |          |          |
+  | [Mobilenet emb256](https://drive.google.com/file/d/1i0B6Hy1clGgfeOYtUXVPNveDEe2DTIBa/view?usp=sharing) | [Emore, E110](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-286398) | 0.996000 | 0.951714 | 0.959333 | 0.887147 | 0.911745 |
+  | [mobilenet_distill emb512](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/30) | 0.997    | 0.964    | 0.972833 | 0.9148   | 0.935573 |
 ***
 
 # Comparing Resnet34 with original MXNet version
