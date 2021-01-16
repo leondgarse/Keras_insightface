@@ -32,14 +32,13 @@
 
 # Current accuracy
   - Model structures may change due to changing default behavior of building models.
+  - `IJBB` and `IJBC` is scored at `TAR@FAR=1e-4`
 
-  | Model backbone   | Dataset | lfw      | cfp_fp   | agedb_30 | Epochs |
-  | ---------------- | ------- | -------- | -------- | -------- | ------ |
-  | [Mobilenet](https://drive.google.com/file/d/1Sumc1LvVKJ4j1adD4zLEMw_XZgv9akFp/view?usp=sharing)        | Emore |0.996167 | 0.948429 | 0.955333 | 120    |
-  | [se_mobilefacenet](https://drive.google.com/file/d/1AjoIxOkiKIzAGml5Jdpq05Y4vM4Ke-Kj/view?usp=sharing) | Emore | 0.996333 | 0.964714 | 0.958833 | 100    |
-  | [Resnet34](https://drive.google.com/file/d/1qmUcSDyftp7TScJHQQXm33wEwDfuTc4l/view?usp=sharing) | CASIA | 0.993667 | 0.949143 | 0.946333 | 40     |
-  | [ResNet101V2](https://drive.google.com/file/d/1-5YHQmT1iNI5-jKogJ1-sh94CS7ptHgb/view?usp=sharing)      | Emore | 0.997833 | 0.946 | 0.972833 | 40    |
-  | [ResNeSt101](https://drive.google.com/file/d/1RVjTRhE8Evqyjl83EVBMOjInxtDtxGyH/view?usp=sharing)       | Emore | 0.997667 | 0.981000 | 0.973333 | 100    |
+  | Model backbone | Train | lfw      | cfp_fp   | agedb_30 | IJBB     | IJBC     |
+  | -------------- | ----- | -------- | -------- | -------- | -------- | -------- |
+  | [Resnet34](https://drive.google.com/file/d/1qmUcSDyftp7TScJHQQXm33wEwDfuTc4l/view?usp=sharing) | [CASIA, Epochs 40](#comparing-resnet34-with-original-mxnet-version)  | 0.993667 | 0.949143 | 0.946333 |          |          |
+  | [Mobilenet emb256](https://drive.google.com/file/d/1i0B6Hy1clGgfeOYtUXVPNveDEe2DTIBa/view?usp=sharing) | [Emore, Epochs 110](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-286398) | 0.996000 | 0.951714 | 0.959333 | 0.887147 | 0.911745 |
+  | [mobilenet_distillation emb512](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [MS1MV3, Epochs 50](https://github.com/leondgarse/Keras_insightface/discussions/30) | 0.997    | 0.964    | 0.972833 | 0.9148   | 0.935573 |
 ***
 
 # Comparing Resnet34 with original MXNet version
