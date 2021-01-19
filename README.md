@@ -364,15 +364,14 @@
     aa = CosineLrScheduler(0.001, first_restart_step=100, lr_min=1e-6, warmup_iters=0, m_mul=1e-3)
     plt.plot(epochs, [aa.on_epoch_begin(ii) for ii in epochs], label="Cosine, first_restart_step=100, min=1e-6, m_mul=1e-3")
     aa_120 = aa.on_epoch_begin(120).numpy()
-    plt.text(120, aa_120, "[Cosine]\n({}, {:.2e})".format(120, aa_120), va="top", ha="left")
+    plt.text(120, aa_120, "[Cosine]\n({}, {:.2e})".format(120, aa_120), va="bottom", ha="right")
 
     bb = CosineLrScheduler(0.001, first_restart_step=24, lr_min=1e-7, warmup_iters=1, m_mul=0.4)
     plt.plot(epochs, [bb.on_epoch_begin(ii) for ii in epochs], label="Cosine restart, first_restart_step=24, min=1e-7, warmup=1, m_mul=0.4")
     bb_25 = bb.on_epoch_begin(25).numpy()
-    plt.plot((25, 25), (1e-6, bb_25), 'k:')
     plt.text(25, bb_25, (25, bb_25))
 
-    cc = CosineLrScheduler(0.001, first_restart_step=21000, lr_min=1e-7, warmup_iters=4000)
+    cc = CosineLrScheduler(0.001, first_restart_step=21000, lr_min=1e-7, warmup_iters=4000, m_mul=0.5)
     plt.plot([cc.on_train_batch_begin(ii * 1000) for ii in range(120)], label="Cosine restart, on batch, first_restart_step=21000, min=1e-7, warmup=4000, m_mul=0.5")
     cc_25 = cc.on_train_batch_begin(25 * 1000).numpy()
     plt.plot((25, 25), (1e-6, cc_25), 'k:')
@@ -380,7 +379,7 @@
 
     plt.xlim(0, 120)
     plt.legend()
-    # plt.grid()
+    plt.grid()
     plt.tight_layout()
     ```
     ![](checkpoints/learning_rate_decay.svg)
