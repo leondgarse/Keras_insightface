@@ -101,9 +101,68 @@ class ArcfaceLoss(tf.keras.losses.Loss):
         return cls(**config)
 
 
-# ArcfaceLoss class
+# ArcfaceLoss simple
+class ArcfaceLossSimple(tf.keras.losses.Loss):
+    def __init__(self, margin=0.5, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
+        super(ArcfaceLossSimple, self).__init__(**kwargs)
+        self.margin, self.scale, self.from_logits, self.label_smoothing = margin, scale, from_logits, label_smoothing
+        self.margin_cos, self.margin_sin = tf.cos(margin), tf.sin(margin)
+        self.threshold = tf.cos(np.pi - margin)
+        self.low_pred_punish = tf.sin(np.pi - margin) * margin
+
+    def call(self, y_true, norm_logits):
+        pick_cond = tf.cast(y_true, dtype=tf.bool)
+        y_pred_vals = norm_logits[pick_cond]
+        theta = y_pred_vals * self.margin_cos - tf.sqrt(1 - tf.pow(y_pred_vals, 2)) * self.margin_sin
+        theta_valid = tf.where(y_pred_vals > self.threshold, theta, y_pred_vals - self.low_pred_punish)
+        theta_one_hot = tf.expand_dims(theta_valid, 1) * tf.cast(y_true, dtype=tf.float32)
+        arcface_logits = tf.where(pick_cond, theta_one_hot, norm_logits) * self.scale
+        return tf.keras.losses.categorical_crossentropy(
+            y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
+        )
+
+    def get_config(self):
+        config = super(ArcfaceLossSimple, self).get_config()
+        config.update(
+            {
+                "margin": self.margin,
+                "scale": self.scale,
+                "from_logits": self.from_logits,
+                "label_smoothing": self.label_smoothing,
+            }
+        )
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+
+# [CurricularFace: Adaptive Curriculum Learning Loss for Deep Face Recognition](https://arxiv.org/pdf/2004.00288.pdf)
+class CurricularFace(ArcfaceLossSimple):
+    def __init__(self, margin=0.5, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
+        super(CurricularFace, self).__init__(margin, scale, from_logits, label_smoothing, **kwargs)
+        self.hard_example_scale = tf.Variable(0, dtype='float32')
+
+    def call(self, y_true, norm_logits):
+        pick_cond = tf.cast(y_true, dtype=tf.bool)
+        y_pred_vals = norm_logits[pick_cond]
+        theta = y_pred_vals * self.margin_cos - tf.sqrt(1 - tf.pow(y_pred_vals, 2)) * self.margin_sin
+        theta_valid = tf.where(y_pred_vals > self.threshold, theta, y_pred_vals - self.low_pred_punish)
+
+        self.hard_example_scale.assign(tf.reduce_mean(y_pred_vals) * 0.01 + (1 - 0.01) * self.hard_example_scale)
+        tf.print(", hard_example_scale =", self.hard_example_scale, end="")
+        hard_norm_logits = tf.where(norm_logits > tf.expand_dims(theta, 1), norm_logits * (self.hard_example_scale + norm_logits), norm_logits)
+
+        theta_one_hot = tf.expand_dims(theta_valid, 1) * tf.cast(y_true, dtype=tf.float32)
+        arcface_logits = tf.where(pick_cond, theta_one_hot, hard_norm_logits) * self.scale
+        return tf.keras.losses.categorical_crossentropy(
+            y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
+        )
+
+
 # [AdaCos: Adaptively Scaling Cosine Logits for Effectively Learning Deep Face Representations](https://arxiv.org/pdf/1905.00292.pdf)
-class AdaCosLossSimple(tf.keras.losses.Loss):
+class AdaCosLoss(tf.keras.losses.Loss):
     def __init__(self, num_classes, scale=0, max_median=np.pi / 4, from_logits=True, label_smoothing=0, **kwargs):
         super(AdaCosLossSimple, self).__init__(**kwargs)
         self.max_median, self.from_logits, self.label_smoothing = max_median, from_logits, label_smoothing
@@ -139,79 +198,6 @@ class AdaCosLossSimple(tf.keras.losses.Loss):
         config.update(
             {
                 "num_classes": self.num_classes,
-                # "scale": self.scale.numpy(),
-                "max_median": self.max_median,
-                "from_logits": self.from_logits,
-                "label_smoothing": self.label_smoothing,
-            }
-        )
-        return config
-
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)
-
-
-class AdaCosLossT4(tf.keras.losses.Loss):
-    def __init__(
-        self,
-        batch_size,
-        num_classes,
-        margin=0.5,
-        scale=0,
-        max_median=np.cos(np.pi / 4),
-        from_logits=True,
-        label_smoothing=0,
-        **kwargs
-    ):
-        super(AdaCosLossT4, self).__init__(**kwargs)
-        self.margin, self.max_median, self.from_logits, self.label_smoothing = margin, max_median, from_logits, label_smoothing
-        self.batch_size, self.num_classes = batch_size, num_classes
-        self.threshold = tf.cos(np.pi - margin)
-        self.low_pred_punish = tf.sin(np.pi - margin) * margin
-
-        margin_cos, margin_sin = tf.cos(margin), tf.sin(margin)
-        self.theta_func = lambda xx: xx * margin_cos - tf.sqrt(1 - tf.pow(xx, 2)) * margin_sin
-
-        # self.theta_med_max = self.theta_func(tf.cast(max_median, 'float32'))
-        self.theta_med_max = tf.cast(max_median, "float32")
-        self.med_pos = batch_size // 2
-        if scale == 0:
-            self.scale = tf.sqrt(2.0) * tf.math.log(float(num_classes) - 1)
-        else:
-            # In reload condition
-            self.scale = tf.cast(scale, "float32")
-        tf.print("Init med_pos:", self.med_pos, "scale:", self.scale, "theta_med_max:", self.theta_med_max)
-
-    @tf.function
-    def call(self, y_true, norm_logits):
-        pick_cond = tf.cast(y_true, dtype=tf.bool)
-        y_pred_vals = norm_logits[pick_cond]
-        theta_med = tf.sort(y_pred_vals)[self.med_pos]
-
-        B_avg = tf.where(pick_cond, tf.zeros_like(norm_logits), tf.exp(self.scale * norm_logits))
-        B_avg = tf.reduce_mean(tf.reduce_sum(B_avg, axis=1))
-        self.scale = tf.math.log(B_avg) / tf.maximum(self.theta_med_max, theta_med)
-        tf.print(", scale =", self.scale, ", theta_med =", theta_med, end="")
-
-        theta = self.theta_func(y_pred_vals)
-        theta_valid = tf.where(y_pred_vals > self.threshold, theta, y_pred_vals - self.low_pred_punish)
-
-        # theta_one_hot = tf.expand_dims(theta_valid, 1) * tf.cast(y_true, dtype=tf.float32)
-        # arcface_logits = tf.where(pick_cond, theta_one_hot, norm_logits) * self.scale
-        theta_one_hot = tf.expand_dims(theta_valid - y_pred_vals, 1) * tf.cast(y_true, dtype=tf.float32)
-        arcface_logits = (theta_one_hot + norm_logits) * self.scale
-        return tf.keras.losses.categorical_crossentropy(
-            y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
-        )
-
-    def get_config(self):
-        config = super(AdaCosLossT4, self).get_config()
-        config.update(
-            {
-                "batch_size": self.batch_size,
-                "num_classes": self.num_classes,
-                "margin": self.margin,
                 # "scale": self.scale.numpy(),
                 "max_median": self.max_median,
                 "from_logits": self.from_logits,
