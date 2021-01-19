@@ -52,7 +52,7 @@ class eval_callback(tf.keras.callbacks.Callback):
             if self.flip:
                 emb_f = self.basic_model(tf.image.flip_left_right(img_batch))
                 emb = emb + emb_f
-            embs.extend(emb.numpy())
+            embs.extend(np.array(emb))
         return np.array(embs)
 
     def __do_predict_distribute__(self):

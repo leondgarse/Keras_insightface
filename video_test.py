@@ -67,7 +67,7 @@ def embedding_images(det, face_model, known_user, batch_size=32, force_reload=Fa
         for image_name in tqdm(image_names, "Detect"):
             img = imread(image_name)
             nimg = do_detect_in_image(img, det, image_format="RGB")[-1]
-            if nimg.shape[0] == 1:
+            if nimg.shape[0] > 0:
                 nimgs.append(nimg[0])
                 image_classes.append(os.path.basename(os.path.dirname(image_name)))
 
@@ -130,13 +130,16 @@ def video_recognize(image_classes, embeddings, det, face_model, video_source=0, 
         if cur_frame_idx % frames_per_detect == 0:
             rec_dist, rec_class, bbs, ccs = image_recognize(image_classes, embeddings, det, face_model, frame)
             cur_frame_idx = 0
-        draw_polyboxes(frame, rec_dist, rec_class, bbs, ccs, dist_thresh)
 
-        cv2.imshow("", frame)
-        cur_frame_idx += 1
         key = cv2.waitKey(1) & 0xFF
+        if key == ord("s"):
+            cv2.imwrite("{}.jpg".format(cur_frame_idx), frame)
         if key == ord("q"):
             break
+
+        draw_polyboxes(frame, rec_dist, rec_class, bbs, ccs, dist_thresh)
+        cv2.imshow("", frame)
+        cur_frame_idx += 1
     cap.release()
     cv2.destroyAllWindows()
 

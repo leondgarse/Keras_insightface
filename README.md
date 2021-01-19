@@ -329,50 +329,60 @@
     ```
 ## Learning rate
   - `train.Train` parameters `lr_base` / `lr_decay` / `lr_decay_steps` set different decay strategies and their parameters.
-  - **Exponential decay** default one, `lr_base` and `lr_decay` in `train.Train` set it. Default is `lr_base=0.001, lr_decay=0.05`.
-  - **Cosine decay with restart**
-    - Set `lr_decay` with a value `> 1` will use `cosine lr decay`, in this case `lr_decay` means `total decay steps`.
-    - Set `lr_decay_steps` with a value `> 1` will set decay on every `NUM` batches, default `lr_decay_steps=0` means decay on every epoch.
-    - Other default values `restarts=4, t_mul=2.0, m_mul=0.5` are set in `myCallbacks.py`. See `keras.experimental.CosineDecayRestarts` for detail.
-  - **Constant decay**
-    - Set `lr_decay_steps` a list will use `Constant lr decay`, in this case `lr_decay_steps` means the decay epochs.
-    - `lr_base` and `lr_decay` set the lr base and decay rate on each decay epoch.
-  ```py
-  # Exponential, lr_decay < 1
-  tt = train.Train(..., lr_base=0.001, lr_decay=0.05, ...)
-  # Cosine with restarts on epoch, lr_decay > 1
-  tt = train.Train(..., lr_base=0.001, lr_decay=105, lr_decay_steps=0, lr_min=1e-7, ...)
-  # Cosine with restarts on batch, lr_decay > 1 and lr_decay_steps > 1
-  tt = train.Train(..., lr_base=0.001, lr_decay=105 * 1000, lr_decay_steps=1000, lr_min=1e-7, ...)
-  # Constant, lr_decay_steps is a list
-  tt = train.Train(..., lr_base=0.1, lr_decay=0.1, lr_decay_steps=[3, 5, 7, 16, 20, 24], ...)
-  ```
-  ```py
-  import myCallbacks
-  epochs = np.arange(120)
-  plt.figure(figsize=(14, 6))
-  plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.1) for ii in epochs], label="lr=0.001, decay=0.1")
-  plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.05) for ii in epochs], label="lr=0.001, decay=0.05")
-  plt.plot(epochs, [myCallbacks.scheduler(ii, 0.001, 0.02) for ii in epochs], label="lr=0.001, decay=0.02")
-  aa = myCallbacks.CosineLrScheduler(0.001, 100, 1e-6, 0, restarts=1)
-  plt.plot(epochs, [aa.on_epoch_begin(ii) for ii in epochs], label="Cosine, lr=0.001, decay_steps=100, min=1e-6")
+  - **lr_decay_steps** controls different decay types. Default is `Exponential decay` with `lr_base=0.001, lr_decay=0.05`.
 
-  bb = myCallbacks.CosineLrScheduler(0.001, 105 * 1000, lr_min=1e-7, warmup_iters=4 * 1000, lr_on_batch=1000, restarts=4)
-  plt.plot([bb.on_train_batch_begin(ii * 1000) for ii in range(120)], label="Cosine restart, lr=0.001, decay_steps=105000, on batch, min=1e-7, warmup=5000, restarts=4")
-  bb_25 = bb.on_train_batch_begin(25 * 1000).numpy()
-  plt.plot((25, 25), (1e-6, bb_25), 'k:')
-  plt.text(25, bb_25, (25, bb_25))
+    | lr_decay_steps | decay type             | mean of lr_decay_steps | mean of lr_decay |
+    | -------------- | ---------------------- | ---------------------- | ---------------- |
+    | <= 1           | Exponential decay      |                        | decay_rate       |
+    | > 1, < 500     | Cosine decay, on epoch | first_restart_step     | m_mul            |
+    | >= 500         | Cosine decay, on batch | first_restart_step     | m_mul            |
+    | list           | Constant decay         | decay_steps            | decay_rate       |
 
-  cc = myCallbacks.CosineLrScheduler(0.001, 120, 1e-7, warmup_iters=1, restarts=4, m_mul=0.5)
-  plt.plot(epochs, [cc.on_epoch_begin(ii) for ii in epochs], label="Cosine restart, lr=0.001, decay_steps=120, min=1e-7, warmup=1, restarts=4")
+    ```py
+    # Exponential, lr_decay_steps == 0
+    tt = train.Train(..., lr_base=0.001, lr_decay=0.05, ...)
+    # Cosine decay on epoch, no restart, lr_min == lr_base * lr_decay
+    tt = train.Train(..., lr_base=0.001, lr_decay=1e-4, lr_decay_steps=24, lr_min=1e-7, ...)
+    # Cosine decay on epoch, restart on epoch [25, 73, 169], 1 < lr_decay_steps < 500
+    tt = train.Train(..., lr_base=0.001, lr_decay=0.5, lr_decay_steps=24, lr_min=1e-7, ...)
+    # Cosine decay on batch, restart on batch [25000, 73000, 169000], 500 <= lr_decay_steps
+    tt = train.Train(..., lr_base=0.001, lr_decay=0.5, lr_decay_steps=24 * 1000, lr_min=1e-7, ...)
+    # Constant, lr_decay_steps is a list
+    tt = train.Train(..., lr_base=0.1, lr_decay=0.1, lr_decay_steps=[3, 5, 7, 16, 20, 24], ...)
+    ```
+  - **Example learning rates**
+    ```py
+    import myCallbacks
+    epochs = np.arange(120)
+    plt.figure(figsize=(14, 6))
+    plt.plot(epochs, [myCallbacks.exp_scheduler(ii, 0.001, 0.1) for ii in epochs], label="lr=0.001, decay=0.1")
+    plt.plot(epochs, [myCallbacks.exp_scheduler(ii, 0.001, 0.05) for ii in epochs], label="lr=0.001, decay=0.05")
+    plt.plot(epochs, [myCallbacks.exp_scheduler(ii, 0.001, 0.02) for ii in epochs], label="lr=0.001, decay=0.02")
+    aa = myCallbacks.CosineLrScheduler(0.001, first_restart_step=100, lr_min=1e-6, warmup_iters=0, m_mul=1e-3)
+    plt.plot(epochs, [aa.on_epoch_begin(ii) for ii in epochs], label="Cosine, first_restart_step=100, min=1e-6, m_mul=1e-3")
+    plt.text(115, 1e-5, "[Red line]\n({}, {:.2e})".format(120, aa.on_epoch_begin(120).numpy()))
 
-  dd = myCallbacks.ConstantDecayScheduler(sch=[10, 20, 30, 40], lr_base=0.001, decay_rate=0.1)
-  plt.plot(epochs, [dd.on_epoch_begin(ii) for ii in epochs], label="Constant, lr=0.001, decay_steps=[10, 20, 30, 40], decay_rate=0.1")
+    bb = myCallbacks.CosineLrScheduler(0.001, first_restart_step=21000, lr_min=1e-7, warmup_iters=4000)
+    plt.plot([bb.on_train_batch_begin(ii * 1000) for ii in range(120)], label="Cosine restart, on batch, first_restart_step=21000, min=1e-7, warmup=4000, m_mul=0.5")
+    bb_25 = bb.on_train_batch_begin(25 * 1000).numpy()
+    plt.plot((25, 25), (1e-6, bb_25), 'k:')
+    plt.text(25, bb_25, (25, bb_25))
 
-  plt.legend()
-  plt.tight_layout()
-  ```
-  ![](checkpoints/learning_rate_decay.svg)
+    cc = myCallbacks.CosineLrScheduler(0.001, first_restart_step=24, lr_min=1e-7, warmup_iters=1, m_mul=0.4)
+    plt.plot(epochs, [cc.on_epoch_begin(ii) for ii in epochs], label="Cosine restart, first_restart_step=24, min=1e-7, warmup=1, m_mul=0.4")
+    cc_25 = cc.on_epoch_begin(25).numpy()
+    plt.plot((25, 25), (1e-6, cc_25), 'k:')
+    plt.text(25, cc_25, (25, cc_25))
+
+    dd = myCallbacks.ConstantDecayScheduler(lr_decay_steps=[10, 20, 30, 40], lr_base=0.001, decay_rate=0.1)
+    plt.plot(epochs, [dd.on_epoch_begin(ii) for ii in epochs], label="Constant, lr=0.001, decay_steps=[10, 20, 30, 40], decay_rate=0.1")
+
+    plt.xlim(0, 120)
+    plt.legend()
+    # plt.grid()
+    plt.tight_layout()
+    ```
+    ![](checkpoints/learning_rate_decay.svg)
 ## Other backbones
   - **EfficientNet** `tf-nightly` / `tf 2.3.0` now includes all `EfficientNet` backbone in `tensorflow.keras.applications`, but it has a `Rescaling` and `Normalization` layer on the head.
     ```py

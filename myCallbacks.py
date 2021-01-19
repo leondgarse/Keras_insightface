@@ -103,29 +103,34 @@ class ConstantDecayScheduler(keras.callbacks.Callback):
 
 
 class CosineLrScheduler(keras.callbacks.Callback):
-    def __init__(self, lr_base, decay_steps, lr_min=0.0, warmup_iters=0, lr_on_batch=0, restarts=1, m_mul=0.5):
+    def __init__(self, lr_base, first_restart_step, m_mul=0.5, lr_min=0.0, warmup_iters=0):
         super(CosineLrScheduler, self).__init__()
-        self.lr_base, self.decay_steps, self.lr_min = lr_base, decay_steps, lr_min
-        if restarts > 1:
-            # with restarts == 3, t_mul == 2, restart_step 1 + 2 + 4 == 7
-            restart_step = sum([2 ** ii for ii in range(restarts)]) * max(1, lr_on_batch)
-            self.schedule = keras.experimental.CosineDecayRestarts(
-                lr_base, self.decay_steps // restart_step, t_mul=2.0, m_mul=m_mul, alpha=lr_min / lr_base
-            )
-        else:
-            self.schedule = keras.experimental.CosineDecay(lr_base, self.decay_steps, alpha=lr_min / lr_base)
-        if lr_on_batch < 1:
+        if first_restart_step < 500:
             self.on_epoch_begin = self.__lr_sheduler__
+            self.lr_decay_steps = 1
+            self.warmup_iters = warmup_iters
         else:
             self.on_train_batch_begin = self.__lr_sheduler__
+            self.lr_decay_steps = 100
+            self.warmup_iters = warmup_iters / self.lr_decay_steps
+            first_restart_step /= self.lr_decay_steps
+
+        if lr_min == lr_base * m_mul:
+            self.schedule = keras.experimental.CosineDecay(lr_base, first_restart_step, alpha=lr_min / lr_base)
+        else:
+            # with `first_restart_step, t_mul, warmup_iters = 10, 2, 1` restart epochs will be:
+            # ee = lambda ss: warmup_iters + first_restart_step * np.sum([t_mul ** jj for jj in range(ss)])
+            # [ee(ii) for ii in range(1, 5)] == [11, 31, 71, 151]
+            self.schedule = keras.experimental.CosineDecayRestarts(
+                lr_base, first_restart_step, t_mul=2.0, m_mul=m_mul, alpha=lr_min / lr_base
+            )
+
         if warmup_iters != 0:
             # self.warmup_lr_func = lambda ii: lr_min + (lr_base - lr_min) * ii / warmup_iters
             self.warmup_lr_func = lambda ii: lr_base
-        self.lr_on_batch = max(1, lr_on_batch)
-        self.warmup_iters = warmup_iters / self.lr_on_batch
 
     def __lr_sheduler__(self, iterNum, logs=None):
-        iterNum //= self.lr_on_batch
+        iterNum //= self.lr_decay_steps
         if iterNum < self.warmup_iters:
             lr = self.warmup_lr_func(iterNum)
         else:
@@ -150,7 +155,7 @@ def scheduler_warmup(lr_target, cur_epoch, lr_init=0.1, epochs=10):
     return lr
 
 
-def scheduler(epoch, lr_base, decay_rate=0.05, lr_min=0, warmup=10):
+def exp_scheduler(epoch, lr_base, decay_rate=0.05, lr_min=0, warmup=10):
     lr = lr_base if epoch < warmup else lr_base * np.exp(decay_rate * (warmup - epoch))
     # lr = scheduler_warmup(lr_base, epoch) if epoch < warmup else lr_base * np.exp(decay_rate * (warmup - epoch))
     lr = lr_min if lr < lr_min else lr
@@ -169,15 +174,15 @@ def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_de
     if isinstance(lr_decay_steps, list):
         # Constant decay on epoch
         lr_scheduler = ConstantDecayScheduler(lr_decay_steps=lr_decay_steps, lr_base=lr, decay_rate=lr_decay)
-    elif lr_decay < 1:
-        # Exponential decay
-        warmup = 10 if lr_decay_steps == 0 else lr_decay_steps
-        lr_scheduler = LearningRateScheduler(lambda epoch: scheduler(epoch, lr, lr_decay, lr_min, warmup=warmup))
-    else:
+    elif lr_decay_steps > 1:
         # Cosine decay on epoch / batch
         lr_scheduler = CosineLrScheduler(
-            lr_base=lr, decay_steps=lr_decay, lr_min=lr_min, warmup_iters=1, lr_on_batch=lr_decay_steps, restarts=4
+            lr_base=lr, first_restart_step=lr_decay_steps, m_mul=lr_decay, lr_min=lr_min, warmup_iters=1
         )
+    else:
+        # Exponential decay
+        warmup = 10
+        lr_scheduler = LearningRateScheduler(lambda epoch: exp_scheduler(epoch, lr, lr_decay, lr_min, warmup=warmup))
     my_history = My_history(os.path.splitext(checkpoint)[0] + "_hist.json", evals=evals)
     # tensor_board_log = keras.callbacks.TensorBoard(log_dir=os.path.splitext(checkpoint)[0] + '_logs')
     return [my_history, model_checkpoint, lr_scheduler, Gently_stop_callback()]
