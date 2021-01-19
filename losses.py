@@ -139,10 +139,10 @@ class ArcfaceLossSimple(tf.keras.losses.Loss):
 
 
 # [CurricularFace: Adaptive Curriculum Learning Loss for Deep Face Recognition](https://arxiv.org/pdf/2004.00288.pdf)
-class CurricularFace(ArcfaceLossSimple):
+class CurricularFaceLoss(ArcfaceLossSimple):
     def __init__(self, margin=0.5, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
-        super(CurricularFace, self).__init__(margin, scale, from_logits, label_smoothing, **kwargs)
-        self.hard_example_scale = tf.Variable(0, dtype='float32')
+        super(CurricularFaceLoss, self).__init__(margin, scale, from_logits, label_smoothing, **kwargs)
+        self.hard_example_scale = tf.Variable(0, dtype="float32")
 
     def call(self, y_true, norm_logits):
         pick_cond = tf.cast(y_true, dtype=tf.bool)
@@ -152,12 +152,27 @@ class CurricularFace(ArcfaceLossSimple):
 
         self.hard_example_scale.assign(tf.reduce_mean(y_pred_vals) * 0.01 + (1 - 0.01) * self.hard_example_scale)
         tf.print(", hard_example_scale =", self.hard_example_scale, end="")
-        hard_norm_logits = tf.where(norm_logits > tf.expand_dims(theta, 1), norm_logits * (self.hard_example_scale + norm_logits), norm_logits)
+        hard_norm_logits = tf.where(
+            norm_logits > tf.expand_dims(theta, 1), norm_logits * (self.hard_example_scale + norm_logits), norm_logits
+        )
 
         theta_one_hot = tf.expand_dims(theta_valid, 1) * tf.cast(y_true, dtype=tf.float32)
-        arcface_logits = tf.where(pick_cond, theta_one_hot, hard_norm_logits) * self.scale
+        logits = tf.where(pick_cond, theta_one_hot, hard_norm_logits) * self.scale
         return tf.keras.losses.categorical_crossentropy(
-            y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
+            y_true, logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
+        )
+
+
+# [CosFace: Large Margin Cosine Loss for Deep Face Recognition](https://arxiv.org/pdf/1801.09414.pdf)
+class CosFaceLoss(ArcfaceLossSimple):
+    def __init__(self, margin=0.35, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
+        super(CosFaceLoss, self).__init__(margin, scale, from_logits, label_smoothing, **kwargs)
+
+    def call(self, y_true, norm_logits):
+        pick_cond = tf.cast(y_true, dtype=tf.bool)
+        logits = tf.where(pick_cond, norm_logits - self.margin, norm_logits) * self.scale
+        return tf.keras.losses.categorical_crossentropy(
+            y_true, logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
         )
 
 
