@@ -80,7 +80,7 @@ class OptimizerWeightDecay(keras.callbacks.Callback):
 
 
 class ConstantDecayScheduler(keras.callbacks.Callback):
-    def __init__(self, lr_decay_steps, lr_base=1e-1, decay_rate=0.1):
+    def __init__(self, lr_base, lr_decay_steps, decay_rate=0.1):
         super(ConstantDecayScheduler, self).__init__()
         self.lr_decay_steps, self.lr_base, self.decay_rate = lr_decay_steps, lr_base, decay_rate
 
@@ -173,7 +173,7 @@ def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_de
 
     if isinstance(lr_decay_steps, list):
         # Constant decay on epoch
-        lr_scheduler = ConstantDecayScheduler(lr_decay_steps=lr_decay_steps, lr_base=lr, decay_rate=lr_decay)
+        lr_scheduler = ConstantDecayScheduler(lr_base=lr, lr_decay_steps=lr_decay_steps, decay_rate=lr_decay)
     elif lr_decay_steps > 1:
         # Cosine decay on epoch / batch
         lr_scheduler = CosineLrScheduler(

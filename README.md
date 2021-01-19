@@ -336,7 +336,7 @@
     | <= 1           | Exponential decay      |                        | decay_rate       |
     | > 1, < 500     | Cosine decay, on epoch | first_restart_step     | m_mul            |
     | >= 500         | Cosine decay, on batch | first_restart_step     | m_mul            |
-    | list           | Constant decay         | decay_steps            | decay_rate       |
+    | list           | Constant decay         | lr_decay_steps         | decay_rate       |
 
     ```py
     # Exponential, lr_decay_steps == 0
@@ -352,30 +352,31 @@
     ```
   - **Example learning rates**
     ```py
-    import myCallbacks
+    from myCallbacks import exp_scheduler, CosineLrScheduler, ConstantDecayScheduler
     epochs = np.arange(120)
     plt.figure(figsize=(14, 6))
-    plt.plot(epochs, [myCallbacks.exp_scheduler(ii, 0.001, 0.1) for ii in epochs], label="lr=0.001, decay=0.1")
-    plt.plot(epochs, [myCallbacks.exp_scheduler(ii, 0.001, 0.05) for ii in epochs], label="lr=0.001, decay=0.05")
-    plt.plot(epochs, [myCallbacks.exp_scheduler(ii, 0.001, 0.02) for ii in epochs], label="lr=0.001, decay=0.02")
-    aa = myCallbacks.CosineLrScheduler(0.001, first_restart_step=100, lr_min=1e-6, warmup_iters=0, m_mul=1e-3)
-    plt.plot(epochs, [aa.on_epoch_begin(ii) for ii in epochs], label="Cosine, first_restart_step=100, min=1e-6, m_mul=1e-3")
-    plt.text(115, 1e-5, "[Red line]\n({}, {:.2e})".format(120, aa.on_epoch_begin(120).numpy()))
+    plt.plot(epochs, [exp_scheduler(ii, 0.001, 0.1) for ii in epochs], label="lr=0.001, decay=0.1")
+    plt.plot(epochs, [exp_scheduler(ii, 0.001, 0.05) for ii in epochs], label="lr=0.001, decay=0.05")
+    plt.plot(epochs, [exp_scheduler(ii, 0.001, 0.02) for ii in epochs], label="lr=0.001, decay=0.02")
+    dd = ConstantDecayScheduler(0.001, lr_decay_steps=[10, 20, 30, 40], decay_rate=0.1)
+    plt.plot(epochs, [dd.on_epoch_begin(ii) for ii in epochs], label="Constant, lr=0.001, decay_steps=[10, 20, 30, 40], decay_rate=0.1")
 
-    bb = myCallbacks.CosineLrScheduler(0.001, first_restart_step=21000, lr_min=1e-7, warmup_iters=4000)
-    plt.plot([bb.on_train_batch_begin(ii * 1000) for ii in range(120)], label="Cosine restart, on batch, first_restart_step=21000, min=1e-7, warmup=4000, m_mul=0.5")
-    bb_25 = bb.on_train_batch_begin(25 * 1000).numpy()
+    aa = CosineLrScheduler(0.001, first_restart_step=100, lr_min=1e-6, warmup_iters=0, m_mul=1e-3)
+    plt.plot(epochs, [aa.on_epoch_begin(ii) for ii in epochs], label="Cosine, first_restart_step=100, min=1e-6, m_mul=1e-3")
+    aa_120 = aa.on_epoch_begin(120).numpy()
+    plt.text(120, aa_120, "[Cosine]\n({}, {:.2e})".format(120, aa_120), va="top", ha="left")
+
+    bb = CosineLrScheduler(0.001, first_restart_step=24, lr_min=1e-7, warmup_iters=1, m_mul=0.4)
+    plt.plot(epochs, [bb.on_epoch_begin(ii) for ii in epochs], label="Cosine restart, first_restart_step=24, min=1e-7, warmup=1, m_mul=0.4")
+    bb_25 = bb.on_epoch_begin(25).numpy()
     plt.plot((25, 25), (1e-6, bb_25), 'k:')
     plt.text(25, bb_25, (25, bb_25))
 
-    cc = myCallbacks.CosineLrScheduler(0.001, first_restart_step=24, lr_min=1e-7, warmup_iters=1, m_mul=0.4)
-    plt.plot(epochs, [cc.on_epoch_begin(ii) for ii in epochs], label="Cosine restart, first_restart_step=24, min=1e-7, warmup=1, m_mul=0.4")
-    cc_25 = cc.on_epoch_begin(25).numpy()
+    cc = CosineLrScheduler(0.001, first_restart_step=21000, lr_min=1e-7, warmup_iters=4000)
+    plt.plot([cc.on_train_batch_begin(ii * 1000) for ii in range(120)], label="Cosine restart, on batch, first_restart_step=21000, min=1e-7, warmup=4000, m_mul=0.5")
+    cc_25 = cc.on_train_batch_begin(25 * 1000).numpy()
     plt.plot((25, 25), (1e-6, cc_25), 'k:')
     plt.text(25, cc_25, (25, cc_25))
-
-    dd = myCallbacks.ConstantDecayScheduler(lr_decay_steps=[10, 20, 30, 40], lr_base=0.001, decay_rate=0.1)
-    plt.plot(epochs, [dd.on_epoch_begin(ii) for ii in epochs], label="Constant, lr=0.001, decay_steps=[10, 20, 30, 40], decay_rate=0.1")
 
     plt.xlim(0, 120)
     plt.legend()
