@@ -21,7 +21,7 @@
   	- [Other backbones](#other-backbones)
   	- [Optimizer with weight decay](#optimizer-with-weight-decay)
   	- [Multi GPU train using horovod or distribute strategy](#multi-gpu-train-using-horovod-or-distribute-strategy)
-  - [TFLite model inference time test on ARM32](#tflite-model-inference-time-test-on-arm32)
+  - [TFLite model inference time test on ARM64](#tflite-model-inference-time-test-on-arm64)
   - [Sub Center ArcFace](#sub-center-arcface)
   - [Knowledge distillation](#knowledge-distillation)
   - [Evaluating on IJB datasets](#evaluating-on-ijb-datasets)
@@ -454,38 +454,48 @@
     ```
 ***
 
-# TFLite model inference time test on ARM32
+# TFLite model inference time test on ARM64
   - Test using [TFLite Model Benchmark Tool](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/tools/benchmark)
   - **Platform**
-    - CPU: `rk3288`
+    - CPU: `Qualcomm Technologies, Inc SDM630`
     - System: `Android`
     - Inference: `TFLite`
   - **mobilenet_v2** comparing `orignal` / `dynamic` / `float16` / `uint8` conversion of `TFLite` model.
-    | mobilenet_v2 | threads=1 (ms) | threads=4 (ms) | Size (MB) |
-    | ------------ | -------------- | -------------- | --------- |
-    | orignal      | 73.930         | 39.180         | 12.049    |
-    | orignal xnn  | 55.806         | 23.844         | 12.049    |
-    | dynamic      | 65.858         | 53.397         | 3.11019   |
-    | dynamic xnn  | 61.564         | 99.096         | 3.11019   |
-    | float16      | 73.648         | 38.593         | 6.06125   |
-    | float16 xnn  | 56.231         | 23.904         | 6.06125   |
-    | uint8        | 41.593         | 23.179         | 3.69072   |
-    | MNN          | 47.583         | 27.574         | 12        |
-  - **Model comparing**
-    | Model                      | threads=1 (ms) | threads=4 (ms) | Size (MB) |
-    | -------------------------- | -------------- | -------------- | --------- |
-    | mobilenet_v1 float16       | 111.696        | 50.433         | 7.74493   |
-    | mobilenet_v1 float16 xnn   | 94.774         | 37.345         | 7.74493   |
-    | mobilenet_v1 uint8         | 47.551         | 22.335         | 4.31061   |
-    | EB0 float16                | 139.394        | 95.317         | 9.8998    |
-    | EB0 float16 xnn            | 117.684        | 69.567         | 9.8998    |
-    | EB0 uint8                  | 80.863         | 64.178         | 5.99462   |
-    | mobilefacenet float16      | 188.111        | 111.990        | 2.14302   |
-    | mobilefacenet float16 xnn  | 118.711        | 54.152         | 2.14302   |
-    | mobilefacenet uint8        | 191.208        | 158.794        | 1.30752   |
-    | se_mobilefacenet float16   | 191.044        | 118.211        | 2.32702   |
-    | mobilenet_v3_small f16 xnn | 22.056         | 14.156         | 3.63155   |
-    | mobilenet_v3_large f16 xnn | 59.167         | 34.316         | 9.13332   |
+    | mobilenet_v2 | output_layer | emb_shape | threads=1 (ms) | threads=4 (ms) | Size (MB) |
+    | ------------ | ------------ | --------- | -------------- | -------------- | --------- |
+    | orignal      | GDC          | 512       | 52.224         | 18.102         | 11.576    |
+    | orignal xnn  | GDC          | 512       | 29.116         | 8.744          | 11.576    |
+    | dynamic      | GDC          | 512       | 38.497         | 20.008         | 3.36376   |
+    | dynamic xnn  | GDC          | 512       | 37.433         | 19.234         | 3.36376   |
+    | float16      | GDC          | 512       | 53.986         | 19.191         | 5.8267    |
+    | float16 xnn  | GDC          | 512       | 29.862         | 8.661          | 5.8267    |
+    | uint8        | GDC          | 512       | 27.247         | 10.783         | 3.59032   |
+
+  - **mobilenet_v2** comparing different headers using `float16 conversion + xnn + threads=4`
+    | emb_shape | output_layer | pointwise_conv | PReLU | Size (MB) | Time (ms) |
+    | ---------:|:------------ |:-------------- | ----- | ---------:| ---------:|
+    |       256 | GDC          | False          | False |   5.17011 |     8.214 |
+    |       512 | GDC          | False          | False |   5.82598 |     8.436 |
+    |       256 | GDC          | True           | False |   6.06384 |     9.129 |
+    |       512 | GDC          | True           | False |   6.32542 |     9.357 |
+    |       256 | E            | True           | False |   9.98053 |    10.669 |
+    |       256 | E            | False          | False |   14.9618 |    11.502 |
+    |       512 | E            | True           | False |    14.174 |    11.958 |
+    |       512 | E            | False          | False |   25.4481 |    15.063 |
+    |       512 | GDC          | False          | True  |   5.85275 |    10.481 |
+
+  - **Backbones comparing** using `float16 conversion + xnn + threads=4`, header `GDC + emb_shape=512 + pointwise_conv=False`
+    | Model              | Time (ms) | Size (MB) |
+    | ------------------ | --------- | --------- |
+    | mobilenet_v3_small | 4.211     | 2.80058   |
+    | mobilenet_v3_large | 10.025    | 6.95015   |
+    | ghostnet           | 11.125    | 8.06546   |
+    | mobilenet          | 11.836    | 7.4905    |
+    | se_mobilefacenet   | 18.713    | 1.88518   |
+    | mobilefacenet      | 20.443    | 1.84267   |
+    | EB0                | 22.054    | 9.40449   |
+    | EB1                | 31.881    | 14.4268   |
+    | mobilenet_m1       | 52.648    | 7.02651   |
 ***
 
 # Sub Center ArcFace

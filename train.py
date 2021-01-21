@@ -27,12 +27,12 @@ class Train:
         basic_model=None,
         model=None,
         compile=True,
-        output_weight_decay=0,  # L2 regularizer for output layer, 0 for None, >=1 for value in basic_model, (0, 1) for specific value.
+        output_weight_decay=0,  # L2 regularizer for output layer, 0 for None, >=1 for value in basic_model, (0, 1) for specific value
         custom_objects={},
         batch_size=128,
         lr_base=0.001,
-        lr_decay=0.05,  # lr_decay < 1 for exponential, or it's cosine decay_steps
-        lr_decay_steps=0,  # lr_decay_steps < 1 for update lr on epoch, or update on every [NUM] batches, or list for ConstantDecayScheduler
+        lr_decay=0.05,  # for cosine it's m_mul, or it's decay_rate for exponential or constant
+        lr_decay_steps=0,  # <=1 for Exponential, (1, 500) for Cosine decay on epoch, >= 500 for Cosine decay on batch, list for Constant
         lr_min=0,
         eval_freq=1,
         random_status=0,
@@ -276,6 +276,8 @@ class Train:
             if isinstance(loss, losses.CenterLoss) or self.center in ss:
                 return self.center
             if isinstance(loss, losses.ArcfaceLoss) or self.arcface in ss:
+                return self.arcface
+            if isinstance(loss, losses.ArcfaceLossSimple) or isinstance(loss, losses.AdaCosLoss):
                 return self.arcface
             if self.softmax in ss:
                 return self.softmax

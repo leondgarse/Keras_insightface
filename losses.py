@@ -179,7 +179,7 @@ class CosFaceLoss(ArcfaceLossSimple):
 # [AdaCos: Adaptively Scaling Cosine Logits for Effectively Learning Deep Face Representations](https://arxiv.org/pdf/1905.00292.pdf)
 class AdaCosLoss(tf.keras.losses.Loss):
     def __init__(self, num_classes, scale=0, max_median=np.pi / 4, from_logits=True, label_smoothing=0, **kwargs):
-        super(AdaCosLossSimple, self).__init__(**kwargs)
+        super(AdaCosLoss, self).__init__(**kwargs)
         self.max_median, self.from_logits, self.label_smoothing = max_median, from_logits, label_smoothing
         self.num_classes = num_classes
         self.theta_med_max = tf.cast(max_median, "float32")
@@ -209,7 +209,7 @@ class AdaCosLoss(tf.keras.losses.Loss):
         # return self.reduction_func(y_true, arcface_logits)
 
     def get_config(self):
-        config = super(AdaCosLossSimple, self).get_config()
+        config = super(AdaCosLoss, self).get_config()
         config.update(
             {
                 "num_classes": self.num_classes,
@@ -310,8 +310,7 @@ class CenterLossCosine(CenterLoss):
         return 1 - tf.reduce_sum(norm_emb * norm_center, axis=-1)
 
 
-# TripletLoss helper class definitions
-# [Triplet Loss and Online Triplet Mining in TensorFlow](https://omoindrot.github.io/triplet-loss)
+# TripletLoss helper class definitions [Triplet Loss and Online Triplet Mining in TensorFlow](https://omoindrot.github.io/triplet-loss)
 class TripletLossWapper(tf.keras.losses.Loss):
     def __init__(self, alpha=0.35, **kwargs):
         # reduction = tf.keras.losses.Reduction.NONE if tf.distribute.has_strategy() else tf.keras.losses.Reduction.AUTO

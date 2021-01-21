@@ -40,6 +40,8 @@ class My_history(keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
+        logs.pop('lr', None)
+        self.history.setdefault("lr", []).append(float(self.model.optimizer.lr))
         for k, v in logs.items():
             k = "accuracy" if "accuracy" in k else k
             self.history.setdefault(k, []).append(float(v))
@@ -51,16 +53,18 @@ class My_history(keras.callbacks.Callback):
             self.history.setdefault(kk, []).append(tt)
         if len(self.model.losses) != 0:
             regular_loss = K.sum(self.model.losses).numpy()
-            print("regular_loss:", regular_loss)
             self.history.setdefault("regular_loss", []).append(float(regular_loss))
             self.history["loss"][-1] -= regular_loss
+
         if self.initial_file:
             with open(self.initial_file, "w") as ff:
                 json.dump(self.history, ff)
 
     def print_hist(self):
+        print("{")
         for kk, vv in self.history.items():
-            print("  %s = %s" % (kk, vv))
+            print("  '%s': %s," % (kk, vv))
+        print("}")
 
 
 class OptimizerWeightDecay(keras.callbacks.Callback):
@@ -90,10 +94,6 @@ class ConstantDecayScheduler(keras.callbacks.Callback):
             K.set_value(self.model.optimizer.lr, lr)
         print("\nLearning rate for iter {} is {}".format(step + 1, lr))
         return lr
-
-    def on_epoch_end(self, epoch, logs=None):
-        logs = logs or {}
-        logs["lr"] = K.get_value(self.model.optimizer.lr)
 
     def constant_decay(self, cur_step):
         for id, ii in enumerate(self.lr_decay_steps):
@@ -139,10 +139,6 @@ class CosineLrScheduler(keras.callbacks.Callback):
             K.set_value(self.model.optimizer.lr, lr)
         print("\nLearning rate for iter {} is {}".format(iterNum + 1, lr))
         return lr
-
-    def on_epoch_end(self, epoch, logs=None):
-        logs = logs or {}
-        logs["lr"] = K.get_value(self.model.optimizer.lr)
 
 
 def scheduler_warmup(lr_target, cur_epoch, lr_init=0.1, epochs=10):
