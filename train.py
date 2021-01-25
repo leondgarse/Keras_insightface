@@ -101,11 +101,12 @@ class Train:
         my_evals = [evals.eval_callback(self.basic_model, ii, batch_size=batch_size, eval_freq=eval_freq) for ii in eval_paths]
         if len(my_evals) != 0:
             my_evals[-1].save_model = os.path.splitext(save_path)[0]
-        basic_callbacks = myCallbacks.basic_callbacks(
+        self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop = myCallbacks.basic_callbacks(
             checkpoint=save_path, evals=my_evals, lr=lr_base, lr_decay=lr_decay, lr_min=lr_min, lr_decay_steps=lr_decay_steps
         )
-        self.my_evals, self.basic_callbacks, self.custom_callbacks = my_evals, basic_callbacks, []
-        self.my_hist = [ii for ii in self.basic_callbacks if isinstance(ii, myCallbacks.My_history)][0]
+        self.basic_callbacks = [self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop]
+        self.is_lr_on_batch = isinstance(self.lr_scheduler, myCallbacks.CosineLrScheduler) and self.lr_scheduler.is_on_batch
+        self.my_evals, self.custom_callbacks = my_evals, []
         self.metrics = ["accuracy"]
         self.default_optimizer = "adam"
 
@@ -134,16 +135,17 @@ class Train:
             print(">>>> Init triplet dataset...")
             if self.data_path.endswith(".tfrecord"):
                 print(">>>> Combining tfrecord dataset with triplet is NOT recommended.")
-                self.train_ds = data.prepare_distill_dataset_tfrecord(**dataset_params)
+                self.train_ds, self.steps_per_epoch = data.prepare_distill_dataset_tfrecord(**dataset_params)
             else:
-                self.train_ds = data.Triplet_dataset( **dataset_params).ds
+                aa = data.Triplet_dataset( **dataset_params)
+                self.train_ds, self.steps_per_epoch = aa.ds, aa.steps_per_epoch
             self.is_triplet_dataset = True
         else:
             print(">>>> Init softmax dataset...")
             if self.data_path.endswith(".tfrecord"):
-                self.train_ds = data.prepare_distill_dataset_tfrecord(**dataset_params)
+                self.train_ds, self.steps_per_epoch = data.prepare_distill_dataset_tfrecord(**dataset_params)
             else:
-                self.train_ds = data.prepare_dataset(**dataset_params)
+                self.train_ds, self.steps_per_epoch = data.prepare_dataset(**dataset_params)
             self.is_triplet_dataset = False
 
         if tf.distribute.has_strategy():
@@ -186,7 +188,7 @@ class Train:
             if isinstance(self.optimizer, tfa.optimizers.weight_decay_optimizers.DecoupledWeightDecayExtension):
                 print(">>>> Insert weight decay callback...")
                 lr_base, wd_base = self.optimizer.lr.numpy(), self.optimizer.weight_decay.numpy()
-                wd_callback = myCallbacks.OptimizerWeightDecay(lr_base, wd_base)
+                wd_callback = myCallbacks.OptimizerWeightDecay(lr_base, wd_base, is_lr_on_batch=self.is_lr_on_batch)
                 self.callbacks.insert(-1, wd_callback)  # should be after lr_scheduler
 
     def __init_model__(self, type, loss_top_k=1):
@@ -310,6 +312,7 @@ class Train:
             callbacks=self.callbacks,
             initial_epoch=initial_epoch,
             steps_per_epoch=self.steps_per_epoch,
+            # steps_per_epoch=0,
             use_multiprocessing=True,
             workers=4,
         )
@@ -333,6 +336,9 @@ class Train:
             print(">>>> Error: Dataset doesn't contain embedding data.")
             self.model.stop_training = True
             return
+
+        if self.is_lr_on_batch:
+            self.lr_scheduler.steps_per_epoch = self.steps_per_epoch
 
         self.callbacks = self.my_evals + self.custom_callbacks + self.basic_callbacks
         # self.basic_model.trainable = True
@@ -375,7 +381,7 @@ class Train:
 
         print(">>>> Train %s DONE!!! epochs = %s, model.stop_training = %s" % (type, self.model.history.epoch, self.model.stop_training))
         print(">>>> My history:")
-        self.my_hist.print_hist()
+        self.my_history.print_hist()
         print()
 
     def train(self, train_schedule, initial_epoch=0):

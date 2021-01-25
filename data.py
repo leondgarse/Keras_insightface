@@ -122,7 +122,8 @@ def prepare_dataset(
 
     ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
     ds = ds.prefetch(buffer_size=AUTOTUNE)
-    return ds
+    steps_per_epoch = int(np.ceil(len(image_names) / float(batch_size)))
+    return ds, steps_per_epoch
 
 
 def prepare_distill_dataset_tfrecord(data_path, batch_size=128, img_shape=(112, 112), random_status=2, random_crop=(100, 100, 3), **kw):
@@ -162,7 +163,8 @@ def prepare_distill_dataset_tfrecord(data_path, batch_size=128, img_shape=(112, 
     ds = ds.batch(batch_size)
     ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
     ds = ds.prefetch(buffer_size=AUTOTUNE)
-    return ds
+    steps_per_epoch = int(np.ceil(total / float(batch_size)))
+    return ds, steps_per_epoch
 
 
 class Triplet_dataset:
@@ -218,6 +220,10 @@ class Triplet_dataset:
 
         ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
         self.ds = ds.prefetch(buffer_size=AUTOTUNE)
+
+        shuffle_dataset = self.image_dataframe.map(self.split_func)
+        self.total = np.vstack(shuffle_dataset.values).flatten().shape[0]
+        self.steps_per_epoch = int(np.ceil(self.total / float(batch_size)))
 
     def image_shuffle_gen(self):
         tf.print("Shuffle image data...")

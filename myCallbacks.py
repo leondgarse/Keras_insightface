@@ -68,19 +68,29 @@ class My_history(keras.callbacks.Callback):
 
 
 class OptimizerWeightDecay(keras.callbacks.Callback):
-    def __init__(self, lr_base, wd_base):
+    def __init__(self, lr_base, wd_base, is_lr_on_batch=False):
         super(OptimizerWeightDecay, self).__init__()
         self.wd_m = wd_base / lr_base
         self.lr_base, self.wd_base = lr_base, wd_base
         # self.model.optimizer.weight_decay = lambda: wd_m * self.model.optimizer.lr
+        self.is_lr_on_batch = is_lr_on_batch
+        if is_lr_on_batch:
+            self.on_train_batch_begin = self.__update_wd__
+            self.on_epoch_begin = self.__print_wd__
+        else:
+            self.on_epoch_begin = self.__update_wd__
 
-    def on_epoch_begin(self, step, log=None):
+    def __update_wd__(self, step, log=None):
         if self.model is not None:
             wd = self.wd_m * K.get_value(self.model.optimizer.lr)
             # wd = self.wd_base * K.get_value(self.model.optimizer.lr)
             K.set_value(self.model.optimizer.weight_decay, wd)
         # wd = self.model.optimizer.weight_decay
-        print("Weight decay for iter {} is {}".format(step + 1, wd))
+        if not self.is_lr_on_batch:
+            self.__print_wd__(step)
+
+    def __print_wd__(self, iterNum, logs=None):
+        print("Weight decay for iter {} is {}".format(iterNum + 1, K.get_value(self.model.optimizer.weight_decay)))
 
 
 class ConstantDecayScheduler(keras.callbacks.Callback):
@@ -107,38 +117,52 @@ class CosineLrScheduler(keras.callbacks.Callback):
         super(CosineLrScheduler, self).__init__()
         if first_restart_step < 500:
             self.on_epoch_begin = self.__lr_sheduler__
-            self.lr_decay_steps = 1
+            self.decay_step = 1
+            self.init_step_num = 0
             self.warmup_iters = warmup_iters
+            self.first_restart_step = first_restart_step
+            self.is_on_batch = False
         else:
+            self.steps_per_epoch = -1   # Set after dataset inited
+            self.on_epoch_begin = self.__on_epoch_begin_for_lr_on_batch__
             self.on_train_batch_begin = self.__lr_sheduler__
-            self.lr_decay_steps = 100
-            self.warmup_iters = warmup_iters / self.lr_decay_steps
-            first_restart_step /= self.lr_decay_steps
+            self.decay_step = 100
+            self.warmup_iters = warmup_iters
+            self.first_restart_step = first_restart_step // self.decay_step
+            self.is_on_batch = True
 
         if lr_min == lr_base * m_mul:
-            self.schedule = keras.experimental.CosineDecay(lr_base, first_restart_step, alpha=lr_min / lr_base)
+            self.schedule = keras.experimental.CosineDecay(lr_base, self.first_restart_step, alpha=lr_min / lr_base)
         else:
             # with `first_restart_step, t_mul, warmup_iters = 10, 2, 1` restart epochs will be:
             # ee = lambda ss: warmup_iters + first_restart_step * np.sum([t_mul ** jj for jj in range(ss)])
             # [ee(ii) for ii in range(1, 5)] == [11, 31, 71, 151]
             self.schedule = keras.experimental.CosineDecayRestarts(
-                lr_base, first_restart_step, t_mul=2.0, m_mul=m_mul, alpha=lr_min / lr_base
+                lr_base, self.first_restart_step, t_mul=2.0, m_mul=m_mul, alpha=lr_min / lr_base
             )
 
         if warmup_iters != 0:
             # self.warmup_lr_func = lambda ii: lr_min + (lr_base - lr_min) * ii / warmup_iters
             self.warmup_lr_func = lambda ii: lr_base
 
+    def __on_epoch_begin_for_lr_on_batch__(self, cur_epoch, logs=None):
+        self.__print_lr__(cur_epoch)
+        self.init_step_num = self.steps_per_epoch * cur_epoch
+
     def __lr_sheduler__(self, iterNum, logs=None):
-        iterNum //= self.lr_decay_steps
+        iterNum = (iterNum + self.init_step_num) // self.decay_step
         if iterNum < self.warmup_iters:
             lr = self.warmup_lr_func(iterNum)
         else:
             lr = self.schedule(iterNum - self.warmup_iters)
         if self.model is not None:
             K.set_value(self.model.optimizer.lr, lr)
-        print("\nLearning rate for iter {} is {}".format(iterNum + 1, lr))
+        if not self.is_on_batch:
+            self.__print_lr__(iterNum)
         return lr
+
+    def __print_lr__(self, iterNum, logs=None):
+        print("\nLearning rate for iter {} is {}".format(iterNum + 1, K.get_value(self.model.optimizer.lr)))
 
 
 def scheduler_warmup(lr_target, cur_epoch, lr_init=0.1, epochs=10):
