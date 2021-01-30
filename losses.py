@@ -140,9 +140,9 @@ class ArcfaceLossSimple(tf.keras.losses.Loss):
 
 # [CurricularFace: Adaptive Curriculum Learning Loss for Deep Face Recognition](https://arxiv.org/pdf/2004.00288.pdf)
 class CurricularFaceLoss(ArcfaceLossSimple):
-    def __init__(self, margin=0.5, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
+    def __init__(self, margin=0.5, scale=64.0, from_logits=True, label_smoothing=0, hard_scale=0, **kwargs):
         super(CurricularFaceLoss, self).__init__(margin, scale, from_logits, label_smoothing, **kwargs)
-        self.hard_example_scale = tf.Variable(0, dtype="float32")
+        self.hard_scale = tf.Variable(hard_scale, dtype="float32", trainable=False)
 
     def call(self, y_true, norm_logits):
         pick_cond = tf.cast(y_true, dtype=tf.bool)
@@ -150,10 +150,10 @@ class CurricularFaceLoss(ArcfaceLossSimple):
         theta = y_pred_vals * self.margin_cos - tf.sqrt(1 - tf.pow(y_pred_vals, 2)) * self.margin_sin
         theta_valid = tf.where(y_pred_vals > self.threshold, theta, y_pred_vals - self.low_pred_punish)
 
-        self.hard_example_scale.assign(tf.reduce_mean(y_pred_vals) * 0.01 + (1 - 0.01) * self.hard_example_scale)
-        tf.print(", hard_example_scale =", self.hard_example_scale, end="")
+        self.hard_scale.assign(tf.reduce_mean(y_pred_vals) * 0.01 + (1 - 0.01) * self.hard_scale)
+        tf.print(", hard_scale =", self.hard_scale, end="")
         hard_norm_logits = tf.where(
-            norm_logits > tf.expand_dims(theta, 1), norm_logits * (self.hard_example_scale + norm_logits), norm_logits
+            norm_logits > tf.expand_dims(theta, 1), norm_logits * (self.hard_scale + norm_logits), norm_logits
         )
 
         theta_one_hot = tf.expand_dims(theta_valid, 1) * tf.cast(y_true, dtype=tf.float32)
@@ -161,6 +161,10 @@ class CurricularFaceLoss(ArcfaceLossSimple):
         return tf.keras.losses.categorical_crossentropy(
             y_true, logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
         )
+    def get_config(self):
+        config = super(CurricularFaceLoss, self).get_config()
+        config.update({"hard_scale": K.get_value(self.hard_scale)})
+        return config
 
 
 # [CosFace: Large Margin Cosine Loss for Deep Face Recognition](https://arxiv.org/pdf/1801.09414.pdf)
@@ -178,16 +182,14 @@ class CosFaceLoss(ArcfaceLossSimple):
 
 # [AdaCos: Adaptively Scaling Cosine Logits for Effectively Learning Deep Face Representations](https://arxiv.org/pdf/1905.00292.pdf)
 class AdaCosLoss(tf.keras.losses.Loss):
-    def __init__(self, num_classes, scale=0, max_median=np.pi / 4, from_logits=True, label_smoothing=0, **kwargs):
+    def __init__(self, num_classes=1000, scale=0, max_median=np.pi / 4, from_logits=True, label_smoothing=0, **kwargs):
         super(AdaCosLoss, self).__init__(**kwargs)
         self.max_median, self.from_logits, self.label_smoothing = max_median, from_logits, label_smoothing
         self.num_classes = num_classes
         self.theta_med_max = tf.cast(max_median, "float32")
         if scale == 0:
-            self.scale = tf.sqrt(2.0) * tf.math.log(float(num_classes) - 1)
-        else:
-            # In reload condition
-            self.scale = tf.cast(scale, "float32")
+            scale = tf.sqrt(2.0) * tf.math.log(float(num_classes) - 1)
+        self.scale = tf.Variable(scale, dtype="float32", trainable=False)
 
     @tf.function
     def call(self, y_true, norm_logits):
@@ -199,7 +201,7 @@ class AdaCosLoss(tf.keras.losses.Loss):
 
         B_avg = tf.where(pick_cond, tf.zeros_like(norm_logits), tf.exp(self.scale * norm_logits))
         B_avg = tf.reduce_mean(tf.reduce_sum(B_avg, axis=1))
-        self.scale = tf.math.log(B_avg) / tf.cos(tf.minimum(self.theta_med_max, theta_med))
+        self.scale.assign(tf.math.log(B_avg) / tf.cos(tf.minimum(self.theta_med_max, theta_med)))
         tf.print(", scale =", self.scale, ", theta_med =", theta_med, end="")
 
         arcface_logits = norm_logits * self.scale
@@ -213,7 +215,7 @@ class AdaCosLoss(tf.keras.losses.Loss):
         config.update(
             {
                 "num_classes": self.num_classes,
-                # "scale": self.scale.numpy(),
+                "scale": K.get_value(self.scale),
                 "max_median": self.max_median,
                 "from_logits": self.from_logits,
                 "label_smoothing": self.label_smoothing,

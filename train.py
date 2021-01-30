@@ -104,7 +104,6 @@ class Train:
         self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop = myCallbacks.basic_callbacks(
             checkpoint=save_path, evals=my_evals, lr=lr_base, lr_decay=lr_decay, lr_min=lr_min, lr_decay_steps=lr_decay_steps
         )
-        self.basic_callbacks = [self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop]
         self.is_lr_on_batch = isinstance(self.lr_scheduler, myCallbacks.CosineLrScheduler) and self.lr_scheduler.is_on_batch
         self.my_evals, self.custom_callbacks = my_evals, []
         self.metrics = ["accuracy"]
@@ -324,10 +323,16 @@ class Train:
             self.dataset_params["data_path"] = self.data_path
 
     def train_single_scheduler(
-        self, loss, epoch, initial_epoch=0, lossWeight=1, optimizer=None, bottleneckOnly=False, lossTopK=1, type=None, embLossTypes=None, embLossWeights=1, tripletAlpha=0.35
+        self, epoch, loss=None, initial_epoch=0, lossWeight=1, optimizer=None, bottleneckOnly=False, lossTopK=1, type=None, embLossTypes=None, embLossWeights=1, tripletAlpha=0.35
     ):
         emb_loss_names, emb_loss_weights = self.__init_emb_losses__(embLossTypes, embLossWeights)
 
+        if loss is None:
+            if self.model.built:
+                loss = self.model.loss[0]
+            else:
+                return
+            
         if type is None:
             type = self.default_type or self.__init_type_by_loss__(loss)
         print(">>>> Train %s..." % type)
@@ -340,7 +345,8 @@ class Train:
         if self.is_lr_on_batch:
             self.lr_scheduler.steps_per_epoch = self.steps_per_epoch
 
-        self.callbacks = self.my_evals + self.custom_callbacks + self.basic_callbacks
+        basic_callbacks = [self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop]
+        self.callbacks = self.my_evals + self.custom_callbacks + basic_callbacks
         # self.basic_model.trainable = True
         self.__init_optimizer__(optimizer)
         self.__init_model__(type, lossTopK)
@@ -353,7 +359,7 @@ class Train:
             emb_shape = self.basic_model.output_shape[-1]
             initial_file = os.path.splitext(self.save_path)[0] + "_centers.npy"
             center_loss = loss_class(self.classes, emb_shape=emb_shape, initial_file=initial_file)
-            self.callbacks = self.my_evals + self.custom_callbacks + [center_loss.save_centers_callback] + self.basic_callbacks
+            self.callbacks = self.my_evals + self.custom_callbacks + [center_loss.save_centers_callback] + basic_callbacks
             self.__add_emb_output_to_model__(self.center, center_loss, emb_loss_weights[self.center])
 
         if self.triplet in emb_loss_names and type != self.triplet:
@@ -387,8 +393,6 @@ class Train:
     def train(self, train_schedule, initial_epoch=0):
         train_schedule = [train_schedule] if isinstance(train_schedule, dict) else train_schedule
         for sch in train_schedule:
-            if sch.get("loss", None) is None:
-                continue
             for ii in ["centerloss", "triplet", "distill"]:
                 if ii in sch:
                     sch.setdefault("embLossTypes", []).append(ii)

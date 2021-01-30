@@ -113,36 +113,37 @@ class ConstantDecayScheduler(keras.callbacks.Callback):
 
 
 class CosineLrScheduler(keras.callbacks.Callback):
-    def __init__(self, lr_base, first_restart_step, m_mul=0.5, lr_min=0.0, warmup_iters=0):
+    def __init__(self, lr_base, first_restart_step, m_mul=0.5, t_mul=2.0, lr_min=0.0, warmup=0, on_batch_step=100, steps_per_epoch=-1):
         super(CosineLrScheduler, self).__init__()
         if first_restart_step < 500:
             self.on_epoch_begin = self.__lr_sheduler__
             self.decay_step = 1
             self.init_step_num = 0
-            self.warmup_iters = warmup_iters
+            self.warmup = warmup
             self.first_restart_step = first_restart_step
             self.is_on_batch = False
         else:
-            self.steps_per_epoch = -1   # Set after dataset inited
+            self.steps_per_epoch = steps_per_epoch   # Set after dataset inited
             self.on_epoch_begin = self.__on_epoch_begin_for_lr_on_batch__
             self.on_train_batch_begin = self.__lr_sheduler__
-            self.decay_step = 100
-            self.warmup_iters = warmup_iters
+            self.decay_step = on_batch_step
+            self.init_step_num = 0
+            self.warmup = warmup
             self.first_restart_step = first_restart_step // self.decay_step
             self.is_on_batch = True
 
         if lr_min == lr_base * m_mul:
             self.schedule = keras.experimental.CosineDecay(lr_base, self.first_restart_step, alpha=lr_min / lr_base)
         else:
-            # with `first_restart_step, t_mul, warmup_iters = 10, 2, 1` restart epochs will be:
-            # ee = lambda ss: warmup_iters + first_restart_step * np.sum([t_mul ** jj for jj in range(ss)])
+            # with `first_restart_step, t_mul, warmup = 10, 2, 1` restart epochs will be:
+            # ee = lambda ss: warmup + first_restart_step * np.sum([t_mul ** jj for jj in range(ss)])
             # [ee(ii) for ii in range(1, 5)] == [11, 31, 71, 151]
             self.schedule = keras.experimental.CosineDecayRestarts(
-                lr_base, self.first_restart_step, t_mul=2.0, m_mul=m_mul, alpha=lr_min / lr_base
+                lr_base, self.first_restart_step, t_mul=t_mul, m_mul=m_mul, alpha=lr_min / lr_base
             )
 
-        if warmup_iters != 0:
-            # self.warmup_lr_func = lambda ii: lr_min + (lr_base - lr_min) * ii / warmup_iters
+        if warmup != 0:
+            # self.warmup_lr_func = lambda ii: lr_min + (lr_base - lr_min) * ii / warmup
             self.warmup_lr_func = lambda ii: lr_base
 
     def __on_epoch_begin_for_lr_on_batch__(self, cur_epoch, logs=None):
@@ -151,10 +152,10 @@ class CosineLrScheduler(keras.callbacks.Callback):
 
     def __lr_sheduler__(self, iterNum, logs=None):
         iterNum = (iterNum + self.init_step_num) // self.decay_step
-        if iterNum < self.warmup_iters:
+        if iterNum < self.warmup:
             lr = self.warmup_lr_func(iterNum)
         else:
-            lr = self.schedule(iterNum - self.warmup_iters)
+            lr = self.schedule(iterNum - self.warmup)
         if self.model is not None:
             K.set_value(self.model.optimizer.lr, lr)
         if not self.is_on_batch:
@@ -162,7 +163,8 @@ class CosineLrScheduler(keras.callbacks.Callback):
         return lr
 
     def __print_lr__(self, iterNum, logs=None):
-        print("\nLearning rate for iter {} is {}".format(iterNum + 1, K.get_value(self.model.optimizer.lr)))
+        if self.model is not None:
+            print("\nLearning rate for iter {} is {}".format(iterNum + 1, K.get_value(self.model.optimizer.lr)))
 
 
 def scheduler_warmup(lr_target, cur_epoch, lr_init=0.1, epochs=10):
@@ -197,7 +199,7 @@ def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_de
     elif lr_decay_steps > 1:
         # Cosine decay on epoch / batch
         lr_scheduler = CosineLrScheduler(
-            lr_base=lr, first_restart_step=lr_decay_steps, m_mul=lr_decay, lr_min=lr_min, warmup_iters=1
+            lr_base=lr, first_restart_step=lr_decay_steps, m_mul=lr_decay, lr_min=lr_min, warmup=1
         )
     else:
         # Exponential decay

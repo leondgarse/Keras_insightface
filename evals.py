@@ -267,7 +267,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-m", "--basic_model", type=str, default=None, help="Model file, keras h5")
+    parser.add_argument("-m", "--basic_model", type=str, required=True, help="Model file, keras h5")
     parser.add_argument("-b", "--batch_size", type=int, default=128, help="Batch size")
     parser.add_argument("-t", "--test_bin_files", nargs="*", type=str, help="Test bin files")
     parser.add_argument("-F", "--no_flip", action="store_true", help="Disable flip")
@@ -278,3 +278,7 @@ if __name__ == "__main__":
     for test_bin_file in args.test_bin_files:
         aa = eval_callback(basic_model, test_bin_file, batch_size=args.batch_size, flip=flip)
         aa.on_epoch_end()
+elif __name__== "__test__":
+    from data_distiller import teacher_model_interf_wrapper
+    mm = teacher_model_interf_wrapper('../models/GhostNet_x1.3_Arcface_Epoch_24.pth')
+    evals.eval_callback(lambda imm: mm(imm * 128 + 127.5), '/datasets/ms1m-retinaface-t1/agedb_30.bin').on_epoch_end()
