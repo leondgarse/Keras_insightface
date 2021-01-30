@@ -40,6 +40,7 @@
   | [Resnet34](https://drive.google.com/file/d/1qmUcSDyftp7TScJHQQXm33wEwDfuTc4l/view?usp=sharing) | [CASIA, E40](#comparing-resnet34-with-original-mxnet-version)  | 0.993667 | 0.949143 | 0.946333 |          |          |
   | [Mobilenet emb256](https://drive.google.com/file/d/1i0B6Hy1clGgfeOYtUXVPNveDEe2DTIBa/view?usp=sharing) | [Emore, E110](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-286398) | 0.996000 | 0.951714 | 0.959333 | 0.887147 | 0.911745 |
   | [Mobilenet_distill emb512](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/30) | 0.997    | 0.964    | 0.972833 | 0.9148   | 0.935573 |
+  | [Ghostnet emb512](https://drive.google.com/file/d/1--ZRa8v3j5KKEcHzwTVMV6F8gsRr0mLB/view?usp=sharing) | [MS1MV3, E49](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-322997) | 0.997167 | 0.959429 | 0.969333 | 0.912463 | 0.934499 |
   | [se_mobilefacenet](https://drive.google.com/file/d/1AjoIxOkiKIzAGml5Jdpq05Y4vM4Ke-Kj/view?usp=sharing) | Emore, E100 | 0.996333 | 0.964714 | 0.958833 | | |
   | [ResNet101V2](https://drive.google.com/file/d/1-5YHQmT1iNI5-jKogJ1-sh94CS7ptHgb/view?usp=sharing)      | Emore, E40 | 0.997833 | 0.946 | 0.972833 | | |
   | [ResNeSt101](https://drive.google.com/file/d/1RVjTRhE8Evqyjl83EVBMOjInxtDtxGyH/view?usp=sharing)       | Emore, E100 | 0.997667 | 0.981000 | 0.973333 | | |
@@ -255,9 +256,9 @@
     - `(0, 1)` for specific value, actual added value will also divided by `2`.
     - `>= 1` will be value multiplied by `L2 regularizer` value in `basic_model` if added.
   - **Scheduler** is a list of dicts, each contains a training plan
-    - **loss** indicates the loss function. **Required**.
-    - **optimizer** is the optimizer used in this plan, `None` indicates using the last one.
     - **epoch** indicates how many epochs will be trained. **Required**.
+    - **loss** indicates the loss function. If not provided, will try to use the previous one if `model.built` is `True`.
+    - **optimizer** is the optimizer used in this plan, `None` indicates using the last one.
     - **bottleneckOnly** True / False, `True` will set `basic_model.trainable = False`, train the output layer only.
     - **centerloss** float value, if set a non zero value, attach a `CenterLoss` to `logits_loss`, and the value means `loss_weight`.
     - **triplet** float value, if set a non zero value, attach a `BatchHardTripletLoss` to `logits_loss`, and the value means `loss_weight`.
@@ -300,7 +301,7 @@
     sch = [
       # {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.01, "optimizer": optimizer, "epoch": 20},
       # {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.1, "epoch": 20},
-      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 1, "epoch": 5},
+      {"centerloss": 1, "epoch": 5},
       {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.3},
       {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.25},
       {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.2},
@@ -361,19 +362,19 @@
     dd = ConstantDecayScheduler(0.001, lr_decay_steps=[10, 20, 30, 40], decay_rate=0.1)
     plt.plot(epochs, [dd.on_epoch_begin(ii) for ii in epochs], label="Constant, lr=0.001, decay_steps=[10, 20, 30, 40], decay_rate=0.1")
 
-    aa = CosineLrScheduler(0.001, first_restart_step=100, lr_min=1e-6, warmup_iters=0, m_mul=1e-3)
+    aa = CosineLrScheduler(0.001, first_restart_step=100, lr_min=1e-6, warmup=0, m_mul=1e-3)
     plt.plot(epochs, [aa.on_epoch_begin(ii) for ii in epochs], label="Cosine, first_restart_step=100, min=1e-6, m_mul=1e-3")
     aa_120 = aa.on_epoch_begin(120).numpy()
     plt.text(120, aa_120, "[Cosine]\n({}, {:.2e})".format(120, aa_120), va="bottom", ha="right")
 
-    bb = CosineLrScheduler(0.001, first_restart_step=24, lr_min=1e-7, warmup_iters=1, m_mul=0.4)
+    bb = CosineLrScheduler(0.001, first_restart_step=24, lr_min=1e-7, warmup=1, m_mul=0.4)
     plt.plot(epochs, [bb.on_epoch_begin(ii) for ii in epochs], label="Cosine restart, first_restart_step=24, min=1e-7, warmup=1, m_mul=0.4")
-    bb_25 = bb.on_epoch_begin(25).numpy()
+    bb_25 = np.float(bb.on_epoch_begin(25))
     plt.text(25, bb_25, (25, bb_25))
 
-    cc = CosineLrScheduler(0.001, first_restart_step=21000, lr_min=1e-7, warmup_iters=4000, m_mul=0.5)
-    plt.plot([cc.on_train_batch_begin(ii * 1000) for ii in range(120)], label="Cosine restart, on batch, first_restart_step=21000, min=1e-7, warmup=4000, m_mul=0.5")
-    cc_25 = cc.on_train_batch_begin(25 * 1000).numpy()
+    cc = CosineLrScheduler(0.001, first_restart_step=21 * 100, lr_min=1e-7, warmup=4, m_mul=0.5)
+    plt.plot([cc.on_train_batch_begin(ii * 100) for ii in range(120)], label="Cosine restart, on batch, first_restart_step=2100, min=1e-7, warmup=4, m_mul=0.5")
+    cc_25 = np.float(cc.on_train_batch_begin(25 * 100))
     plt.plot((25, 25), (1e-6, cc_25), 'k:')
     plt.text(25, cc_25, (25, cc_25))
 
