@@ -7,17 +7,18 @@ def print_buildin_models():
     print(
         """
     >>>> buildin_models
-    MXNet version resnet: r34, r50, r100, r101,
+    MXNet version resnet: mobilenet_m1, r34, r50, r100, r101,
     Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
     EfficientNet: efficientnetb[0-7], efficientnetl2,
-    Custom: ghostnet, mobilefacenet, mobilenetv3_small, mobilenetv3_large, resnest50, resnest101, se_mobilefacenet, se_resnext
+    Custom 1: ghostnet, mobilefacenet, mobilenetv3_small, mobilenetv3_large, se_mobilefacenet
+    Custom 2: botnet50, botnet101, botnet152, resnest50, resnest101, se_resnext
     Or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
     """,
         end="",
     )
 
 
-# MXNET: bn_momentum=0.9, bn_epsilon=2e-5, TF default: bn_momentum=0.99, bn_epsilon=0.001
+# MXNET: bn_momentum=0.9, bn_epsilon=2e-5, TF default: bn_momentum=0.99, bn_epsilon=0.001, PyTorch default: momentum=0.1, eps=1e-05
 def buildin_models(
     name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), output_layer="GDC", bn_momentum=0.99, bn_epsilon=0.001, add_pointwise_conv=False, **kwargs
 ):
@@ -25,6 +26,10 @@ def buildin_models(
     """ Basic model """
     if name_lower == "mobilenet":
         xx = keras.applications.MobileNet(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
+    elif name_lower == "mobilenet_m1":
+        from backbones import mobilenet
+
+        xx = mobilenet.MobileNet(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name_lower == "mobilenetv2":
         xx = keras.applications.MobileNetV2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
     elif name_lower == "r34" or name_lower == "r50" or name_lower == "r100" or name_lower == "r101":
@@ -64,6 +69,7 @@ def buildin_models(
             xx = resnest.ResNest101(input_shape=input_shape)
     elif name_lower.startswith("mobilenetv3"):
         from backbones import mobilenet_v3
+        # from backbones import mobilenetv3 as mobilenet_v3
         model_class = mobilenet_v3.MobileNetV3Small if "small" in name_lower else mobilenet_v3.MobileNetV3Large
         # from tensorflow.keras.layers.experimental.preprocessing import Rescaling
         # model_class = keras.applications.MobileNetV3Small if "small" in name_lower else keras.applications.MobileNetV3Large
@@ -78,12 +84,24 @@ def buildin_models(
         from backbones import ghost_model
 
         xx = ghost_model.GhostNet(input_shape=input_shape, include_top=False, width=1.3)
+    elif name_lower.startswith("botnet"):
+        from backbones import botnet
+
+        model_name = "BotNet" + name_lower[len("botnet"):]
+        model_class = getattr(botnet, model_name)
+        xx = model_class(input_shape=input_shape, strides=1, **kwargs)
     elif hasattr(keras.applications, name):
         model_class = getattr(keras.applications, name)
         xx = model_class(weights="imagenet", include_top=False, input_shape=input_shape)
     else:
         return None
     xx.trainable = True
+
+    if bn_momentum != 0.99 or bn_epsilon != 0.001:
+        print(">>>> Change BatchNormalization momentum and epsilon default value.")
+        for ii in xx.layers:
+            if isinstance(ii, keras.layers.BatchNormalization):
+                ii.momentum, ii.epsilon = bn_momentum, bn_epsilon
 
     inputs = xx.inputs[0]
     nn = xx.outputs[0]
@@ -103,6 +121,7 @@ def buildin_models(
     else:
         """ GDC """
         nn = keras.layers.DepthwiseConv2D(int(nn.shape[1]), depth_multiplier=1, use_bias=False)(nn)
+        # nn = keras.layers.Conv2D(512, int(nn.shape[1]), use_bias=False, padding="valid", groups=512)(nn)
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)

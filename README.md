@@ -233,10 +233,11 @@
   - **models.print_buildin_models** is used to print build-in model names in `models.py`.
     ```py
     >>>> buildin_models
-    MXNet version resnet: r34, r50, r100, r101,
+    MXNet version resnet: mobilenet_m1, r34, r50, r100, r101,
     Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
     EfficientNet: efficientnetb[0-7], efficientnetl2,
-    Custom: se_resnext, resnest50, resnest101, ghostnet, mobilefacenet, se_mobilefacenet, mobilenetv3_small, mobilenetv3_large
+    Custom 1: ghostnet, mobilefacenet, mobilenetv3_small, mobilenetv3_large, se_mobilefacenet
+    Custom 2: botnet50, botnet101, botnet152, resnest50, resnest101, se_resnext
     Or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
     ```
   - **models.add_l2_regularizer_2_model** will add `l2_regularizer` to model layers. The actual added `l2` value is divided by `2`.
@@ -330,6 +331,7 @@
     ```
 ## Learning rate
   - `train.Train` parameters `lr_base` / `lr_decay` / `lr_decay_steps` set different decay strategies and their parameters.
+  - `tt.lr_scheduler` can also be used to set learning rate scheduler directly.
   - **lr_decay_steps** controls different decay types. Default is `Exponential decay` with `lr_base=0.001, lr_decay=0.05`.
 
     | lr_decay_steps | decay type             | mean of lr_decay_steps | mean of lr_decay |

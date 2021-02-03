@@ -104,7 +104,6 @@ class Train:
         self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop = myCallbacks.basic_callbacks(
             checkpoint=save_path, evals=my_evals, lr=lr_base, lr_decay=lr_decay, lr_min=lr_min, lr_decay_steps=lr_decay_steps
         )
-        self.is_lr_on_batch = isinstance(self.lr_scheduler, myCallbacks.CosineLrScheduler) and self.lr_scheduler.is_on_batch
         self.my_evals, self.custom_callbacks = my_evals, []
         self.metrics = ["accuracy"]
         self.default_optimizer = "adam"
@@ -332,7 +331,7 @@ class Train:
                 loss = self.model.loss[0]
             else:
                 return
-            
+
         if type is None:
             type = self.default_type or self.__init_type_by_loss__(loss)
         print(">>>> Train %s..." % type)
@@ -342,6 +341,7 @@ class Train:
             self.model.stop_training = True
             return
 
+        self.is_lr_on_batch = isinstance(self.lr_scheduler, myCallbacks.CosineLrScheduler) and self.lr_scheduler.is_on_batch
         if self.is_lr_on_batch:
             self.lr_scheduler.steps_per_epoch = self.steps_per_epoch
 
