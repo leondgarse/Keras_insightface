@@ -89,7 +89,7 @@ def buildin_models(
 
         model_name = "BotNet" + name_lower[len("botnet"):]
         model_class = getattr(botnet, model_name)
-        xx = model_class(input_shape=input_shape, strides=1, **kwargs)
+        xx = model_class(include_top=False, input_shape=input_shape, strides=1, **kwargs)
     elif hasattr(keras.applications, name):
         model_class = getattr(keras.applications, name)
         xx = model_class(weights="imagenet", include_top=False, input_shape=input_shape)

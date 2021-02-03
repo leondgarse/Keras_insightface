@@ -195,32 +195,36 @@ def bot_stack(
     return featuremap
 
 
-def convert_keras_resnet_2_botnet(resnet_model, num_layers=3, strides=2, activation="relu", **kwargs):
+def convert_keras_resnet_2_botnet(model, include_top=True, classes=1000, num_layers=3, strides=2, activation="relu", **kwargs):
     """ Count the fourth `add layer` from the bottom, then use the next `activation` layer as input to `bot_stack` """
     add_layer_count = 0
-    for idx, layer in enumerate(resnet_model.layers[::-1]):
+    for idx, layer in enumerate(model.layers[::-1]):
         if isinstance(layer, keras.layers.Add):
             add_layer_count += 1
             # print("idx:", -idx - 1, ", layer:", layer.name)
         if add_layer_count == num_layers + 1:
             break
 
-    inputs = resnet_model.inputs[0]
-    nn = resnet_model.layers[-idx - 1 + 1].output  # Pick the next `activation` layer as `input` to `bot_stack`
+    inputs = model.inputs[0]
+    nn = model.layers[-idx - 1 + 1].output  # Pick the next `activation` layer as `input` to `bot_stack`
     nn = bot_stack(nn, strides=strides, activation=activation, **kwargs)
+
+    if include_top:
+        nn = layers.GlobalAveragePooling2D(name="avg_pool")(nn)
+        nn = layers.Dense(classes, activation="softmax", name="predictions")(nn)
     return keras.models.Model(inputs, nn)
 
 
-def BotNet50(input_tensor=None, input_shape=None, strides=2, activation="relu", **kwargs):
+def BotNet50(include_top=True, input_tensor=None, input_shape=None, classes=1000, strides=2, activation="relu", **kwargs):
     mm = keras.applications.ResNet50(include_top=False, input_tensor=input_tensor, input_shape=input_shape, **kwargs)
-    return convert_keras_resnet_2_botnet(mm, strides=strides, activation=activation)
+    return convert_keras_resnet_2_botnet(mm, include_top=include_top, classes=classes, strides=strides, activation=activation)
 
 
-def BotNet101(input_tensor=None, input_shape=None, strides=2, activation="relu", **kwargs):
+def BotNet101(include_top=True, input_tensor=None, input_shape=None, classes=1000, strides=2, activation="relu", **kwargs):
     mm = keras.applications.ResNet101(include_top=False, input_tensor=input_tensor, input_shape=input_shape, **kwargs)
-    return convert_keras_resnet_2_botnet(mm, strides=strides, activation=activation)
+    return convert_keras_resnet_2_botnet(mm, include_top=include_top, classes=classes, strides=strides, activation=activation)
 
 
-def BotNet152(input_tensor=None, input_shape=None, strides=2, activation="relu", **kwargs):
+def BotNet152(include_top=True, input_tensor=None, input_shape=None, classes=1000, strides=2, activation="relu", **kwargs):
     mm = keras.applications.ResNet152(include_top=False, input_tensor=input_tensor, input_shape=input_shape, **kwargs)
-    return convert_keras_resnet_2_botnet(mm, strides=strides, activation=activation)
+    return convert_keras_resnet_2_botnet(mm, include_top=include_top, classes=classes, strides=strides, activation=activation)
