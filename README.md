@@ -230,7 +230,7 @@
     tt.train(sch, 0)
     ```
     Using `tt.train_single_scheduler` can control the behavior more detail.
-  - **models.print_buildin_models** is used to print build-in model names in `models.py`.
+  - **models.print_buildin_models** is used to print build-in model names in `models.py`, which can be used in `models.buildin_models`.
     ```py
     >>>> buildin_models
     MXNet version resnet: mobilenet_m1, r34, r50, r100, r101,
@@ -240,10 +240,10 @@
     Custom 2: botnet50, botnet101, botnet152, resnest50, resnest101, se_resnext
     Or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
     ```
-  - **models.add_l2_regularizer_2_model** will add `l2_regularizer` to model layers. The actual added `l2` value is divided by `2`.
+  - **models.add_l2_regularizer_2_model** will add `l2_regularizer` to `dense` / `convolution` layers, or set `apply_to_batch_normal=True` also to `PReLU` / `BatchNormalization` layers. The actual added `l2` value is divided by `2`.
     ```py
-    # Will add keras.regularizers.L2(5e-4) to all layers
-    basic_model = models.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=True)
+    # Will add keras.regularizers.L2(5e-4) to `dense` / `convolution` layers.
+    basic_model = models.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=False)
     ```
   - **train.Train model parameters** including `basic_model` / `model`. Combine them to initialize model from different sources. Sometimes may need `custom_objects` to load model.
     | basic_model                                                     | model           | Used for                                   |
