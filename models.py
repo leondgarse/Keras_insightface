@@ -189,17 +189,17 @@ def add_l2_regularizer_2_model(model, weight_decay, custom_objects={}, apply_to_
     return keras.models.clone_model(model)
 
 
-def replace_ReLU_with_PReLU(model, target_actavition='PReLU', **kwargs):
+def replace_ReLU_with_PReLU(model, target_activation='PReLU', **kwargs):
     from tensorflow.keras.layers import ReLU, PReLU, Activation
 
     def convert_ReLU(layer):
         # print(layer.name)
         if isinstance(layer, ReLU) or (isinstance(layer, Activation) and layer.activation == keras.activations.relu):
             print(">>>> Convert ReLU:", layer.name)
-            if target_actavition == 'PReLU':
+            if target_activation == 'PReLU':
                 return PReLU(shared_axes=[1, 2], name=layer.name, **kwargs)
             else:
-                return target_actavition(**kwargs)
+                return target_activation(**kwargs)
         return layer
 
     return keras.models.clone_model(model, clone_function=convert_ReLU)
