@@ -41,6 +41,7 @@
   | [Mobilenet emb256](https://drive.google.com/file/d/1i0B6Hy1clGgfeOYtUXVPNveDEe2DTIBa/view?usp=sharing) | [Emore, E110](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-286398) | 0.996000 | 0.951714 | 0.959333 | 0.887147 | 0.911745 |
   | [Mobilenet_distill emb512](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/30) | 0.997    | 0.964    | 0.972833 | 0.9148   | 0.935573 |
   | [Ghostnet emb512](https://drive.google.com/file/d/1--ZRa8v3j5KKEcHzwTVMV6F8gsRr0mLB/view?usp=sharing) | [MS1MV3, E49](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-322997) | 0.997167 | 0.959429 | 0.969333 | 0.912463 | 0.934499 |
+  | [Botnet50 relu](https://drive.google.com/file/d/1zbGOSYkRpj1_I8uJAZH04cWvC9rYVPT-/view?usp=sharing) | [MS1MV3, E52](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-417580) | 0.998000 | 0.978000 | 0.978167 | 0.941967 | 0.955924 |
   | [se_mobilefacenet](https://drive.google.com/file/d/1AjoIxOkiKIzAGml5Jdpq05Y4vM4Ke-Kj/view?usp=sharing) | Emore, E100 | 0.996333 | 0.964714 | 0.958833 | | |
   | [ResNet101V2](https://drive.google.com/file/d/1-5YHQmT1iNI5-jKogJ1-sh94CS7ptHgb/view?usp=sharing)      | Emore, E40 | 0.997833 | 0.946 | 0.972833 | | |
   | [ResNeSt101](https://drive.google.com/file/d/1RVjTRhE8Evqyjl83EVBMOjInxtDtxGyH/view?usp=sharing)       | Emore, E100 | 0.997667 | 0.981000 | 0.973333 | | |
@@ -332,55 +333,63 @@
 ## Learning rate
   - `train.Train` parameters `lr_base` / `lr_decay` / `lr_decay_steps` set different decay strategies and their parameters.
   - `tt.lr_scheduler` can also be used to set learning rate scheduler directly.
-  - **lr_decay_steps** controls different decay types. Default is `Exponential decay` with `lr_base=0.001, lr_decay=0.05`.
+  - **lr_decay_steps** controls different decay types.
+    - Default is `Exponential decay` with `lr_base=0.001, lr_decay=0.05`.
+    - For `ConstantDecayScheduler`, `steps_per_epoch` is set after dataset been inited.
+    - For `ConstantDecayScheduler`, default value of `keep_as_min=1`, means will train `1 epoch` using `lr_min` before each restart.
 
-    | lr_decay_steps | decay type             | mean of lr_decay_steps | mean of lr_decay |
-    | -------------- | ---------------------- | ---------------------- | ---------------- |
-    | <= 1           | Exponential decay      |                        | decay_rate       |
-    | > 1, < 500     | Cosine decay, on epoch | first_restart_step     | m_mul            |
-    | >= 500         | Cosine decay, on batch | first_restart_step     | m_mul            |
-    | list           | Constant decay         | lr_decay_steps         | decay_rate       |
+    | lr_decay_steps | decay type                                       | mean of lr_decay_steps    | mean of lr_decay |
+    | -------------- | ------------------------------------------------ | ------------------------- | ---------------- |
+    | <= 1           | Exponential decay                                |                           | decay_rate       |
+    | > 1, < 500     | Cosine decay, will multiply with steps_per_epoch | first_restart_step, epoch | m_mul            |
+    | >= 500         | Cosine decay, specific batch number              | first_restart_step, batch | m_mul            |
+    | list           | Constant decay                                   | lr_decay_steps            | decay_rate       |
 
     ```py
-    # Exponential, lr_decay_steps == 0
+    # lr_decay_steps == 0, Exponential
     tt = train.Train(..., lr_base=0.001, lr_decay=0.05, ...)
-    # Cosine decay on epoch, no restart, lr_min == lr_base * lr_decay
-    tt = train.Train(..., lr_base=0.001, lr_decay=1e-4, lr_decay_steps=24, lr_min=1e-7, ...)
-    # Cosine decay on epoch, restart on epoch [25, 73, 169], 1 < lr_decay_steps < 500
+    # 1 < lr_decay_steps < 500, Cosine decay, first_restart_step = lr_decay_steps * steps_per_epoch
+    # restart on epoch [25, 50, 75]
     tt = train.Train(..., lr_base=0.001, lr_decay=0.5, lr_decay_steps=24, lr_min=1e-7, ...)
-    # Cosine decay on batch, restart on batch [25000, 73000, 169000], 500 <= lr_decay_steps
+    # 1 < lr_decay_steps < 500, lr_min == lr_base * lr_decay, Cosine decay, no restart
+    tt = train.Train(..., lr_base=0.001, lr_decay=1e-4, lr_decay_steps=24, lr_min=1e-7, ...)
+    # 500 <= lr_decay_steps, Cosine decay, first_restart_step = lr_decay_steps
+    # restart on batch [24000 + steps_per_epoch, 48000 + 2 * steps_per_epoch, 72000 + 3 * steps_per_epoch]
     tt = train.Train(..., lr_base=0.001, lr_decay=0.5, lr_decay_steps=24 * 1000, lr_min=1e-7, ...)
-    # Constant, lr_decay_steps is a list
+    # lr_decay_steps is a list, Constant
     tt = train.Train(..., lr_base=0.1, lr_decay=0.1, lr_decay_steps=[3, 5, 7, 16, 20, 24], ...)
     ```
   - **Example learning rates**
     ```py
     from myCallbacks import exp_scheduler, CosineLrScheduler, ConstantDecayScheduler
-    epochs = np.arange(120)
+    epochs = np.arange(60)
     plt.figure(figsize=(14, 6))
     plt.plot(epochs, [exp_scheduler(ii, 0.001, 0.1) for ii in epochs], label="lr=0.001, decay=0.1")
     plt.plot(epochs, [exp_scheduler(ii, 0.001, 0.05) for ii in epochs], label="lr=0.001, decay=0.05")
-    plt.plot(epochs, [exp_scheduler(ii, 0.001, 0.02) for ii in epochs], label="lr=0.001, decay=0.02")
     dd = ConstantDecayScheduler(0.001, lr_decay_steps=[10, 20, 30, 40], decay_rate=0.1)
     plt.plot(epochs, [dd.on_epoch_begin(ii) for ii in epochs], label="Constant, lr=0.001, decay_steps=[10, 20, 30, 40], decay_rate=0.1")
 
-    aa = CosineLrScheduler(0.001, first_restart_step=100, lr_min=1e-6, warmup=0, m_mul=1e-3)
-    plt.plot(epochs, [aa.on_epoch_begin(ii) for ii in epochs], label="Cosine, first_restart_step=100, min=1e-6, m_mul=1e-3")
-    aa_120 = aa.on_epoch_begin(120).numpy()
-    plt.text(120, aa_120, "[Cosine]\n({}, {:.2e})".format(120, aa_120), va="bottom", ha="right")
+    steps_per_epoch = 100
+    batchs = np.arange(60 * steps_per_epoch)
+    aa = CosineLrScheduler(0.001, first_restart_step=50, lr_min=1e-6, warmup=0, m_mul=1e-3, steps_per_epoch=steps_per_epoch)
+    aa.build()
+    plt.plot(batchs / steps_per_epoch, [aa.on_train_batch_begin(ii) for ii in batchs], label="Cosine, first_restart_step=100, min=1e-6, m_mul=1e-3")
+    aa_60 = np.float(aa.on_train_batch_begin(60 * steps_per_epoch))
+    plt.text(60, aa_60, "[Cosine]\n({}, {:.2e})".format(60, aa_60), va="bottom", ha="right")
 
-    bb = CosineLrScheduler(0.001, first_restart_step=24, lr_min=1e-7, warmup=1, m_mul=0.4)
-    plt.plot(epochs, [bb.on_epoch_begin(ii) for ii in epochs], label="Cosine restart, first_restart_step=24, min=1e-7, warmup=1, m_mul=0.4")
-    bb_25 = np.float(bb.on_epoch_begin(25))
-    plt.text(25, bb_25, (25, bb_25))
+    bb = CosineLrScheduler(0.001, first_restart_step=24, lr_min=1e-7, warmup=1, m_mul=0.4, steps_per_epoch=steps_per_epoch)
+    bb.build()
+    plt.plot(batchs / steps_per_epoch, [bb.on_train_batch_begin(ii) for ii in batchs], label="Cosine restart, first_restart_step=24, min=1e-7, warmup=1, m_mul=0.4")
+    plt.scatter(26, 0.0004, c='r')
+    plt.text(26, 0.0004, (26, 0.0004))
 
-    cc = CosineLrScheduler(0.001, first_restart_step=21 * 100, lr_min=1e-7, warmup=4, m_mul=0.5)
-    plt.plot([cc.on_train_batch_begin(ii * 100) for ii in range(120)], label="Cosine restart, on batch, first_restart_step=2100, min=1e-7, warmup=4, m_mul=0.5")
-    cc_25 = np.float(cc.on_train_batch_begin(25 * 100))
-    plt.plot((25, 25), (1e-6, cc_25), 'k:')
-    plt.text(25, cc_25, (25, cc_25))
+    cc = CosineLrScheduler(0.001, first_restart_step=21 * 100, lr_min=1e-7, warmup=4, m_mul=0.5, steps_per_epoch=steps_per_epoch)
+    cc.build()
+    plt.plot(batchs / steps_per_epoch, [cc.on_train_batch_begin(ii) for ii in batchs], label="Cosine restart, on batch, first_restart_step=2100, min=1e-7, warmup=4, m_mul=0.5")
+    plt.scatter(26, 0.0005, c='r')
+    plt.text(26, 0.0005, (26, 0.0005))
 
-    plt.xlim(0, 120)
+    plt.xlim(0, 60)
     plt.legend()
     plt.grid()
     plt.tight_layout()

@@ -64,11 +64,12 @@ class Torch_model_interf:
 
 def keras_model_interf(model_file):
     import tensorflow as tf
+    from backbones import botnet
 
     for gpu in tf.config.experimental.list_physical_devices("GPU"):
         tf.config.experimental.set_memory_growth(gpu, True)
 
-    mm = tf.keras.models.load_model(model_file, compile=False)
+    mm = tf.keras.models.load_model(model_file, compile=False, custom_objects={"MHSAWithRelativePosition": botnet.MHSAWithRelativePosition})
     return lambda imgs: mm((tf.cast(imgs, "float32") - 127.5) * 0.0078125).numpy()
 
 

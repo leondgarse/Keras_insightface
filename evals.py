@@ -125,7 +125,7 @@ class eval_callback(tf.keras.callbacks.Callback):
                 % (self.test_names, acc_max, self.acc_thresh, self.max_accuracy)
             )
 
-        if acc_max > self.max_accuracy:
+        if acc_max >= self.max_accuracy:
             tf.print(">>>> Improved = %f" % (acc_max - self.max_accuracy))
             self.max_accuracy = acc_max
             if self.save_model:

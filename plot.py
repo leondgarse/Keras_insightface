@@ -59,13 +59,15 @@ def set_scale(scale):
         Default_figure_base_size *= scale
 
 
-def peak_scatter(ax, array, peak_method, color="r", init_epoch=0, limit_max=1e9):
+def peak_scatter(ax, array, peak_method, color="r", init_epoch=0, limit_max=1e9, limit_min=0):
     start = init_epoch + 1
     for ii in array:
         pp = len(ii) - peak_method(ii[::-1]) - 1
         # Skip scatter if it's 0
         if ii[pp] != 0:
-            y_pos = ii[pp] if ii[pp] < limit_max else limit_max
+            y_pos = ii[pp]
+            y_pos = y_pos if y_pos < limit_max else limit_max
+            y_pos = y_pos if y_pos > limit_min else limit_min
             ax.scatter(pp + start, y_pos, color=color, marker="v")
             ax.text(
                 pp + start,
@@ -79,7 +81,7 @@ def peak_scatter(ax, array, peak_method, color="r", init_epoch=0, limit_max=1e9)
         start += len(ii)
 
 
-def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0, linestyle="-", limit_max=1e9):
+def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0, linestyle="-", limit_max=1e9, limit_min=0):
     tt = []
     for ii in arrays:
         tt += ii
@@ -97,6 +99,8 @@ def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0, l
             tt[id] = tt[id - 1]
         if ii > limit_max:
             tt[id] = limit_max
+        if ii < limit_min:
+            tt[id] = limit_min
     ax.plot(xx, tt, label=label, color=color, linestyle=linestyle)
     xticks = list(range(xx[-1]))[:: xx[-1] // 16 + 1]
     # print(xticks, ax.get_xticks())
@@ -146,6 +150,8 @@ def hist_plot(
             limit_max=limit_loss_max,
         )
         peak_scatter(axes[0], loss_lists, np.argmin, init_epoch=init_epoch, limit_max=limit_loss_max)
+        # if axes[0].get_ylim()[0] < 0:
+        #     axes[0].set_ylim(0)
     axes[0].set_title("loss")
     if fig_label:
         axes[0].legend(loc="upper right", fontsize=Default_legend_font_size)

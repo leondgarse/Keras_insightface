@@ -19,8 +19,19 @@ def print_buildin_models():
 
 
 # MXNET: bn_momentum=0.9, bn_epsilon=2e-5, TF default: bn_momentum=0.99, bn_epsilon=0.001, PyTorch default: momentum=0.1, eps=1e-05
+# MXNET: use_bias=True, scale=False, cavaface.pytorch: use_bias=False, scale=True
 def buildin_models(
-    name, dropout=1, emb_shape=512, input_shape=(112, 112, 3), output_layer="GDC", bn_momentum=0.99, bn_epsilon=0.001, add_pointwise_conv=False, **kwargs
+    name,
+    dropout=1,
+    emb_shape=512,
+    input_shape=(112, 112, 3),
+    output_layer="GDC",
+    bn_momentum=0.99,
+    bn_epsilon=0.001,
+    add_pointwise_conv=False,
+    use_bias=False,
+    scale=True,
+    **kwargs
 ):
     name_lower = name.lower()
     """ Basic model """
@@ -69,6 +80,7 @@ def buildin_models(
             xx = resnest.ResNest101(input_shape=input_shape)
     elif name_lower.startswith("mobilenetv3"):
         from backbones import mobilenet_v3
+
         # from backbones import mobilenetv3 as mobilenet_v3
         model_class = mobilenet_v3.MobileNetV3Small if "small" in name_lower else mobilenet_v3.MobileNetV3Large
         # from tensorflow.keras.layers.experimental.preprocessing import Rescaling
@@ -87,7 +99,7 @@ def buildin_models(
     elif name_lower.startswith("botnet"):
         from backbones import botnet
 
-        model_name = "BotNet" + name_lower[len("botnet"):]
+        model_name = "BotNet" + name_lower[len("botnet") :]
         model_class = getattr(botnet, model_name)
         xx = model_class(include_top=False, input_shape=input_shape, strides=1, **kwargs)
     elif hasattr(keras.applications, name):
@@ -117,7 +129,7 @@ def buildin_models(
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
         nn = keras.layers.Flatten()(nn)
-        nn = keras.layers.Dense(emb_shape, activation=None, use_bias=True, kernel_initializer="glorot_normal")(nn)
+        nn = keras.layers.Dense(emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal")(nn)
     else:
         """ GDC """
         nn = keras.layers.DepthwiseConv2D(int(nn.shape[1]), depth_multiplier=1, use_bias=False)(nn)
@@ -125,12 +137,12 @@ def buildin_models(
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
-        nn = keras.layers.Conv2D(emb_shape, 1, use_bias=True, activation=None, kernel_initializer="glorot_normal")(nn)
+        nn = keras.layers.Conv2D(emb_shape, 1, use_bias=use_bias, activation=None, kernel_initializer="glorot_normal")(nn)
         nn = keras.layers.Flatten()(nn)
         # nn = keras.layers.Dense(emb_shape, activation=None, use_bias=True, kernel_initializer="glorot_normal")(nn)
 
     # `fix_gamma=True` in MXNet means `scale=False` in Keras
-    embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="embedding", scale=False)(nn)
+    embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="embedding", scale=scale)(nn)
     basic_model = keras.models.Model(inputs, embedding, name=xx.name)
     return basic_model
 
@@ -189,14 +201,14 @@ def add_l2_regularizer_2_model(model, weight_decay, custom_objects={}, apply_to_
     return keras.models.clone_model(model)
 
 
-def replace_ReLU_with_PReLU(model, target_activation='PReLU', **kwargs):
+def replace_ReLU_with_PReLU(model, target_activation="PReLU", **kwargs):
     from tensorflow.keras.layers import ReLU, PReLU, Activation
 
     def convert_ReLU(layer):
         # print(layer.name)
         if isinstance(layer, ReLU) or (isinstance(layer, Activation) and layer.activation == keras.activations.relu):
             print(">>>> Convert ReLU:", layer.name)
-            if target_activation == 'PReLU':
+            if target_activation == "PReLU":
                 return PReLU(shared_axes=[1, 2], name=layer.name, **kwargs)
             else:
                 return target_activation(**kwargs)
@@ -238,7 +250,11 @@ class NormDense(keras.layers.Layer):
     def get_config(self):
         config = super(NormDense, self).get_config()
         config.update(
-            {"units": self.units, "loss_top_k": self.loss_top_k, "kernel_regularizer": keras.regularizers.serialize(self.kernel_regularizer),}
+            {
+                "units": self.units,
+                "loss_top_k": self.loss_top_k,
+                "kernel_regularizer": keras.regularizers.serialize(self.kernel_regularizer),
+            }
         )
         return config
 

@@ -341,7 +341,7 @@ class Train:
             self.model.stop_training = True
             return
 
-        self.is_lr_on_batch = isinstance(self.lr_scheduler, myCallbacks.CosineLrScheduler) and self.lr_scheduler.is_on_batch
+        self.is_lr_on_batch = isinstance(self.lr_scheduler, myCallbacks.CosineLrScheduler)
         if self.is_lr_on_batch:
             self.lr_scheduler.steps_per_epoch = self.steps_per_epoch
 
