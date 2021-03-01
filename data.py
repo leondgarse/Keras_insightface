@@ -48,23 +48,36 @@ def tf_imread(file_path):
     return img
 
 
-def random_process_image(img, img_shape=(112, 112), random_status=2, random_crop=None):
-    if random_status >= 0:
-        img = tf.image.random_flip_left_right(img)
-    if random_status >= 1:
-        # 25.5 == 255 * 0.1
-        img = tf.image.random_brightness(img, 25.5 * random_status)
-    if random_status >= 2:
-        img = tf.image.random_contrast(img, 1 - 0.1 * random_status, 1 + 0.1 * random_status)
-        img = tf.image.random_saturation(img, 1 - 0.1 * random_status, 1 + 0.1 * random_status)
-    if random_status >= 3 and random_crop is not None:
-        img = tf.image.random_crop(img, random_crop)
-        img = tf.image.resize(img, img_shape)
+class RandomProcessImage:
+    def __init__(self, img_shape=(112, 112), random_status=2, random_crop=None):
+        self.img_shape, self.random_status, self.random_crop = img_shape, random_status, random_crop
+        if random_status >= 100:
+            import augment
+            random_enlarge = random_status / 100
+            magnitude, cutout_const = 5 * random_enlarge, int(40 // random_enlarge)
+            print(">>>> RandAugment: magnitude = %f, cutout_const = %d" % (magnitude, cutout_const))
+            aa = augment.RandAugment(magnitude=magnitude, cutout_const=cutout_const)
+            aa.available_ops = ['AutoContrast', 'Equalize', 'Posterize', 'Color', 'Contrast', 'Brightness', 'Sharpness', 'ShearX', 'ShearY', 'Cutout']
+            self.process = lambda img: aa.distort(tf.image.random_flip_left_right(img))
+        else:
+            self.process = lambda img: self.tf_buildin_image_random(img)
 
-    if random_status >= 1:
-        img = tf.clip_by_value(img, 0.0, 255.0)
-    return img
+    def tf_buildin_image_random(self, img):
+        if self.random_status >= 0:
+            img = tf.image.random_flip_left_right(img)
+        if self.random_status >= 1:
+            # 12.75 == 255 * 0.05
+            img = tf.image.random_brightness(img, 12.75 * self.random_status)
+        if self.random_status >= 2:
+            img = tf.image.random_contrast(img, 1 - 0.1 * self.random_status, 1 + 0.1 * self.random_status)
+            img = tf.image.random_saturation(img, 1 - 0.1 * self.random_status, 1 + 0.1 * self.random_status)
+        if self.random_status >= 3 and self.random_crop is not None:
+            img = tf.image.random_crop(img, self.random_crop)
+            img = tf.image.resize(img, self.img_shape)
 
+        if self.random_status >= 1:
+            img = tf.clip_by_value(img, 0.0, 255.0)
+        return img
 
 def pick_by_image_per_class(image_classes, image_per_class):
     cc = pd.value_counts(image_classes)
@@ -111,10 +124,12 @@ def prepare_dataset(
     ds = ds.map(process_func, num_parallel_calls=AUTOTUNE)
 
     if is_train and random_status >= 0:
-        random_process_func = lambda xx, yy: (random_process_image(xx, img_shape, random_status, random_crop), yy)
+        random_process_image = RandomProcessImage(img_shape, random_status, random_crop)
+        random_process_func = lambda xx, yy: (random_process_image.process(xx), yy)
         ds = ds.map(random_process_func, num_parallel_calls=AUTOTUNE)
 
     ds = ds.batch(batch_size)  # Use batch --> map has slightly effect on dataset reading time, but harm the randomness
+    # ds = ds.map(lambda xx, yy: (random_rotate(xx), yy), num_parallel_calls=AUTOTUNE)
     if teacher_model_interf is not None:
         print(">>>> Teacher model interface provided.")
         emb_func = lambda imm, label: (imm, (teacher_model_interf(imm), label))
@@ -199,7 +214,8 @@ class Triplet_dataset:
         print("The final train_dataset batch will be %s" % ([self.batch_size, *self.img_shape, self.channels]))
 
         one_hot_label = lambda label: tf.one_hot(label, depth=classes, dtype=tf.int32)
-        random_imread = lambda imm: random_process_image(tf_imread(imm), self.img_shape, random_status, random_crop)
+        random_process_image = RandomProcessImage(img_shape, random_status, random_crop)
+        random_imread = lambda imm: random_process_image.process(tf_imread(imm))
         if len(embeddings) != 0 and teacher_model_interf is None:
             self.teacher_embeddings = dict(zip(image_names, embeddings[pick]))
             emb_spec = tf.TensorSpec(shape=(embeddings.shape[-1],), dtype=tf.float32)
@@ -226,13 +242,19 @@ class Triplet_dataset:
         self.steps_per_epoch = int(np.ceil(self.total / float(batch_size)))
 
     def image_shuffle_gen(self):
-        tf.print("Shuffle image data...")
-        shuffle_dataset = self.image_dataframe.map(self.split_func)
-        image_data = np.random.permutation(np.vstack(shuffle_dataset.values)).flatten()
-        return ((ii, int(ii.split(os.path.sep)[-2])) for ii in image_data)
+        while True:
+            tf.print("Shuffle image data...")
+            shuffle_dataset = self.image_dataframe.map(self.split_func)
+            image_data = np.random.permutation(np.vstack(shuffle_dataset.values)).flatten()
+            for ii in image_data:
+                yield (ii, int(ii.split(os.path.sep)[-2]))
+            # return ((ii, int(ii.split(os.path.sep)[-2])) for ii in image_data)
 
     def image_shuffle_gen_with_emb(self):
-        tf.print("Shuffle image with embedding data...")
-        shuffle_dataset = self.image_dataframe.map(self.split_func)
-        image_data = np.random.permutation(np.vstack(shuffle_dataset.values)).flatten()
-        return ((ii, self.teacher_embeddings[ii], int(ii.split(os.path.sep)[-2])) for ii in image_data)
+        while True:
+            tf.print("Shuffle image with embedding data...")
+            shuffle_dataset = self.image_dataframe.map(self.split_func)
+            image_data = np.random.permutation(np.vstack(shuffle_dataset.values)).flatten()
+            for ii in image_data:
+                yield (ii, self.teacher_embeddings[ii], int(ii.split(os.path.sep)[-2]))
+            # return ((ii, self.teacher_embeddings[ii], int(ii.split(os.path.sep)[-2])) for ii in image_data)
