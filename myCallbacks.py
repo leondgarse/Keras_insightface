@@ -40,7 +40,7 @@ class My_history(keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
-        logs.pop('lr', None)
+        logs.pop("lr", None)
         self.history.setdefault("lr", []).append(float(self.model.optimizer.lr))
         for k, v in logs.items():
             k = "accuracy" if "accuracy" in k else k
@@ -76,7 +76,6 @@ class OptimizerWeightDecay(keras.callbacks.Callback):
         self.is_lr_on_batch = is_lr_on_batch
         if is_lr_on_batch:
             self.on_train_batch_begin = self.__update_wd__
-            self.on_epoch_begin = self.__print_wd__
         else:
             self.on_epoch_begin = self.__update_wd__
 
@@ -86,11 +85,8 @@ class OptimizerWeightDecay(keras.callbacks.Callback):
             # wd = self.wd_base * K.get_value(self.model.optimizer.lr)
             K.set_value(self.model.optimizer.weight_decay, wd)
         # wd = self.model.optimizer.weight_decay
-        if not self.is_lr_on_batch:
-            self.__print_wd__(step)
-
-    def __print_wd__(self, iterNum, logs=None):
-        print("Weight decay for iter {} is {}".format(iterNum + 1, K.get_value(self.model.optimizer.weight_decay)))
+        if not self.is_lr_on_batch or step == 0:
+            print("Weight decay is {}".format(wd))
 
 
 class ConstantDecayScheduler(keras.callbacks.Callback):
@@ -113,58 +109,88 @@ class ConstantDecayScheduler(keras.callbacks.Callback):
 
 
 class CosineLrScheduler(keras.callbacks.Callback):
-    def __init__(self, lr_base, first_restart_step, m_mul=0.5, t_mul=2.0, lr_min=0.0, warmup=0, on_batch_step=100, steps_per_epoch=-1):
+    def __init__(
+        self,
+        lr_base,
+        first_restart_step,
+        m_mul=0.5,
+        t_mul=1.0,
+        lr_min=1e-5,
+        warmup=0,
+        decay_step=100,
+        steps_per_epoch=-1,
+        keep_as_min=1,
+    ):
         super(CosineLrScheduler, self).__init__()
-        if first_restart_step < 500:
-            self.on_epoch_begin = self.__lr_sheduler__
-            self.decay_step = 1
-            self.init_step_num = 0
-            self.warmup = warmup
-            self.first_restart_step = first_restart_step
-            self.is_on_batch = False
-        else:
-            self.steps_per_epoch = steps_per_epoch   # Set after dataset inited
-            self.on_epoch_begin = self.__on_epoch_begin_for_lr_on_batch__
-            self.on_train_batch_begin = self.__lr_sheduler__
-            self.decay_step = on_batch_step
-            self.init_step_num = 0
-            self.warmup = warmup
-            self.first_restart_step = first_restart_step // self.decay_step
-            self.is_on_batch = True
+        self.lr_base, self.m_mul, self.t_mul, self.lr_min = lr_base, m_mul, t_mul, lr_min
+        self.first_restart_step = first_restart_step
+        self.warmup, self.decay_step, self.keep_as_min = warmup, decay_step, keep_as_min
+        self.steps_per_epoch = steps_per_epoch  # Set after dataset inited
+        self.init_step_num = 0
+        self.cur_epoch = 0
+        self.is_built = False
 
-        if lr_min == lr_base * m_mul:
-            self.schedule = keras.experimental.CosineDecay(lr_base, self.first_restart_step, alpha=lr_min / lr_base)
+    def build(self):
+        if self.first_restart_step < 500:
+            # first_restart_step is epoch number, will nultiply with steps_per_epoch
+            self.first_restart_step *= self.steps_per_epoch
+
+        if self.warmup < 500:
+            self.warmup *= self.steps_per_epoch
+
+        if self.keep_as_min < 500:
+            self.keep_as_min *= self.steps_per_epoch
+
+        self.start_keep_as_min, self.stop_keep_as_min = [], []
+        self.keep_as_min_batchs_already, self.is_keeping_as_min = 0, False
+        alpha = self.lr_min / self.lr_base
+        first_restart_step = self.first_restart_step // self.decay_step
+        if self.lr_min == self.lr_base * self.m_mul:
+            self.schedule = keras.experimental.CosineDecay(self.lr_base, first_restart_step, alpha=alpha)
         else:
             # with `first_restart_step, t_mul, warmup = 10, 2, 1` restart epochs will be:
             # ee = lambda ss: warmup + first_restart_step * np.sum([t_mul ** jj for jj in range(ss)])
             # [ee(ii) for ii in range(1, 5)] == [11, 31, 71, 151]
             self.schedule = keras.experimental.CosineDecayRestarts(
-                lr_base, self.first_restart_step, t_mul=t_mul, m_mul=m_mul, alpha=lr_min / lr_base
+                self.lr_base, first_restart_step, t_mul=self.t_mul, m_mul=self.m_mul, alpha=alpha
             )
+            if self.keep_as_min != 0 and self.lr_min != 0:
+                restart_mul = [np.sum([self.t_mul ** jj for jj in range(ii)]) for ii in range(1, 5)]
+                restart_batch_nums = [self.warmup + self.first_restart_step * ii for ii in restart_mul]
+                self.start_keep_as_min = [int(ii + self.keep_as_min * id) for id, ii in enumerate(restart_batch_nums)]
+                self.stop_keep_as_min = [int(ii + self.keep_as_min) for ii in self.start_keep_as_min]
 
-        if warmup != 0:
-            # self.warmup_lr_func = lambda ii: lr_min + (lr_base - lr_min) * ii / warmup
-            self.warmup_lr_func = lambda ii: lr_base
+        if self.warmup != 0:
+            # self.warmup_lr_func = lambda ii: self.lr_base
+            self.warmup_lr_func = lambda ii: self.lr_min + (self.lr_base - self.lr_min) * ii / self.warmup
 
-    def __on_epoch_begin_for_lr_on_batch__(self, cur_epoch, logs=None):
-        self.__print_lr__(cur_epoch)
-        self.init_step_num = self.steps_per_epoch * cur_epoch
+    def on_epoch_begin(self, cur_epoch, logs=None):
+        if not self.is_built:
+            self.build()
+            self.is_built = True
+        self.init_step_num = int(self.steps_per_epoch * cur_epoch)
+        self.cur_epoch = cur_epoch
 
-    def __lr_sheduler__(self, iterNum, logs=None):
-        iterNum = (iterNum + self.init_step_num) // self.decay_step
-        if iterNum < self.warmup:
-            lr = self.warmup_lr_func(iterNum)
+    def on_train_batch_begin(self, iterNum, logs=None):
+        global_iterNum = iterNum + self.init_step_num
+        if not self.is_keeping_as_min and global_iterNum in self.start_keep_as_min:
+            print(">>>> Keep lr as min:", self.lr_min, ", global_iterNum:", global_iterNum)
+            self.keep_as_min_batchs_already += self.keep_as_min
+            self.is_keeping_as_min = True
+        elif self.is_keeping_as_min and global_iterNum in self.stop_keep_as_min:
+            self.is_keeping_as_min = False
+
+        if self.is_keeping_as_min:
+            lr = self.lr_min
+        elif global_iterNum < self.warmup:
+            lr = self.warmup_lr_func(global_iterNum)
         else:
-            lr = self.schedule(iterNum - self.warmup)
+            lr = self.schedule((global_iterNum - self.warmup - self.keep_as_min_batchs_already) // self.decay_step)
         if self.model is not None:
             K.set_value(self.model.optimizer.lr, lr)
-        if not self.is_on_batch:
-            self.__print_lr__(iterNum)
+        if iterNum == 0:
+            print("\nLearning rate for iter {} is {}".format(self.cur_epoch + 1, lr))
         return lr
-
-    def __print_lr__(self, iterNum, logs=None):
-        if self.model is not None:
-            print("\nLearning rate for iter {} is {}".format(iterNum + 1, K.get_value(self.model.optimizer.lr)))
 
 
 def scheduler_warmup(lr_target, cur_epoch, lr_init=0.1, epochs=10):
@@ -198,9 +224,7 @@ def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_de
         lr_scheduler = ConstantDecayScheduler(lr_base=lr, lr_decay_steps=lr_decay_steps, decay_rate=lr_decay)
     elif lr_decay_steps > 1:
         # Cosine decay on epoch / batch
-        lr_scheduler = CosineLrScheduler(
-            lr_base=lr, first_restart_step=lr_decay_steps, m_mul=lr_decay, lr_min=lr_min, warmup=1
-        )
+        lr_scheduler = CosineLrScheduler(lr_base=lr, first_restart_step=lr_decay_steps, m_mul=lr_decay, lr_min=lr_min)
     else:
         # Exponential decay
         warmup = 10
