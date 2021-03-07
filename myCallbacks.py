@@ -114,23 +114,22 @@ class CosineLrScheduler(keras.callbacks.Callback):
         lr_base,
         first_restart_step,
         m_mul=0.5,
-        t_mul=1.0,
+        t_mul=2.0,
         lr_min=1e-5,
         warmup=0,
-        decay_step=100,
         steps_per_epoch=-1,
         keep_as_min=1,
     ):
         super(CosineLrScheduler, self).__init__()
         self.lr_base, self.m_mul, self.t_mul, self.lr_min = lr_base, m_mul, t_mul, lr_min
         self.first_restart_step = first_restart_step
-        self.warmup, self.decay_step, self.keep_as_min = warmup, decay_step, keep_as_min
+        self.warmup, self.keep_as_min = warmup, keep_as_min
         self.steps_per_epoch = steps_per_epoch  # Set after dataset inited
         self.init_step_num = 0
         self.cur_epoch = 0
         self.is_built = False
 
-    def build(self):
+    def build(self, cur_epoch=0):
         if self.first_restart_step < 500:
             # first_restart_step is epoch number, will nultiply with steps_per_epoch
             self.first_restart_step *= self.steps_per_epoch
@@ -144,15 +143,14 @@ class CosineLrScheduler(keras.callbacks.Callback):
         self.start_keep_as_min, self.stop_keep_as_min = [], []
         self.keep_as_min_batchs_already, self.is_keeping_as_min = 0, False
         alpha = self.lr_min / self.lr_base
-        first_restart_step = self.first_restart_step // self.decay_step
         if self.lr_min == self.lr_base * self.m_mul:
-            self.schedule = keras.experimental.CosineDecay(self.lr_base, first_restart_step, alpha=alpha)
+            self.schedule = keras.experimental.CosineDecay(self.lr_base, self.first_restart_step, alpha=alpha)
         else:
             # with `first_restart_step, t_mul, warmup = 10, 2, 1` restart epochs will be:
             # ee = lambda ss: warmup + first_restart_step * np.sum([t_mul ** jj for jj in range(ss)])
             # [ee(ii) for ii in range(1, 5)] == [11, 31, 71, 151]
             self.schedule = keras.experimental.CosineDecayRestarts(
-                self.lr_base, first_restart_step, t_mul=self.t_mul, m_mul=self.m_mul, alpha=alpha
+                self.lr_base, self.first_restart_step, t_mul=self.t_mul, m_mul=self.m_mul, alpha=alpha
             )
             if self.keep_as_min != 0 and self.lr_min != 0:
                 restart_mul = [np.sum([self.t_mul ** jj for jj in range(ii)]) for ii in range(1, 5)]
@@ -160,13 +158,23 @@ class CosineLrScheduler(keras.callbacks.Callback):
                 self.start_keep_as_min = [int(ii + self.keep_as_min * id) for id, ii in enumerate(restart_batch_nums)]
                 self.stop_keep_as_min = [int(ii + self.keep_as_min) for ii in self.start_keep_as_min]
 
+        if cur_epoch != 0:
+            cur_batch = int(self.steps_per_epoch * cur_epoch)
+            for start, stop in zip(self.start_keep_as_min, self.stop_keep_as_min):
+                if cur_batch <= start:
+                    break
+                self.keep_as_min_batchs_already += self.keep_as_min
+                if cur_batch < stop:
+                    # print(">>>> Keeping lr as min:", self.lr_min, ", global_iterNum:", cur_batch, "start:", start, "stop:", stop)
+                    self.is_keeping_as_min = True
+
         if self.warmup != 0:
             # self.warmup_lr_func = lambda ii: self.lr_base
             self.warmup_lr_func = lambda ii: self.lr_min + (self.lr_base - self.lr_min) * ii / self.warmup
 
     def on_epoch_begin(self, cur_epoch, logs=None):
         if not self.is_built:
-            self.build()
+            self.build(cur_epoch)
             self.is_built = True
         self.init_step_num = int(self.steps_per_epoch * cur_epoch)
         self.cur_epoch = cur_epoch
@@ -174,10 +182,11 @@ class CosineLrScheduler(keras.callbacks.Callback):
     def on_train_batch_begin(self, iterNum, logs=None):
         global_iterNum = iterNum + self.init_step_num
         if not self.is_keeping_as_min and global_iterNum in self.start_keep_as_min:
-            print(">>>> Keep lr as min:", self.lr_min, ", global_iterNum:", global_iterNum)
+            print(">>>> Start keeping lr as min:", self.lr_min, ", global_iterNum:", global_iterNum)
             self.keep_as_min_batchs_already += self.keep_as_min
             self.is_keeping_as_min = True
         elif self.is_keeping_as_min and global_iterNum in self.stop_keep_as_min:
+            print(">>>> Stop keeping lr as min:", self.lr_min, ", global_iterNum:", global_iterNum)
             self.is_keeping_as_min = False
 
         if self.is_keeping_as_min:
@@ -185,7 +194,7 @@ class CosineLrScheduler(keras.callbacks.Callback):
         elif global_iterNum < self.warmup:
             lr = self.warmup_lr_func(global_iterNum)
         else:
-            lr = self.schedule((global_iterNum - self.warmup - self.keep_as_min_batchs_already) // self.decay_step)
+            lr = self.schedule(global_iterNum - self.warmup - self.keep_as_min_batchs_already)
         if self.model is not None:
             K.set_value(self.model.optimizer.lr, lr)
         if iterNum == 0:

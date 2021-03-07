@@ -91,7 +91,7 @@ def prepare_dataset(
     image_classes_rule=None,
     batch_size=128,
     img_shape=(112, 112),
-    random_status=2,
+    random_status=0,
     random_crop=(100, 100, 3),
     image_per_class=0,
     cache=False,

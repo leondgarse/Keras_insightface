@@ -27,7 +27,7 @@ class Train:
         basic_model=None,
         model=None,
         compile=True,
-        output_weight_decay=0,  # L2 regularizer for output layer, 0 for None, >=1 for value in basic_model, (0, 1) for specific value
+        output_weight_decay=1,  # L2 regularizer for output layer, 0 for None, >=1 for value in basic_model, (0, 1) for specific value
         custom_objects={},
         batch_size=128,
         lr_base=0.001,
