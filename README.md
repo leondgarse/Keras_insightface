@@ -119,11 +119,16 @@
     Out[3]: '0.12.0-dev'
     ```
     Or `tf-nightly`
+    ```sh
+    conda create -n tf-nightly
+    conda activate tf-nightly
+    pip install tf-nightly tfa-nightly glob2 pandas tqdm scikit-image scikit-learn ipython
+    ```
     ```py
     In [1]: tf.__version__
     Out[1]: '2.5.0-dev20201218'
     ```
-  - **Default import**
+  - **Default import for ipython**
     ```py
     import os
     import sys
@@ -135,12 +140,6 @@
     gpus = tf.config.experimental.list_physical_devices("GPU")
     for gpu in gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
-    ```
-  - **Conda install `tf-nightly`**
-    ```sh
-    conda create -n tf-nightly
-    conda activate tf-nightly
-    pip install tf-nightly tfa-nightly glob2 pandas tqdm scikit-image scikit-learn ipython
     ```
 ## Beforehand Data Prepare
   - **Training Data** in this project is downloaded from [Insightface Dataset Zoo](https://github.com/deepinsight/insightface/wiki/Dataset-Zoo)
@@ -185,7 +184,7 @@
     ```
 ## Training scripts
   - **Basic Scripts**
-    - [backbones](backbones) basic model implementation of `mobilefacenet` / `mobilenetv3` / `resnest` / `efficientnet`. Most of them are copied from `keras.applications` source code and modified. Other backbones like `ResNet101V2` is loaded from `keras.applications` in `train.buildin_models`.
+    - [backbones](backbones) basic model implementation of `mobilefacenet` / `mobilenetv3` / `resnest` / `efficientnet` / `botnet` / `ghostnet`. Most of them are copied from `keras.applications` source code and modified. Other backbones like `ResNet101V2` is loaded from `keras.applications` in `train.buildin_models`.
     - [data.py](data.py) loads image data as `tf.dataset` for training. `Triplet` dataset is different from others.
     - [evals.py](evals.py) contains evaluating callback using `bin` files.
     - [losses.py](losses.py) contains `softmax` / `arcface` / `centerloss` / `triplet` loss functions.
@@ -349,13 +348,13 @@
     # lr_decay_steps == 0, Exponential
     tt = train.Train(..., lr_base=0.001, lr_decay=0.05, ...)
     # 1 < lr_decay_steps < 500, Cosine decay, first_restart_step = lr_decay_steps * steps_per_epoch
-    # restart on epoch [25, 50, 75]
-    tt = train.Train(..., lr_base=0.001, lr_decay=0.5, lr_decay_steps=24, lr_min=1e-7, ...)
+    # restart on epoch [16 * 1 + 1, 16 * 3 + 2, 16 * 7 + 3] == [17, 50, 115]
+    tt = train.Train(..., lr_base=0.001, lr_decay=0.5, lr_decay_steps=16, lr_min=1e-7, ...)
     # 1 < lr_decay_steps < 500, lr_min == lr_base * lr_decay, Cosine decay, no restart
     tt = train.Train(..., lr_base=0.001, lr_decay=1e-4, lr_decay_steps=24, lr_min=1e-7, ...)
     # 500 <= lr_decay_steps, Cosine decay, first_restart_step = lr_decay_steps
-    # restart on batch [24000 + steps_per_epoch, 48000 + 2 * steps_per_epoch, 72000 + 3 * steps_per_epoch]
-    tt = train.Train(..., lr_base=0.001, lr_decay=0.5, lr_decay_steps=24 * 1000, lr_min=1e-7, ...)
+    # restart on batch [16000 + steps_per_epoch, 48000 + 2 * steps_per_epoch, 112000 + 3 * steps_per_epoch]
+    tt = train.Train(..., lr_base=0.001, lr_decay=0.5, lr_decay_steps=16 * 1000, lr_min=1e-7, ...)
     # lr_decay_steps is a list, Constant
     tt = train.Train(..., lr_base=0.1, lr_decay=0.1, lr_decay_steps=[3, 5, 7, 16, 20, 24], ...)
     ```
