@@ -37,7 +37,7 @@
 
   | Model backbone | Training | lfw      | cfp_fp   | agedb_30 | IJBB     | IJBC     |
   | -------------- | ----- | -------- | -------- | -------- | -------- | -------- |
-  | [Resnet34](https://drive.google.com/file/d/1qmUcSDyftp7TScJHQQXm33wEwDfuTc4l/view?usp=sharing) | [CASIA, E40](#comparing-resnet34-with-original-mxnet-version)  | 0.993667 | 0.949143 | 0.946333 |          |          |
+  | [Resnet34](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [CASIA, E40](#comparing-resnet34-with-original-mxnet-version)  | 0.99417 | 0.95086 | 0.94733 |          |          |
   | [Mobilenet emb256](https://drive.google.com/file/d/1i0B6Hy1clGgfeOYtUXVPNveDEe2DTIBa/view?usp=sharing) | [Emore, E110](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-286398) | 0.996000 | 0.951714 | 0.959333 | 0.887147 | 0.911745 |
   | [Mobilenet_distill emb512](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/30) | 0.997    | 0.964    | 0.972833 | 0.9148   | 0.935573 |
   | [Ghostnet emb512](https://drive.google.com/file/d/1--ZRa8v3j5KKEcHzwTVMV6F8gsRr0mLB/view?usp=sharing) | [MS1MV3, E49](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-322997) | 0.997167 | 0.959429 | 0.969333 | 0.912463 | 0.934499 |
@@ -90,14 +90,14 @@
     ```
   - **Results** This result is just showing `Keras` is able to reproduce `MXNet` accuracy using similar strategy and backbone.
 
-    | Backbone    | Optimizer | wd   | l2_reg | lfw,cfp_fp,agedb_30,epoch       |
-    | ----------- | --------- | ---- | ------ | ------------------------------- |
-    | MXNet r34   | SGD       | 5e-4 | None   | 0.9933, 0.9514, 0.9448, E31     |
-    | TF resnet34 | SGD       | None | None   | 0.9897, 0.9269, 0.9228, E20     |
-    | TF resnet34 | SGDW      | 5e-4 | None   | 0.9927, 0.9476, 0.9388, E32     |
-    | TF resnet34 | SGDW      | 1e-3 | None   | 0.9935, **0.9549**, 0.9458, E35 |
-    | TF resnet34 | SGD       | None | 5e-4   | **0.9940**, 0.9466, 0.9415, E31 |
-    | TF resnet34 | SGD       | None | 1e-3   | 0.9937, 0.9491, **0.9463**, E31 |
+    | Backbone    | Optimizer | wd   | l2_reg | lfw,cfp_fp,agedb_30,epoch              |
+    | ----------- | --------- | ---- | ------ | -------------------------------------- |
+    | MXNet r34   | SGD       | 5e-4 | None   | 0.9933, 0.9514, 0.9448, E31            |
+    | TF resnet34 | SGD       | None | None   | 0.9897, 0.9269, 0.9228, E20            |
+    | TF resnet34 | SGDW      | 5e-4 | None   | 0.9927, 0.9476, 0.9388, E32            |
+    | TF resnet34 | SGDW      | 1e-3 | None   | 0.9935, **0.9549**, 0.9458, E35        |
+    | TF resnet34 | SGD       | None | 5e-4   | 0.9940, 0.9466, 0.9415, E31            |
+    | TF resnet34 | SGD       | None | 1e-3   | **0.99417**, 0.95086, **0.94733**, E31 |
 
     ![](checkpoints/resnet34_casia.svg)
 ***
@@ -373,25 +373,25 @@
     batchs = np.arange(60 * steps_per_epoch)
     aa = CosineLrScheduler(0.001, first_restart_step=50, lr_min=1e-6, warmup=0, m_mul=1e-3, steps_per_epoch=steps_per_epoch)
     aa.build()
-    plt.plot(batchs / steps_per_epoch, [aa.on_train_batch_begin(ii) for ii in batchs], label="Cosine, first_restart_step=100, min=1e-6, m_mul=1e-3")
+    plt.plot(batchs / steps_per_epoch, [aa.on_train_batch_begin(ii) for ii in batchs], label="Cosine, first_restart_step=50, min=1e-6, m_mul=1e-3")
     aa_60 = np.float(aa.on_train_batch_begin(60 * steps_per_epoch))
     plt.text(60, aa_60, "[Cosine]\n({}, {:.2e})".format(60, aa_60), va="bottom", ha="right")
 
-    bb = CosineLrScheduler(0.001, first_restart_step=24, lr_min=1e-7, warmup=1, m_mul=0.4, steps_per_epoch=steps_per_epoch)
+    bb = CosineLrScheduler(0.001, first_restart_step=16, lr_min=1e-7, warmup=1, m_mul=0.4, steps_per_epoch=steps_per_epoch)
     bb.build()
-    plt.plot(batchs / steps_per_epoch, [bb.on_train_batch_begin(ii) for ii in batchs], label="Cosine restart, first_restart_step=24, min=1e-7, warmup=1, m_mul=0.4")
-    plt.scatter(26, 0.0004, c='r')
-    plt.text(26, 0.0004, (26, 0.0004))
+    plt.plot(batchs / steps_per_epoch, [bb.on_train_batch_begin(ii) for ii in batchs], label="Cosine restart, first_restart_step=16, min=1e-7, warmup=1, m_mul=0.4")
+    plt.scatter(18, 0.0004, c='r')
+    plt.text(18, 0.0004, (18, 0.0004))
 
-    cc = CosineLrScheduler(0.001, first_restart_step=21 * 100, lr_min=1e-7, warmup=4, m_mul=0.5, steps_per_epoch=steps_per_epoch)
+    cc = CosineLrScheduler(0.001, first_restart_step=13 * 100, lr_min=1e-7, warmup=4, m_mul=0.5, steps_per_epoch=steps_per_epoch)
     cc.build()
-    plt.plot(batchs / steps_per_epoch, [cc.on_train_batch_begin(ii) for ii in batchs], label="Cosine restart, on batch, first_restart_step=2100, min=1e-7, warmup=4, m_mul=0.5")
-    plt.scatter(26, 0.0005, c='r')
-    plt.text(26, 0.0005, (26, 0.0005))
+    plt.plot(batchs / steps_per_epoch, [cc.on_train_batch_begin(ii) for ii in batchs], label="Cosine restart, on batch, first_restart_step=1300, min=1e-7, warmup=4, m_mul=0.5")
+    plt.scatter(18, 0.0005, c='r')
+    plt.text(18, 0.0005, (18, 0.0005))
 
     plt.xlim(0, 60)
     plt.legend()
-    plt.grid()
+    # plt.grid()
     plt.tight_layout()
     ```
     ![](checkpoints/learning_rate_decay.svg)
