@@ -14,6 +14,8 @@ Default_text_font_size = 9
 Default_figure_base_size = 8
 # COLORS = cm.rainbow(np.linspace(0, 1, MAX_COLORS))
 
+SPLIT_LINES = {}
+
 try:
     import seaborn as sns
 
@@ -122,6 +124,7 @@ def hist_plot(
     eval_split=True,
     limit_loss_max=1e9,
 ):
+    global SPLIT_LINES
     if axes is None:
         if eval_split:
             fig, axes = plt.subplots(2, 3, sharex=False, figsize=(3 * Default_figure_base_size, 2 * Default_figure_base_size))
@@ -130,6 +133,7 @@ def hist_plot(
             fig, axes = plt.subplots(1, 3, sharex=False, figsize=(3 * Default_figure_base_size, 1 * Default_figure_base_size))
         for ax in axes:
             ax.set_prop_cycle(cycler("color", COLORS))
+        SPLIT_LINES = {}
     else:
         fig = axes[0].figure
         # Empty titles
@@ -137,8 +141,6 @@ def hist_plot(
             ax.set_title("")
         eval_split = True if len(axes) == 6 else False
     axes = axes.tolist()
-    if loss_names == None:
-        loss_names = [""] * len(loss_lists)
 
     if len(loss_lists) != 0:
         arrays_plot(
@@ -213,16 +215,25 @@ def hist_plot(
         axes[other_custom_ax].legend(loc="lower right", fontsize=Default_legend_font_size)
 
     # cur_color = "k" if len(axes[0].lines) == 1 else axes[0].lines[-1].get_color()
-    for ax in axes:
+
+    for ax_id, ax in enumerate(axes):
         ymin, ymax = ax.get_ylim()
         mm = (ymax - ymin) * 0.05
         start = init_epoch + 1
-        for nn, loss in zip(loss_names, loss_lists):
+        for loss_id, loss in enumerate(loss_lists):
             # ax.plot([start, start], [ymin + mm, ymax - mm], color="k", linestyle="--")
-            ax.plot([start, start], [ymin + mm, ymax - mm], color=cur_color, linestyle="--")
-            # ax.text(start + len(loss) * 0.05, np.mean(ax.get_ylim()), nn, va="top", rotation=-90, fontweight="roman", c=cur_color)
-            # ax.text(start + len(loss) * 0.05, ymax - mm * 4, nn, va="top", rotation=-90, fontweight="roman", c=cur_color)
-            ax.text(start + len(loss) * 0.05, ymin + mm * 4, nn, va="bottom", rotation=-90, fontweight="roman", c=cur_color)
+            split_lines = ax.plot([start, start], [ymin + mm, ymax - mm], color=cur_color, linestyle="--")
+
+            if loss_names is not None and len(loss_names) > loss_id:
+                nn = loss_names[loss_id]
+                # ax.text(start + len(loss) * 0.05, np.mean(ax.get_ylim()), nn, va="top", rotation=-90, fontweight="roman", c=cur_color)
+                # ax.text(start + len(loss) * 0.05, ymax - mm * 4, nn, va="top", rotation=-90, fontweight="roman", c=cur_color)
+                ax.text(start + len(loss) * 0.05, ymin + mm * 4, nn, va="bottom", rotation=-90, fontweight="roman", c=cur_color)
+
+            split_line_id = "{}_{}".format(ax_id, start)
+            if split_line_id in SPLIT_LINES:
+                SPLIT_LINES[split_line_id].remove()
+            SPLIT_LINES[split_line_id] = split_lines[0]
             start += len(loss)
 
     fig.tight_layout()
