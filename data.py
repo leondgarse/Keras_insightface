@@ -9,6 +9,15 @@ from skimage.io import imread
 default_image_names_reg = "*/*.jpg"
 default_image_classes_rule = lambda path: int(os.path.basename(os.path.dirname(path)))
 
+class ImageClassesRule_map:
+    def __init__(self, dir, dir_rule="*", excludes=[]):
+        raw_classes = [os.path.basename(ii) for ii in glob2.glob(os.path.join(dir, dir_rule))]
+        self.raw_classes = sorted([ii for ii in raw_classes if ii not in excludes])
+        self.classes_2_indices = {ii: id for id, ii in enumerate(self.raw_classes)}
+        self.indices_2_classes = {vv: kk for kk, vv in self.classes_2_indices.items()}
+    def __call__(self, image_name):
+        raw_image_class = os.path.basename(os.path.dirname(image_name))
+        return self.classes_2_indices[raw_image_class]
 
 def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None):
     while data_path.endswith("/"):
@@ -29,8 +38,10 @@ def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None)
     else:
         if not os.path.exists(data_path):
             return [], [], [], 0, None
-        if image_names_reg is None or image_classes_rule is None:
-            image_names_reg, image_classes_rule = default_image_names_reg, default_image_classes_rule
+        if image_names_reg is None:
+            image_names_reg = default_image_names_reg
+        if image_classes_rule is None:
+            image_classes_rule = default_image_classes_rule
         image_names = glob2.glob(os.path.join(data_path, image_names_reg))
         image_names = np.random.permutation(image_names).tolist()
         image_classes = [image_classes_rule(ii) for ii in image_names]
@@ -53,11 +64,10 @@ class RandomProcessImage:
         self.img_shape, self.random_status, self.random_crop = img_shape, random_status, random_crop
         if random_status >= 100:
             import augment
-            random_enlarge = random_status / 100
-            magnitude, cutout_const = 5 * random_enlarge, int(40 // random_enlarge)
-            print(">>>> RandAugment: magnitude = %f, cutout_const = %d" % (magnitude, cutout_const))
-            aa = augment.RandAugment(magnitude=magnitude, cutout_const=cutout_const)
-            aa.available_ops = ['AutoContrast', 'Equalize', 'Posterize', 'Color', 'Contrast', 'Brightness', 'Sharpness', 'ShearX', 'ShearY', 'Cutout']
+            magnitude = 5 * random_status / 100
+            print(">>>> RandAugment: magnitude =", magnitude)
+            aa = augment.RandAugment(magnitude=magnitude)
+            aa.available_ops = ['AutoContrast', 'Equalize', 'Color', 'Contrast', 'Brightness', 'Sharpness', 'ShearX', 'ShearY']
             self.process = lambda img: aa.distort(tf.image.random_flip_left_right(img))
         else:
             self.process = lambda img: self.tf_buildin_image_random(img)
