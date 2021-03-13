@@ -10,11 +10,13 @@ from tensorflow.keras import layers
 from tensorflow.python.keras import backend
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import special_math_ops
+from tensorflow.python.util.tf_export import keras_export
 
 BATCH_NORM_DECAY = 0.9
 BATCH_NORM_EPSILON = 1e-5
 
 
+@keras_export("keras.layers.MHSAWithRelativePosition")
 class MHSAWithRelativePosition(keras.layers.MultiHeadAttention):
     def __init__(self, num_heads=4, bottleneck_dimension=512, relative=True, **kwargs):
         self.key_dim = bottleneck_dimension // num_heads
@@ -132,8 +134,7 @@ def batchnorm_with_activation(inputs, activation="relu", zero_gamma=False, name=
     return nn
 
 
-def conv2d_no_bias(inputs, filters, kernel_size, strides=1, name=""):
-    padding = "SAME" if strides == 1 else "VALID"
+def conv2d_no_bias(inputs, filters, kernel_size, strides=1, padding="VALID", name=""):
     return layers.Conv2D(filters, kernel_size, strides=strides, padding=padding, use_bias=False, name=name + "conv")(inputs)
 
 
@@ -146,23 +147,30 @@ def bot_block(
     strides=1,
     target_dimension=2048,
     name="all2all",
+    use_MHSA=True,
 ):
     if strides != 1 or featuremap.shape[-1] != target_dimension:
-        shortcut = conv2d_no_bias(featuremap, target_dimension, 1, strides=strides, name=name + "_0_")
-        shortcut = batchnorm_with_activation(shortcut, activation=activation, zero_gamma=False, name=name + "_0_")
+        padding = "SAME" if strides == 1 else "VALID"
+        shortcut = conv2d_no_bias(featuremap, target_dimension, 1, strides=strides, padding=padding, name=name + "_0_")
+        shortcut = batchnorm_with_activation(shortcut, activation=None, zero_gamma=False, name=name + "_0_")
     else:
         shortcut = featuremap
 
     bottleneck_dimension = target_dimension // proj_factor
-    nn = conv2d_no_bias(featuremap, bottleneck_dimension, 1, strides=1, name=name + "_1_")
-    nn = batchnorm_with_activation(nn, activation=activation, zero_gamma=False, name=name + "_1_")
 
-    nn = MHSAWithRelativePosition(num_heads=heads, bottleneck_dimension=bottleneck_dimension, name=name + "_2_mhsa")(nn)
-    if strides != 1:
-        nn = layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding="same")(nn)
+    if use_MHSA:    # BotNet block
+        nn = conv2d_no_bias(featuremap, bottleneck_dimension, 1, strides=1, padding="VALID", name=name + "_1_")
+        nn = batchnorm_with_activation(nn, activation=activation, zero_gamma=False, name=name + "_1_")
+        nn = MHSAWithRelativePosition(num_heads=heads, bottleneck_dimension=bottleneck_dimension, name=name + "_2_mhsa")(nn)
+        if strides != 1:
+            nn = layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding="same")(nn)
+    else:   # ResNet block
+        nn = conv2d_no_bias(featuremap, bottleneck_dimension, 1, strides=strides, padding="VALID", name=name + "_1_")
+        nn = batchnorm_with_activation(nn, activation=activation, zero_gamma=False, name=name + "_1_")
+        nn = conv2d_no_bias(nn, bottleneck_dimension, 3, strides=1, padding="SAME", name=name + "_2_")
     nn = batchnorm_with_activation(nn, activation=activation, zero_gamma=False, name=name + "_2_")
 
-    nn = conv2d_no_bias(nn, target_dimension, 1, strides=1, name=name + "_3_")
+    nn = conv2d_no_bias(nn, target_dimension, 1, strides=1, padding="VALID", name=name + "_3_")
     nn = batchnorm_with_activation(nn, activation=None, zero_gamma=True, name=name + "_3_")
 
     nn = layers.Add(name=name + "_add")([shortcut, nn])
@@ -171,14 +179,15 @@ def bot_block(
 
 def bot_stack(
     featuremap,
+    target_dimension=2048,
+    num_layers=3,
+    strides=2,
+    activation="relu",
     heads=4,
     proj_factor=4,
-    activation="relu",
     pos_enc_type="relative",
     name="all2all_stack",
-    strides=2,
-    num_layers=3,
-    target_dimension=2048,
+    use_MHSA=True,
 ):
     """ c5 Blockgroup of BoT Blocks. Use `activation=swish` for `silu` """
     for i in range(num_layers):
@@ -190,41 +199,71 @@ def bot_stack(
             pos_enc_type=pos_enc_type,
             strides=strides if i == 0 else 1,
             target_dimension=target_dimension,
-            name=name + "_{}".format(i),
+            name=name + "_block{}".format(i+1),
+            use_MHSA=use_MHSA,
         )
     return featuremap
 
 
-def convert_keras_resnet_2_botnet(model, include_top=True, classes=1000, num_layers=3, strides=2, activation="relu", **kwargs):
-    """ Count the fourth `add layer` from the bottom, then use the next `activation` layer as input to `bot_stack` """
-    add_layer_count = 0
-    for idx, layer in enumerate(model.layers[::-1]):
-        if isinstance(layer, keras.layers.Add):
-            add_layer_count += 1
-            # print("idx:", -idx - 1, ", layer:", layer.name)
-        if add_layer_count == num_layers + 1:
-            break
+def BotNet(
+    stack_fn,
+    preact,
+    use_bias,
+    model_name="botnet",
+    activation="relu",
+    include_top=True,
+    weights=None,
+    input_shape=None,
+    classes=1000,
+    classifier_activation="softmax",
+):
+    img_input = layers.Input(shape=input_shape)
 
-    inputs = model.inputs[0]
-    nn = model.layers[-idx - 1 + 1].output  # Pick the next `activation` layer as `input` to `bot_stack`
-    nn = bot_stack(nn, strides=strides, activation=activation, **kwargs)
+    nn = layers.ZeroPadding2D(padding=((3, 3), (3, 3)), name="conv1_pad")(img_input)
+    nn = layers.Conv2D(64, 7, strides=2, use_bias=use_bias, name="conv1_conv")(nn)
 
+    if not preact:
+        nn = batchnorm_with_activation(nn, activation=activation, zero_gamma=False, name="conv1_")
+    nn = layers.ZeroPadding2D(padding=((1, 1), (1, 1)), name="pool1_pad")(nn)
+    nn = layers.MaxPooling2D(3, strides=2, name="pool1_pool")(nn)
+
+    nn = stack_fn(nn)
+    if preact:
+        nn = batchnorm_with_activation(nn, activation=activation, zero_gamma=False, name="post_")
     if include_top:
         nn = layers.GlobalAveragePooling2D(name="avg_pool")(nn)
-        nn = layers.Dense(classes, activation="softmax", name="predictions")(nn)
-    return keras.models.Model(inputs, nn)
+        nn = layers.Dense(classes, activation=classifier_activation, name="predictions")(nn)
+    return keras.models.Model(img_input, nn, name=model_name)
 
 
-def BotNet50(include_top=True, input_tensor=None, input_shape=None, classes=1000, strides=2, activation="relu", **kwargs):
-    mm = keras.applications.ResNet50(include_top=False, input_tensor=input_tensor, input_shape=input_shape, **kwargs)
-    return convert_keras_resnet_2_botnet(mm, include_top=include_top, classes=classes, strides=strides, activation=activation)
+def BotNet50(strides=2, activation="relu", include_top=True, weights=None, input_shape=None, classes=1000, **kwargs):
+    def stack_fn(nn):
+        nn = bot_stack(nn, 64 * 4, 3, strides=1, activation=activation, name="conv2", use_MHSA=False)
+        nn = bot_stack(nn, 128 * 4, 4, strides=2, activation=activation, name="conv3", use_MHSA=False)
+        nn = bot_stack(nn, 256 * 4, 6, strides=2, activation=activation, name="conv4", use_MHSA=False)
+        nn = bot_stack(nn, 512 * 4, 3, strides=strides, activation=activation, use_MHSA=True)
+        return nn
+
+    return BotNet(stack_fn, False, True, "botnet50", activation, include_top, weights, input_shape, classes, **kwargs)
 
 
-def BotNet101(include_top=True, input_tensor=None, input_shape=None, classes=1000, strides=2, activation="relu", **kwargs):
-    mm = keras.applications.ResNet101(include_top=False, input_tensor=input_tensor, input_shape=input_shape, **kwargs)
-    return convert_keras_resnet_2_botnet(mm, include_top=include_top, classes=classes, strides=strides, activation=activation)
+def BotNet101(strides=2, activation="relu", include_top=True, weights=None, input_shape=None, classes=1000, **kwargs):
+    def stack_fn(nn):
+        nn = bot_stack(nn, 64 * 4, 3, strides=1, activation=activation, name="conv2", use_MHSA=False)
+        nn = bot_stack(nn, 128 * 4, 4, strides=2, activation=activation, name="conv3", use_MHSA=False)
+        nn = bot_stack(nn, 256 * 4, 23, strides=2, activation=activation, name="conv4", use_MHSA=False)
+        nn = bot_stack(nn, 512 * 4, 3, strides=strides, activation=activation, use_MHSA=True)
+        return nn
+
+    return BotNet(stack_fn, False, True, "botnet50", activation, include_top, weights, input_shape, classes, **kwargs)
 
 
-def BotNet152(include_top=True, input_tensor=None, input_shape=None, classes=1000, strides=2, activation="relu", **kwargs):
-    mm = keras.applications.ResNet152(include_top=False, input_tensor=input_tensor, input_shape=input_shape, **kwargs)
-    return convert_keras_resnet_2_botnet(mm, include_top=include_top, classes=classes, strides=strides, activation=activation)
+def BotNet152(strides=2, activation="relu", include_top=True, weights=None, input_shape=None, classes=1000, **kwargs):
+    def stack_fn(nn):
+        nn = bot_stack(nn, 64 * 4, 3, strides=1, activation=activation, name="conv2", use_MHSA=False)
+        nn = bot_stack(nn, 128 * 4, 8, strides=2, activation=activation, name="conv3", use_MHSA=False)
+        nn = bot_stack(nn, 256 * 4, 36, strides=2, activation=activation, name="conv4", use_MHSA=False)
+        nn = bot_stack(nn, 512 * 4, 3, strides=strides, activation=activation, use_MHSA=True)
+        return nn
+
+    return BotNet(stack_fn, False, True, "botnet50", activation, include_top, weights, input_shape, classes, **kwargs)

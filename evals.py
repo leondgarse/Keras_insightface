@@ -119,6 +119,8 @@ class eval_callback(tf.keras.callbacks.Callback):
                 "\n>>>> %s evaluation max accuracy: %f, thresh: %f, previous max accuracy: %f, PCA accuray = %f ± %f"
                 % (self.test_names, acc_max, self.acc_thresh, self.max_accuracy, acc2, std2)
             )
+            acc_max = accuracy
+            self.cur_acc = accuracy
         else:
             tf.print(
                 "\n>>>> %s evaluation max accuracy: %f, thresh: %f, previous max accuracy: %f"
