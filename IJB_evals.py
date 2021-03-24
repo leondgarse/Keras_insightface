@@ -271,12 +271,13 @@ def image2template_feature(img_feats=None, templates=None, medias=None, choose_t
     return template_norm_feats, unique_templates, unique_subjectids
 
 
-def verification_11(template_norm_feats=None, unique_templates=None, p1=None, p2=None, batch_size=100000):
+def verification_11(template_norm_feats=None, unique_templates=None, p1=None, p2=None, batch_size=10000):
     try:
         import cupy as cp
 
         template_norm_feats = cp.array(template_norm_feats)
         score_func = lambda feat1, feat2: cp.sum(feat1 * feat2, axis=-1).get()
+        test = score_func(template_norm_feats[:batch_size], template_norm_feats[:batch_size])
         print(">>>> Using cupy.")
     except:
         score_func = lambda feat1, feat2: np.sum(feat1 * feat2, -1)

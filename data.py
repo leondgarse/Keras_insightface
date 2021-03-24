@@ -173,10 +173,12 @@ def prepare_distill_dataset_tfrecord(data_path, batch_size=128, img_shape=(112, 
     emb_dtype = tf.float16 if use_fp16 else tf.float32
     print(">>>> [Base info] total:", total, "classes:", classes, "emb_shape:", emb_shape, "use_fp16:", use_fp16)
 
+    random_process_image = RandomProcessImage(img_shape, random_status, random_crop)
+
     def decode_fn(record_bytes):
         ff = tf.io.parse_single_example(record_bytes, decode_feature)
         image_name, image_classe, embedding = ff["image_names"], ff["image_classes"], ff["embeddings"]
-        img = random_process_image(tf_imread(image_name), img_shape, random_status, random_crop)
+        img = random_process_image.process(tf_imread(image_name))
         label = tf.one_hot(image_classe, depth=classes, dtype=tf.int32)
         embedding = tf.io.decode_raw(embedding, emb_dtype)
         embedding.set_shape([emb_shape])

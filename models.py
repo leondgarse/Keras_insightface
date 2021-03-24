@@ -31,18 +31,19 @@ def buildin_models(
     add_pointwise_conv=False,
     use_bias=False,
     scale=True,
+    weights="imagenet",
     **kwargs
 ):
     name_lower = name.lower()
     """ Basic model """
     if name_lower == "mobilenet":
-        xx = keras.applications.MobileNet(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
+        xx = keras.applications.MobileNet(input_shape=input_shape, include_top=False, weights=weights, **kwargs)
     elif name_lower == "mobilenet_m1":
         from backbones import mobilenet
 
         xx = mobilenet.MobileNet(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name_lower == "mobilenetv2":
-        xx = keras.applications.MobileNetV2(input_shape=input_shape, include_top=False, weights="imagenet", **kwargs)
+        xx = keras.applications.MobileNetV2(input_shape=input_shape, include_top=False, weights=weights, **kwargs)
     elif name_lower == "r34" or name_lower == "r50" or name_lower == "r100" or name_lower == "r101":
         from backbones import resnet  # MXNet insightface version resnet
 
@@ -55,14 +56,14 @@ def buildin_models(
         else:
             model_name = "ResNet" + name_lower[len("resnet") :]
         model_class = getattr(keras.applications, model_name)
-        xx = model_class(weights="imagenet", include_top=False, input_shape=input_shape, **kwargs)
+        xx = model_class(weights=weights, include_top=False, input_shape=input_shape, **kwargs)
     elif name_lower.startswith("efficientnet"):
         # import tensorflow.keras.applications.efficientnet as efficientnet
         from backbones import efficientnet
 
         model_name = "EfficientNet" + name_lower[-2:].upper()
         model_class = getattr(efficientnet, model_name)
-        xx = model_class(weights="imagenet", include_top=False, input_shape=input_shape, **kwargs)  # or weights='imagenet'
+        xx = model_class(weights=weights, include_top=False, input_shape=input_shape, **kwargs)  # or weights='imagenet'
     elif name_lower.startswith("se_resnext"):
         from keras_squeeze_excite_network import se_resnext
 
@@ -70,7 +71,7 @@ def buildin_models(
             depth = [3, 4, 23, 3]
         else:  # se_resnext50
             depth = [3, 4, 6, 3]
-        xx = se_resnext.SEResNextImageNet(weights="imagenet", input_shape=input_shape, include_top=False, depth=depth)
+        xx = se_resnext.SEResNextImageNet(weights=weights, input_shape=input_shape, include_top=False, depth=depth)
     elif name_lower.startswith("resnest"):
         from backbones import resnest
 
@@ -85,7 +86,7 @@ def buildin_models(
         model_class = mobilenet_v3.MobileNetV3Small if "small" in name_lower else mobilenet_v3.MobileNetV3Large
         # from tensorflow.keras.layers.experimental.preprocessing import Rescaling
         # model_class = keras.applications.MobileNetV3Small if "small" in name_lower else keras.applications.MobileNetV3Large
-        xx = model_class(input_shape=input_shape, include_top=False, weights="imagenet")
+        xx = model_class(input_shape=input_shape, include_top=False, weights=weights)
         # xx = keras.models.clone_model(xx, clone_function=lambda layer: Rescaling(1.) if isinstance(layer, Rescaling) else layer)
     elif "mobilefacenet" in name_lower or "mobile_facenet" in name_lower:
         from backbones import mobile_facenet
@@ -104,7 +105,7 @@ def buildin_models(
         xx = model_class(include_top=False, input_shape=input_shape, strides=1, **kwargs)
     elif hasattr(keras.applications, name):
         model_class = getattr(keras.applications, name)
-        xx = model_class(weights="imagenet", include_top=False, input_shape=input_shape)
+        xx = model_class(weights=weights, include_top=False, input_shape=input_shape)
     else:
         return None
     xx.trainable = True
@@ -209,7 +210,11 @@ def replace_ReLU_with_PReLU(model, target_activation="PReLU", **kwargs):
         if isinstance(layer, ReLU) or (isinstance(layer, Activation) and layer.activation == keras.activations.relu):
             print(">>>> Convert ReLU:", layer.name)
             if target_activation == "PReLU":
-                return PReLU(shared_axes=[1, 2], name=layer.name, **kwargs)
+                layer_name = layer.name.replace("_relu", "_prelu")
+                return PReLU(shared_axes=[1, 2], name=layer_name, **kwargs)
+            if target_activation == "swish":
+                layer_name = layer.name.replace("_relu", "_swish")
+                return Activation(activation="swish", name=layer_name, **kwargs)
             else:
                 return target_activation(**kwargs)
         return layer

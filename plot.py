@@ -260,8 +260,18 @@ def hist_plot_split(
     fig_label=None,
     eval_split=True,
     limit_loss_max=1e9,
+    skip_epochs=0,
 ):
     splits = [[int(sum(epochs[:id])), int(sum(epochs[:id])) + ii] for id, ii in enumerate(epochs)]
+    if skip_epochs != 0 :
+        splits = [[ss, ee] for ss, ee in splits if ee > skip_epochs]
+        splits[0][0] = max(splits[0][0], skip_epochs)
+        if names is not None and len(names) != 0:
+            names = names[-len(splits):]
+        if init_epoch == 0:
+            init_epoch = skip_epochs
+        print(skip_epochs, splits, names)
+
     split_func = lambda aa: [aa[ii:jj] for ii, jj in splits if ii < len(aa)]
     if isinstance(history, str):
         history = [history]
