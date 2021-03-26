@@ -110,15 +110,7 @@ class ConstantDecayScheduler(keras.callbacks.Callback):
 
 class CosineLrScheduler(keras.callbacks.Callback):
     def __init__(
-        self,
-        lr_base,
-        first_restart_step,
-        m_mul=0.5,
-        t_mul=2.0,
-        lr_min=1e-5,
-        warmup=0,
-        steps_per_epoch=-1,
-        keep_as_min=1,
+        self, lr_base, first_restart_step, m_mul=0.5, t_mul=2.0, lr_min=1e-5, warmup=0, steps_per_epoch=-1, keep_as_min=1,
     ):
         super(CosineLrScheduler, self).__init__()
         self.lr_base, self.m_mul, self.t_mul, self.lr_min = lr_base, m_mul, t_mul, lr_min

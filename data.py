@@ -9,15 +9,18 @@ from skimage.io import imread
 default_image_names_reg = "*/*.jpg"
 default_image_classes_rule = lambda path: int(os.path.basename(os.path.dirname(path)))
 
+
 class ImageClassesRule_map:
     def __init__(self, dir, dir_rule="*", excludes=[]):
         raw_classes = [os.path.basename(ii) for ii in glob2.glob(os.path.join(dir, dir_rule))]
         self.raw_classes = sorted([ii for ii in raw_classes if ii not in excludes])
         self.classes_2_indices = {ii: id for id, ii in enumerate(self.raw_classes)}
         self.indices_2_classes = {vv: kk for kk, vv in self.classes_2_indices.items()}
+
     def __call__(self, image_name):
         raw_image_class = os.path.basename(os.path.dirname(image_name))
         return self.classes_2_indices[raw_image_class]
+
 
 def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None):
     while data_path.endswith("/"):
@@ -64,10 +67,11 @@ class RandomProcessImage:
         self.img_shape, self.random_status, self.random_crop = img_shape, random_status, random_crop
         if random_status >= 100:
             import augment
+
             magnitude = 5 * random_status / 100
             print(">>>> RandAugment: magnitude =", magnitude)
             aa = augment.RandAugment(magnitude=magnitude)
-            aa.available_ops = ['AutoContrast', 'Equalize', 'Color', 'Contrast', 'Brightness', 'Sharpness', 'ShearX', 'ShearY']
+            aa.available_ops = ["AutoContrast", "Equalize", "Color", "Contrast", "Brightness", "Sharpness", "ShearX", "ShearY"]
             self.process = lambda img: aa.distort(tf.image.random_flip_left_right(img))
         else:
             self.process = lambda img: self.tf_buildin_image_random(img)
@@ -88,6 +92,7 @@ class RandomProcessImage:
         if self.random_status >= 1:
             img = tf.clip_by_value(img, 0.0, 255.0)
         return img
+
 
 def pick_by_image_per_class(image_classes, image_per_class):
     cc = pd.value_counts(image_classes)
@@ -151,7 +156,9 @@ def prepare_dataset(
     return ds, steps_per_epoch
 
 
-def prepare_distill_dataset_tfrecord(data_path, batch_size=128, img_shape=(112, 112), random_status=2, random_crop=(100, 100, 3), **kw):
+def prepare_distill_dataset_tfrecord(
+    data_path, batch_size=128, img_shape=(112, 112), random_status=2, random_crop=(100, 100, 3), **kw
+):
     AUTOTUNE = tf.data.experimental.AUTOTUNE
     decode_base_info = {
         "classes": tf.io.FixedLenFeature([], dtype=tf.int64),
@@ -169,7 +176,8 @@ def prepare_distill_dataset_tfrecord(data_path, batch_size=128, img_shape=(112, 
     # base info saved in the first data line
     header = tf.data.TFRecordDataset([data_path]).as_numpy_iterator().next()
     hh = tf.io.parse_single_example(header, decode_base_info)
-    classes, emb_shape, total, use_fp16 = hh["classes"].numpy(), hh["emb_shape"].numpy(), hh["total"].numpy(), hh["use_fp16"].numpy()
+    classes, emb_shape, total = hh["classes"].numpy(), hh["emb_shape"].numpy(), hh["total"].numpy()
+    use_fp16 = hh["use_fp16"].numpy()
     emb_dtype = tf.float16 if use_fp16 else tf.float32
     print(">>>> [Base info] total:", total, "classes:", classes, "emb_shape:", emb_shape, "use_fp16:", use_fp16)
 

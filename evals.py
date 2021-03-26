@@ -264,6 +264,7 @@ def evaluate(embeddings, actual_issame, nrof_folds=10, pca=0):
     )
     return tpr, fpr, accuracy, val, val_std, far
 
+
 if __name__ == "__main__":
     import sys
     import argparse
@@ -280,7 +281,8 @@ if __name__ == "__main__":
     for test_bin_file in args.test_bin_files:
         aa = eval_callback(basic_model, test_bin_file, batch_size=args.batch_size, flip=flip)
         aa.on_epoch_end()
-elif __name__== "__test__":
+elif __name__ == "__test__":
     from data_distiller import teacher_model_interf_wrapper
-    mm = teacher_model_interf_wrapper('../models/GhostNet_x1.3_Arcface_Epoch_24.pth')
-    evals.eval_callback(lambda imm: mm(imm * 128 + 127.5), '/datasets/ms1m-retinaface-t1/agedb_30.bin').on_epoch_end()
+
+    mm = teacher_model_interf_wrapper("../models/GhostNet_x1.3_Arcface_Epoch_24.pth")
+    evals.eval_callback(lambda imm: mm(imm * 128 + 127.5), "/datasets/ms1m-retinaface-t1/agedb_30.bin").on_epoch_end()
