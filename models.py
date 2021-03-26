@@ -143,8 +143,9 @@ def buildin_models(
         # nn = keras.layers.Dense(emb_shape, activation=None, use_bias=True, kernel_initializer="glorot_normal")(nn)
 
     # `fix_gamma=True` in MXNet means `scale=False` in Keras
-    embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="embedding", scale=scale)(nn)
-    basic_model = keras.models.Model(inputs, embedding, name=xx.name)
+    embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, scale=scale)(nn)
+    embedding_fp32 = keras.layers.Activation("linear", dtype="float32", name="embedding")(embedding)
+    basic_model = keras.models.Model(inputs, embedding_fp32, name=xx.name)
     return basic_model
 
 

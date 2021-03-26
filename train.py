@@ -38,18 +38,11 @@ class Train:
         random_status=0,
         image_per_class=0,  # For triplet, image_per_class will be `4` if it's `< 4`
         teacher_model_interf=None,  # Teacher model to generate embedding data, used for distilling training.
-        use_fp16=False,
     ):
         from inspect import getmembers, isfunction, isclass
 
         custom_objects.update(dict([ii for ii in getmembers(losses) if isfunction(ii[1]) or isclass(ii[1])]))
         custom_objects.update({"NormDense": models.NormDense})
-
-        if use_fp16:
-            from tensorflow.keras import mixed_precision
-            policy = mixed_precision.Policy('mixed_float16')
-            mixed_precision.set_global_policy(policy)
-            print('>>>> Compute dtype: %s, Variable dtype: %s' % (policy.compute_dtype, policy.variable_dtype))
 
         self.model, self.basic_model, self.save_path, self.default_type = None, None, save_path, None
         if isinstance(model, str):
@@ -86,7 +79,8 @@ class Train:
             )
             return
 
-        self.softmax, self.arcface, self.triplet, self.center, self.distill = "softmax", "arcface", "triplet", "center", "distill"
+        self.softmax, self.arcface, self.triplet = "softmax", "arcface", "triplet"
+        self.center, self.distill = "center", "distill"
         if output_weight_decay >= 1:
             l2_weight_decay = 0
             for ii in self.basic_model.layers:
@@ -115,8 +109,9 @@ class Train:
         self.metrics = ["accuracy"]
         self.default_optimizer = "adam"
 
-        self.data_path, self.random_status, self.image_per_class, self.teacher_model_interf = data_path, random_status, image_per_class, teacher_model_interf
-        self.train_ds, self.steps_per_epoch, self.classes, self.is_triplet_dataset, self.is_distill_ds = None, None, 0, False, False
+        self.data_path, self.random_status, self.image_per_class = data_path, random_status, image_per_class
+        self.train_ds, self.steps_per_epoch, self.classes, self.is_triplet_dataset = None, None, 0, False
+        self.teacher_model_interf, self.is_distill_ds = teacher_model_interf, False
         self.distill_emb_map_layer = None
 
     def __search_embedding_layer__(self, model):
@@ -142,7 +137,7 @@ class Train:
                 print(">>>> Combining tfrecord dataset with triplet is NOT recommended.")
                 self.train_ds, self.steps_per_epoch = data.prepare_distill_dataset_tfrecord(**dataset_params)
             else:
-                aa = data.Triplet_dataset( **dataset_params)
+                aa = data.Triplet_dataset(**dataset_params)
                 self.train_ds, self.steps_per_epoch = aa.ds, aa.steps_per_epoch
             self.is_triplet_dataset = True
         else:
@@ -180,8 +175,9 @@ class Train:
                 # self.optimizer = self.model.optimizer
                 # Have to build a new optimizer, or will meet Error: OSError: Unable to create link (name already exists)
                 if isinstance(self.model.optimizer, keras.mixed_precision.LossScaleOptimizer):
-                    inner_optimizer = self.model.optimizer.inner_optimizer
-                    self.optimizer = inner_optimizer.__class__(**inner_optimizer.get_config())
+                    inner_optimizer_pre = self.model.optimizer.inner_optimizer
+                    inner_optimizer = inner_optimizer_pre.__class__(**inner_optimizer_pre.get_config())
+                    self.optimizer = keras.mixed_precision.LossScaleOptimizer(inner_optimizer)
                 else:
                     self.optimizer = self.model.optimizer.__class__(**self.model.optimizer.get_config())
             else:
@@ -216,9 +212,7 @@ class Train:
 
         if type == self.softmax and (self.model == None or self.model.output_names[-1] != self.softmax):
             print(">>>> Add softmax layer...")
-            softmax_logits = keras.layers.Dense(
-                self.classes, use_bias=False, name=self.softmax + "_logits", kernel_regularizer=output_kernel_regularizer,
-            )
+            softmax_logits = keras.layers.Dense(self.classes, use_bias=False, name=self.softmax + "_logits", kernel_regularizer=output_kernel_regularizer)
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
                 softmax_logits.build(embedding.shape)
                 weight_cur = softmax_logits.get_weights()
@@ -227,12 +221,12 @@ class Train:
                     print(">>>> Reload previous %s weight..." % (self.model.output_names[-1]))
                     softmax_logits.set_weights(weight_pre)
             logits = softmax_logits(embedding)
-            output_fp32 = keras.layers.Activation('softmax', dtype='float32', name=self.softmax)(logits)
+            output_fp32 = keras.layers.Activation("softmax", dtype="float32", name=self.softmax)(logits)
             self.model = keras.models.Model(inputs, output_fp32)
         elif type == self.arcface and (self.model == None or self.model.output_names[-1] != self.arcface):
             print(">>>> Add arcface layer, loss_top_k=%d..." % (loss_top_k))
             arcface_logits = models.NormDense(
-                self.classes, name=self.arcface + "_logits", loss_top_k=loss_top_k, kernel_regularizer=output_kernel_regularizer
+                self.classes, name=self.arcface, loss_top_k=loss_top_k, kernel_regularizer=output_kernel_regularizer, dtype="float32",
             )
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
                 arcface_logits.build(embedding.shape)
@@ -241,12 +235,12 @@ class Train:
                 if len(weight_cur) == len(weight_pre) and weight_cur[0].shape == weight_pre[0].shape:
                     print(">>>> Reload previous %s weight..." % (self.model.output_names[-1]))
                     arcface_logits.set_weights(weight_pre)
-            logits = arcface_logits(embedding)
-            output_fp32 = keras.layers.Activation('linear', dtype='float32', name=self.arcface)(logits)
+            output_fp32 = arcface_logits(embedding)
+            # output_fp32 = keras.layers.Activation('linear', dtype='float32', name=self.arcface)(output_fp32)
             self.model = keras.models.Model(inputs, output_fp32)
         elif type in [self.triplet, self.center, self.distill]:
-            output_fp32 = keras.layers.Activation('linear', dtype='float32', name=type + "_embedding")(embedding)
-            self.model = keras.models.Model(inputs, output_fp32)
+            self.model = self.basic_model
+            self.model.output_names[0] = type + "_embedding"
         else:
             print(">>>> Will NOT change model output layer.")
 
@@ -257,13 +251,11 @@ class Train:
             print(">>>> Add a dense layer to map embedding: student %d --> teacher %d" % (emb_shape, self.teacher_emb_size))
             embedding = self.basic_model.outputs[0]
             if self.distill_emb_map_layer is None:
-                self.distill_emb_map_layer = keras.layers.Dense(self.teacher_emb_size, use_bias=False, name="distill_map")
+                self.distill_emb_map_layer = keras.layers.Dense(self.teacher_emb_size, use_bias=False, name="distill_map", dtype="float32")
             emb_map_output = self.distill_emb_map_layer(embedding)
-            emb_map_output_fp32 = keras.layers.Activation('linear', dtype='float32')(emb_map_output)
-            self.model = keras.models.Model(self.model.inputs[0], [emb_map_output_fp32] + self.model.outputs)
+            self.model = keras.models.Model(self.model.inputs[0], [emb_map_output] + self.model.outputs)
         else:
-            emb_map_output_fp32 = keras.layers.Activation('linear', dtype='float32')(self.basic_model.outputs[0])
-            self.model = keras.models.Model(self.model.inputs[0],  [emb_map_output_fp32] + self.model.outputs)
+            self.model = keras.models.Model(self.model.inputs[0], self.basic_model.outputs + self.model.outputs)
 
         self.model.output_names[0] = emb_type + "_embedding"
         for id, nn in enumerate(nns):
@@ -338,7 +330,18 @@ class Train:
             self.data_path = data_path
 
     def train_single_scheduler(
-        self, epoch, loss=None, initial_epoch=0, lossWeight=1, optimizer=None, bottleneckOnly=False, lossTopK=1, type=None, embLossTypes=None, embLossWeights=1, tripletAlpha=0.35
+        self,
+        epoch,
+        loss=None,
+        initial_epoch=0,
+        lossWeight=1,
+        optimizer=None,
+        bottleneckOnly=False,
+        lossTopK=1,
+        type=None,
+        embLossTypes=None,
+        embLossWeights=1,
+        tripletAlpha=0.35,
     ):
         emb_loss_names, emb_loss_weights = self.__init_emb_losses__(embLossTypes, embLossWeights)
 
