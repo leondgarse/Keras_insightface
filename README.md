@@ -17,6 +17,7 @@
   	- [Environment](#environment)
   	- [Beforehand Data Prepare](#beforehand-data-prepare)
   	- [Training scripts](#training-scripts)
+  	- [Mixed precision float16](#mixed-precision-float16)
   	- [Learning rate](#learning-rate)
   	- [Other backbones](#other-backbones)
   	- [Optimizer with weight decay](#optimizer-with-weight-decay)
@@ -328,6 +329,12 @@
     ```py
     # Change evaluating strategy to `on_epoch_end`, as long as `on_batch_end` for every `1000` batch.
     tt = train.Train(data_path, 'keras_mobilefacenet_256.h5', eval_paths, basic_model=basic_model, eval_freq=1000)
+    ```
+## Mixed precision float16
+  - [Tensorflow Guide - Mixed precision](https://www.tensorflow.org/guide/mixed_precision)
+  - Enable `Mixed precision` at the beginning of all functional code by
+    ```py
+    keras.mixed_precision.set_global_policy("mixed_float16")
     ```
 ## Learning rate
   - `train.Train` parameters `lr_base` / `lr_decay` / `lr_decay_steps` set different decay strategies and their parameters.
