@@ -41,8 +41,9 @@
   | [Resnet34](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [CASIA, E40](#comparing-resnet34-with-original-mxnet-version)  | 0.99417 | 0.95086 | 0.94733 |          |          |
   | [Mobilenet emb256](https://drive.google.com/file/d/1i0B6Hy1clGgfeOYtUXVPNveDEe2DTIBa/view?usp=sharing) | [Emore, E110](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-286398) | 0.996000 | 0.951714 | 0.959333 | 0.887147 | 0.911745 |
   | [Mobilenet_distill emb512](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/30) | 0.997    | 0.964    | 0.972833 | 0.9148   | 0.935573 |
-  | [Ghostnet emb512](https://drive.google.com/file/d/1--ZRa8v3j5KKEcHzwTVMV6F8gsRr0mLB/view?usp=sharing) | [MS1MV3, E49](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-322997) | 0.997167 | 0.959429 | 0.969333 | 0.912463 | 0.934499 |
-  | [Botnet50 relu GDC](https://drive.google.com/file/d/12zD6Lba55WEHAcVAuCinJbaptrxH1pIW/view?usp=sharing) | [MS1MV3, E52](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-417580) | 0.9985 | 0.980286 | 0.979667 | 0.940019 | 0.95577 |
+  | [Ghostnet strides 2](https://drive.google.com/file/d/1--ZRa8v3j5KKEcHzwTVMV6F8gsRr0mLB/view?usp=sharing) | [MS1MV3, E49](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-322997) | 0.997167 | 0.959429 | 0.969333 | 0.912463 | 0.934499 |
+  | [Ghostnet strides 1](https://drive.google.com/file/d/18RzKJDcrpdeYlJ70sMsYBOXwg4nh3EbA/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-583252) | 0.997833 | 0.978286 | 0.980000 | 0.931159 | 0.94943 |
+  | [Botnet50 relu GDC](https://drive.google.com/file/d/12zD6Lba55WEHAcVAuCinJbaptrxH1pIW/view?usp=sharing) | [MS1MV3, E52](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-583259) | 0.9985 | 0.980286 | 0.979667 | 0.940019 | 0.95577 |
   | [se_mobilefacenet](https://drive.google.com/file/d/1AjoIxOkiKIzAGml5Jdpq05Y4vM4Ke-Kj/view?usp=sharing) | Emore, E100 | 0.996333 | 0.964714 | 0.958833 | | |
   | [ResNet101V2](https://drive.google.com/file/d/1-5YHQmT1iNI5-jKogJ1-sh94CS7ptHgb/view?usp=sharing)      | Emore, E40 | 0.997833 | 0.946 | 0.972833 | | |
   | [ResNeSt101](https://drive.google.com/file/d/1RVjTRhE8Evqyjl83EVBMOjInxtDtxGyH/view?usp=sharing)       | Emore, E100 | 0.997667 | 0.981000 | 0.973333 | | |
@@ -111,23 +112,24 @@
   - **python and tensorflow version**
     ```py
     # $ ipython
-    Python 3.7.6 | packaged by conda-forge | (default, Mar 23 2020, 23:03:20)
+    Python 3.8.5 (default, Sep  4 2020, 07:30:14)
     In [1]: tf.__version__
-    Out[1]: '2.4.0'
+    Out[1]: '2.4.1'
 
     In [2]: import tensorflow_addons as tfa
     In [3]: tfa.__version__
-    Out[3]: '0.12.0-dev'
+    Out[3]: '0.12.1'
     ```
     Or `tf-nightly`
     ```sh
-    conda create -n tf-nightly
+    # conda create -n tf-nightly python==3.7.6
+    conda create -n tf-nightly python==3.8.5
     conda activate tf-nightly
     pip install tf-nightly tfa-nightly glob2 pandas tqdm scikit-image scikit-learn ipython
     ```
     ```py
     In [1]: tf.__version__
-    Out[1]: '2.5.0-dev20201218'
+    Out[1]: '2.6.0-dev20210401'
     ```
   - **Default import for ipython**
     ```py
@@ -336,6 +338,7 @@
     ```py
     keras.mixed_precision.set_global_policy("mixed_float16")
     ```
+  - In most training case, it will have a `~2x` speedup and less GPU memory consumption.
 ## Learning rate
   - `train.Train` parameters `lr_base` / `lr_decay` / `lr_decay_steps` set different decay strategies and their parameters.
   - `tt.lr_scheduler` can also be used to set learning rate scheduler directly.

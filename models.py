@@ -96,7 +96,7 @@ def buildin_models(
     elif name_lower == "ghostnet":
         from backbones import ghost_model
 
-        xx = ghost_model.GhostNet(input_shape=input_shape, include_top=False, width=1.3)
+        xx = ghost_model.GhostNet(input_shape=input_shape, include_top=False, width=1.3, **kwargs)
     elif name_lower.startswith("botnet"):
         from backbones import botnet
 
@@ -105,7 +105,7 @@ def buildin_models(
         xx = model_class(include_top=False, input_shape=input_shape, strides=1, **kwargs)
     elif hasattr(keras.applications, name):
         model_class = getattr(keras.applications, name)
-        xx = model_class(weights=weights, include_top=False, input_shape=input_shape)
+        xx = model_class(weights=weights, include_top=False, input_shape=input_shape, **kwargs)
     else:
         return None
     xx.trainable = True
@@ -115,6 +115,7 @@ def buildin_models(
         for ii in xx.layers:
             if isinstance(ii, keras.layers.BatchNormalization):
                 ii.momentum, ii.epsilon = bn_momentum, bn_epsilon
+        xx = keras.models.clone_model(xx)
 
     inputs = xx.inputs[0]
     nn = xx.outputs[0]
@@ -130,6 +131,13 @@ def buildin_models(
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
         nn = keras.layers.Flatten()(nn)
+        nn = keras.layers.Dense(emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal")(nn)
+    elif output_layer == "GAP":
+        """ GlobalAveragePooling2D """
+        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
+        if dropout > 0 and dropout < 1:
+            nn = keras.layers.Dropout(dropout)(nn)
+        nn = keras.layers.GlobalAveragePooling2D()(nn)
         nn = keras.layers.Dense(emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal")(nn)
     else:
         """ GDC """
@@ -209,14 +217,17 @@ def replace_ReLU_with_PReLU(model, target_activation="PReLU", **kwargs):
     def convert_ReLU(layer):
         # print(layer.name)
         if isinstance(layer, ReLU) or (isinstance(layer, Activation) and layer.activation == keras.activations.relu):
-            print(">>>> Convert ReLU:", layer.name)
             if target_activation == "PReLU":
                 layer_name = layer.name.replace("_relu", "_prelu")
-                return PReLU(shared_axes=[1, 2], name=layer_name, **kwargs)
+                print(">>>> Convert ReLU:", layer.name, "-->", layer_name)
+                # Default initial value in mxnet and pytorch is 0.25
+                return PReLU(shared_axes=[1, 2], alpha_initializer=tf.initializers.Constant(0.25), name=layer_name, **kwargs)
             if target_activation == "swish":
                 layer_name = layer.name.replace("_relu", "_swish")
+                print(">>>> Convert ReLU:", layer.name, "-->", layer_name)
                 return Activation(activation="swish", name=layer_name, **kwargs)
             else:
+                print(">>>> Convert ReLU:", layer.name)
                 return target_activation(**kwargs)
         return layer
 
