@@ -510,12 +510,13 @@
     | ------------------ | --------- | --------- |
     | mobilenet_v3_small | 2.80058   | 4.211     |
     | mobilenet_v3_large | 6.95015   | 10.025    |
-    | ghostnet           | 8.06546   | 11.125    |
+    | ghostnet strides=2 | 8.06546   | 11.125    |
     | mobilenet          | 7.4905    | 11.836    |
     | se_mobilefacenet   | 1.88518   | 18.713    |
     | mobilefacenet      | 1.84267   | 20.443    |
     | EB0                | 9.40449   | 22.054    |
     | EB1                | 14.4268   | 31.881    |
+    | ghostnet strides=1 | 8.16576   | 46.142    |
     | mobilenet_m1       | 7.02651   | 52.648    |
 ***
 

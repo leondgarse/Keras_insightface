@@ -18,7 +18,7 @@ from sklearn.decomposition import PCA
 
 
 class eval_callback(tf.keras.callbacks.Callback):
-    def __init__(self, basic_model, test_bin_file, batch_size=128, save_model=None, eval_freq=1, flip=True, PCA_acc=True):
+    def __init__(self, basic_model, test_bin_file, batch_size=128, save_model=None, eval_freq=1, flip=True, PCA_acc=False):
         super(eval_callback, self).__init__()
         bins, issame_list = np.load(test_bin_file, encoding="bytes", allow_pickle=True)
         ds = tf.data.Dataset.from_tensor_slices(bins)
@@ -101,9 +101,7 @@ class eval_callback(tf.keras.callbacks.Callback):
 
         tt = np.sort(dists[self.test_issame[: dists.shape[0]]])
         ff = np.sort(dists[np.logical_not(self.test_issame[: dists.shape[0]])])
-        self.tt = tt
-        self.ff = ff
-        self.embs = embs
+        # self.tt, self.ff, self.embs = tt, ff, embs
 
         t_steps = int(0.1 * ff.shape[0])
         acc_count = np.array([(tt > vv).sum() + (ff <= vv).sum() for vv in ff[-t_steps:]])
@@ -119,8 +117,6 @@ class eval_callback(tf.keras.callbacks.Callback):
                 "\n>>>> %s evaluation max accuracy: %f, thresh: %f, previous max accuracy: %f, PCA accuray = %f ± %f"
                 % (self.test_names, acc_max, self.acc_thresh, self.max_accuracy, acc2, std2)
             )
-            acc_max = acc2
-            self.cur_acc = acc2
         else:
             tf.print(
                 "\n>>>> %s evaluation max accuracy: %f, thresh: %f, previous max accuracy: %f"

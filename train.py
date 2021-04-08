@@ -6,10 +6,10 @@ import models
 import myCallbacks
 import tensorflow as tf
 from tensorflow import keras
-import multiprocessing as mp
+# import multiprocessing as mp
 
-if mp.get_start_method() != "forkserver":
-    mp.set_start_method("forkserver", force=True)
+# if mp.get_start_method() != "forkserver":
+#     mp.set_start_method("forkserver", force=True)
 
 gpus = tf.config.experimental.list_physical_devices("GPU")
 for gpu in gpus:
@@ -44,7 +44,7 @@ class Train:
         custom_objects.update(dict([ii for ii in getmembers(losses) if isfunction(ii[1]) or isclass(ii[1])]))
         custom_objects.update({"NormDense": models.NormDense})
 
-        self.model, self.basic_model, self.save_path, self.default_type = None, None, save_path, None
+        self.model, self.basic_model, self.save_path, self.inited_from_model = None, None, save_path, False
         if isinstance(model, str):
             if model.endswith(".h5") and os.path.exists(model):
                 print(">>>> Load model from h5 file: %s..." % model)
@@ -57,7 +57,7 @@ class Train:
             self.model = model
             embedding_layer = basic_model if basic_model is not None else self.__search_embedding_layer__(self.model)
             self.basic_model = keras.models.Model(self.model.inputs[0], self.model.layers[embedding_layer].output)
-            self.default_type = "MODEL"
+            self.inited_from_model = True
             print(">>>> Specified model structure, output layer will keep from changing")
         elif isinstance(basic_model, str):
             if basic_model.endswith(".h5") and os.path.exists(basic_model):
@@ -351,8 +351,8 @@ class Train:
             else:
                 return
 
-        if type is None:
-            type = self.default_type or self.__init_type_by_loss__(loss)
+        if type is None and not self.inited_from_model:
+            type = self.__init_type_by_loss__(loss)
         print(">>>> Train %s..." % type)
         self.__init_dataset__(type, emb_loss_names)
         if self.is_distill_ds == False and type == self.distill:
@@ -368,7 +368,8 @@ class Train:
         self.callbacks = self.my_evals + self.custom_callbacks + basic_callbacks
         # self.basic_model.trainable = True
         self.__init_optimizer__(optimizer)
-        self.__init_model__(type, lossTopK)
+        if not self.inited_from_model:
+            self.__init_model__(type, lossTopK)
 
         # loss_weights
         self.cur_loss, self.loss_weights = [loss], {ii: lossWeight for ii in self.model.output_names}
