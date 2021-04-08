@@ -33,8 +33,8 @@
 
 # Current accuracy
   - Model structures may change due to changing default behavior of building models.
-  - `IJBB` and `IJBC` is scored at `TAR@FAR=1e-4`
-  - Links in `Model backbone` is for `h5` models in Google drive. Links in `Training` is for training details.
+  - `IJBB` and `IJBC` are scored at `TAR@FAR=1e-4`
+  - Links in `Model backbone` are `h5` models in Google drive. Links in `Training` are training details.
 
   | Model backbone | Training | lfw      | cfp_fp   | agedb_30 | IJBB     | IJBC     |
   | -------------- | ----- | -------- | -------- | -------- | -------- | -------- |
@@ -55,6 +55,7 @@
     - In `Resnet50` case , blocks number changes from `[3, 4, 6, 3]` to `[3, 4, 14, 3]`.
     - Remove `bias` from `Conv2D` layers.
     - Use `PReLU` instead of `relu`.
+    - Use `strides=1` instead of `strides=2` in the first `Conv2d` layer.
   - **Original MXNet version** Train `Resnet34` on `CASIA` dataset.
     - `CASIA` dataset contains `490623` images belongs to `10572` classes, for `batch_size = 512`, means `959 steps` per epoch.
     - Learning rate decay on `epochs = [20, 30]`, means `--lr-steps '19180,28770'`.
