@@ -17,23 +17,7 @@ def print_buildin_models():
         end="",
     )
 
-
-# MXNET: bn_momentum=0.9, bn_epsilon=2e-5, TF default: bn_momentum=0.99, bn_epsilon=0.001, PyTorch default: momentum=0.1, eps=1e-05
-# MXNET: use_bias=True, scale=False, cavaface.pytorch: use_bias=False, scale=True
-def buildin_models(
-    name,
-    dropout=1,
-    emb_shape=512,
-    input_shape=(112, 112, 3),
-    output_layer="GDC",
-    bn_momentum=0.99,
-    bn_epsilon=0.001,
-    add_pointwise_conv=False,
-    use_bias=False,
-    scale=True,
-    weights="imagenet",
-    **kwargs
-):
+def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet", **kwargs):
     name_lower = name.lower()
     """ Basic model """
     if name_lower == "mobilenet":
@@ -109,6 +93,31 @@ def buildin_models(
     else:
         return None
     xx.trainable = True
+    return xx
+
+
+# MXNET: bn_momentum=0.9, bn_epsilon=2e-5, TF default: bn_momentum=0.99, bn_epsilon=0.001, PyTorch default: momentum=0.1, eps=1e-05
+# MXNET: use_bias=True, scale=False, cavaface.pytorch: use_bias=False, scale=True
+def buildin_models(
+    stem_model,
+    dropout=1,
+    emb_shape=512,
+    input_shape=(112, 112, 3),
+    output_layer="GDC",
+    bn_momentum=0.99,
+    bn_epsilon=0.001,
+    add_pointwise_conv=False,
+    use_bias=False,
+    scale=True,
+    weights="imagenet",
+    **kwargs
+):
+    if isinstance(stem_model, str):
+        xx = __init_model_from_name__(stem_model, input_shape, weights, **kwargs)
+        name = stem_model
+    else:
+        name = stem_model.name
+        xx = stem_model
 
     if bn_momentum != 0.99 or bn_epsilon != 0.001:
         print(">>>> Change BatchNormalization momentum and epsilon default value.")
@@ -135,9 +144,9 @@ def buildin_models(
     elif output_layer == "GAP":
         """ GlobalAveragePooling2D """
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
+        nn = keras.layers.GlobalAveragePooling2D()(nn)
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
-        nn = keras.layers.GlobalAveragePooling2D()(nn)
         nn = keras.layers.Dense(emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal")(nn)
     else:
         """ GDC """
