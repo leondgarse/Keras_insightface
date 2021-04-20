@@ -20,7 +20,7 @@
   	- [Mixed precision float16](#mixed-precision-float16)
   	- [Learning rate](#learning-rate)
   	- [Other backbones](#other-backbones)
-  	- [Optimizer with weight decay](#optimizer-with-weight-decay)
+  	- [Optimizers](#optimizers)
   	- [Multi GPU train using horovod or distribute strategy](#multi-gpu-train-using-horovod-or-distribute-strategy)
   - [TFLite model inference time test on ARM64](#tflite-model-inference-time-test-on-arm64)
   - [Sub Center ArcFace](#sub-center-arcface)
@@ -77,7 +77,7 @@
     data_path = data_basic_path + 'faces_casia_112x112_folders'
     eval_paths = [data_basic_path + ii for ii in ['faces_casia/lfw.bin', 'faces_casia/cfp_fp.bin', 'faces_casia/agedb_30.bin']]
 
-    basic_model = models.buildin_models("r34", dropout=0.4, emb_shape=512, output_layer='E', bn_momentum=0.9, bn_epsilon=2e-5)
+    basic_model = models.buildin_models("r34", dropout=0.4, emb_shape=512, output_layer='E', bn_momentum=0.9, bn_epsilon=2e-5, use_bias=True, scale=False)
     basic_model = models.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=True)
     tt = train.Train(data_path, save_path='resnet34_MXNET_E_SGD_REG_1e3_lr1e1_random0_arc_S32_E1_BS512_casia.h5',
         eval_paths=eval_paths, basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
@@ -442,9 +442,9 @@
     mm = se_resnext.SEResNextImageNet(weights='imagenet', input_shape=(112, 112, 3), include_top=False)
     ```
     It's TOO slow training a `se_resnext 101`，takes almost 4 times longer than `ResNet101V2`.
-## Optimizer with weight decay
+## Optimizers
   - [PDF DECOUPLED WEIGHT DECAY REGULARIZATION](https://arxiv.org/pdf/1711.05101.pdf)
-  - [tensorflow_addons](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/AdamW) provides `SGDW` / `AdamW`.
+  - **SGDW / AdamW** [tensorflow_addons AdamW](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/AdamW).
     ```py
     # !pip install tensorflow-addons
     !pip install tfa-nightly
@@ -459,7 +459,16 @@
     sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "epoch": 60, "optimizer": opt}]
     ```
     The different behavior of `mx.optimizer.SGD weight_decay` / `tfa.optimizers.SGDW weight_decay` / `L2_regulalizer` is explained [here the discussion](https://github.com/leondgarse/Keras_insightface/discussions/19).
-  - [Train test on cifar10](https://colab.research.google.com/drive/1tD2OrnrYtFPC7q_i62b8al1o3qelU-Vi?usp=sharing)
+  - [Train test of SGDW on cifar10](https://colab.research.google.com/drive/1tD2OrnrYtFPC7q_i62b8al1o3qelU-Vi?usp=sharing)
+  - **RAdam / Lookahead / Ranger optimizer** [tensorflow_addons RectifiedAdam](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/RectifiedAdam)
+    ```py
+    # Rectified Adam,a.k.a. RAdam, [ON THE VARIANCE OF THE ADAPTIVE LEARNING RATE AND BEYOND](https://arxiv.org/pdf/1908.03265v1.pdf)
+    optimizer = tfa.optimizers.RectifiedAdam()
+    # SGD with Lookahead [Lookahead Optimizer: k steps forward, 1 step back](https://arxiv.org/pdf/1907.08610v1.pdf)
+    optmizer = tfa.optimizers.Lookahead(keras.optimizers.SGD(0.1))
+    # Ranger [Gradient Centralization: A New Optimization Technique for Deep Neural Networks](https://arxiv.org/pdf/2004.01461v2.pdf)
+    optmizer = tfa.optimizers.Lookahead(tfa.optimizers.RectifiedAdam()) # Ranger []()
+    ```
 ## Multi GPU train using horovod or distribute strategy
   - **Horovod** usage is still under test. [Tensorflow multi GPU training using distribute strategies vs Horovod](https://github.com/leondgarse/Keras_insightface/discussions/17)
   - Add an overall `tf.distribute.MirroredStrategy().scope()` `with` block. This is just working in my case... The `batch_size` will be multiplied by `count of GPUs`.
@@ -739,7 +748,8 @@
 # Related Projects
   - [TensorFlow Addons Losses: TripletSemiHardLoss](https://www.tensorflow.org/addons/tutorials/losses_triplet)
   - [TensorFlow Addons Layers: WeightNormalization](https://www.tensorflow.org/addons/tutorials/layers_weightnormalization)
-  - [deepinsight/insightface](https://github.com/deepinsight/insightface)
+  - [Github deepinsight/insightface](https://github.com/deepinsight/insightface)
+  - [Github cavalleria/cavaface.pytorch](https://github.com/cavalleria/cavaface.pytorch)
   - [Github titu1994/keras-squeeze-excite-network](https://github.com/titu1994/keras-squeeze-excite-network)
   - [Github qubvel/EfficientNet](https://github.com/qubvel/efficientnet)
   - [Github QiaoranC/tf_ResNeSt_RegNet_model](https://github.com/QiaoranC/tf_ResNeSt_RegNet_model)
