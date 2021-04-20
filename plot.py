@@ -43,6 +43,8 @@ def set_scale(scale):
 
         Scale, scale = scale, scale / Scale
         mpl.rcParams["axes.titlesize"] *= scale
+        mpl.rcParams["axes.labelsize"] *= scale
+        mpl.rcParams["axes.labelpad"] *= scale
         mpl.rcParams["legend.fontsize"] *= scale
         mpl.rcParams["font.size"] *= scale
 

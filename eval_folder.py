@@ -166,7 +166,7 @@ def plot_tpr_far(score, label):
         import matplotlib.pyplot as plt
 
         fig = plt.figure()
-        plt.plot(fpr, tpr, lw=1, label="[%s (AUC = %0.4f%%)]" % (result_name, roc_auc * 100))
+        plt.plot(fpr, tpr, lw=1, label="AUC = %0.4f%%" % (roc_auc * 100))
         plt.xlim([10 ** -6, 0.1])
         plt.xscale("log")
         plt.xticks(fpr_show)

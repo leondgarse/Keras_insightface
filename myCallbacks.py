@@ -205,6 +205,7 @@ def scheduler_warmup(lr_target, cur_epoch, lr_init=0.1, epochs=10):
 
 
 def exp_scheduler(epoch, lr_base, decay_rate=0.05, lr_min=0, warmup=10):
+    # decayed_learning_rate = learning_rate * decay_rate ^ (global_step / decaysteps)
     lr = lr_base if epoch < warmup else lr_base * np.exp(decay_rate * (warmup - epoch))
     # lr = scheduler_warmup(lr_base, epoch) if epoch < warmup else lr_base * np.exp(decay_rate * (warmup - epoch))
     lr = lr_min if lr < lr_min else lr
