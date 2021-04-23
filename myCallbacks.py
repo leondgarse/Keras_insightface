@@ -89,25 +89,6 @@ class OptimizerWeightDecay(keras.callbacks.Callback):
             print("Weight decay is {}".format(wd))
 
 
-class ConstantDecayScheduler(keras.callbacks.Callback):
-    def __init__(self, lr_base, lr_decay_steps, decay_rate=0.1):
-        super(ConstantDecayScheduler, self).__init__()
-        self.lr_decay_steps, self.lr_base, self.decay_rate = lr_decay_steps, lr_base, decay_rate
-
-    def on_epoch_begin(self, step, log=None):
-        lr = self.constant_decay(step)
-        if self.model is not None:
-            K.set_value(self.model.optimizer.lr, lr)
-        print("\nLearning rate for iter {} is {}".format(step + 1, lr))
-        return lr
-
-    def constant_decay(self, cur_step):
-        for id, ii in enumerate(self.lr_decay_steps):
-            if cur_step < ii:
-                return self.lr_base * self.decay_rate ** id
-        return self.lr_base * self.decay_rate ** len(self.lr_decay_steps)
-
-
 class CosineLrScheduler(keras.callbacks.Callback):
     def __init__(
         self, lr_base, first_restart_step, m_mul=0.5, t_mul=2.0, lr_min=1e-5, warmup=0, steps_per_epoch=-1, keep_as_min=1,
@@ -212,6 +193,11 @@ def exp_scheduler(epoch, lr_base, decay_rate=0.05, lr_min=0, warmup=10):
     print("\nLearning rate for iter {} is {}".format(epoch + 1, lr))
     return lr
 
+def constant_scheduler(epoch, lr_base, lr_decay_steps, decay_rate=0.1):
+    lr = lr_base * decay_rate ** np.sum(epoch >= np.array(lr_decay_steps))
+    print("\nLearning rate for iter {} is {}".format(epoch + 1, lr))
+    return lr
+
 
 def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_decay=0.05, lr_min=0, lr_decay_steps=0):
     checkpoint_base = "./checkpoints"
@@ -223,7 +209,7 @@ def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_de
 
     if isinstance(lr_decay_steps, list):
         # Constant decay on epoch
-        lr_scheduler = ConstantDecayScheduler(lr_base=lr, lr_decay_steps=lr_decay_steps, decay_rate=lr_decay)
+        lr_scheduler = LearningRateScheduler(lambda epoch: constant_scheduler(epoch, lr, lr_decay_steps, lr_decay))
     elif lr_decay_steps > 1:
         # Cosine decay on epoch / batch
         lr_scheduler = CosineLrScheduler(lr_base=lr, first_restart_step=lr_decay_steps, m_mul=lr_decay, lr_min=lr_min)

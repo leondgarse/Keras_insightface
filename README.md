@@ -345,8 +345,8 @@
   - `tt.lr_scheduler` can also be used to set learning rate scheduler directly.
   - **lr_decay_steps** controls different decay types.
     - Default is `Exponential decay` with `lr_base=0.001, lr_decay=0.05`.
-    - For `ConstantDecayScheduler`, `steps_per_epoch` is set after dataset been inited.
-    - For `ConstantDecayScheduler`, default value of `keep_as_min=1`, means will train `1 epoch` using `lr_min` before each restart.
+    - For `CosineLrScheduler`, `steps_per_epoch` is set after dataset been inited.
+    - For `CosineLrScheduler`, default value of `keep_as_min=1`, means will train `1 epoch` using `lr_min` before each restart.
 
     | lr_decay_steps | decay type                                       | mean of lr_decay_steps    | mean of lr_decay |
     | -------------- | ------------------------------------------------ | ------------------------- | ---------------- |
@@ -371,13 +371,12 @@
     ```
   - **Example learning rates**
     ```py
-    from myCallbacks import exp_scheduler, CosineLrScheduler, ConstantDecayScheduler
+    from myCallbacks import exp_scheduler, CosineLrScheduler, constant_scheduler
     epochs = np.arange(60)
     plt.figure(figsize=(14, 6))
     plt.plot(epochs, [exp_scheduler(ii, 0.001, 0.1) for ii in epochs], label="lr=0.001, decay=0.1")
     plt.plot(epochs, [exp_scheduler(ii, 0.001, 0.05) for ii in epochs], label="lr=0.001, decay=0.05")
-    dd = ConstantDecayScheduler(0.001, lr_decay_steps=[10, 20, 30, 40], decay_rate=0.1)
-    plt.plot(epochs, [dd.on_epoch_begin(ii) for ii in epochs], label="Constant, lr=0.001, decay_steps=[10, 20, 30, 40], decay_rate=0.1")
+    plt.plot(epochs, [constant_scheduler(ii, 0.001, [10, 20, 30, 40], 0.1) for ii in epochs], label="Constant, lr=0.001, decay_steps=[10, 20, 30, 40], decay_rate=0.1")
 
     steps_per_epoch = 100
     batchs = np.arange(60 * steps_per_epoch)
@@ -443,7 +442,7 @@
     ```
     It's TOO slow training a `se_resnext 101`，takes almost 4 times longer than `ResNet101V2`.
 ## Optimizers
-  - [PDF DECOUPLED WEIGHT DECAY REGULARIZATION](https://arxiv.org/pdf/1711.05101.pdf)
+
   - **SGDW / AdamW** [tensorflow_addons AdamW](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/AdamW).
     ```py
     # !pip install tensorflow-addons
@@ -458,16 +457,17 @@
     opt = tfa.optimizers.AdamW(weight_decay=5e-5)
     sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": True, "epoch": 60, "optimizer": opt}]
     ```
-    The different behavior of `mx.optimizer.SGD weight_decay` / `tfa.optimizers.SGDW weight_decay` / `L2_regulalizer` is explained [here the discussion](https://github.com/leondgarse/Keras_insightface/discussions/19).
-  - [Train test of SGDW on cifar10](https://colab.research.google.com/drive/1tD2OrnrYtFPC7q_i62b8al1o3qelU-Vi?usp=sharing)
-  - **RAdam / Lookahead / Ranger optimizer** [tensorflow_addons RectifiedAdam](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/RectifiedAdam)
+    - The different behavior of `mx.optimizer.SGD weight_decay` / `tfa.optimizers.SGDW weight_decay` / `L2_regulalizer` is explained [here the discussion](https://github.com/leondgarse/Keras_insightface/discussions/19).
+    - [PDF DECOUPLED WEIGHT DECAY REGULARIZATION](https://arxiv.org/pdf/1711.05101.pdf)
+    - [Train test of SGDW on cifar10](https://colab.research.google.com/drive/1tD2OrnrYtFPC7q_i62b8al1o3qelU-Vi?usp=sharing)
+  - **RAdam / Lookahead / Ranger optimizer** [tensorflow_addons RectifiedAdam](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/RectifiedAdam).
     ```py
     # Rectified Adam,a.k.a. RAdam, [ON THE VARIANCE OF THE ADAPTIVE LEARNING RATE AND BEYOND](https://arxiv.org/pdf/1908.03265v1.pdf)
     optimizer = tfa.optimizers.RectifiedAdam()
     # SGD with Lookahead [Lookahead Optimizer: k steps forward, 1 step back](https://arxiv.org/pdf/1907.08610v1.pdf)
     optmizer = tfa.optimizers.Lookahead(keras.optimizers.SGD(0.1))
     # Ranger [Gradient Centralization: A New Optimization Technique for Deep Neural Networks](https://arxiv.org/pdf/2004.01461v2.pdf)
-    optmizer = tfa.optimizers.Lookahead(tfa.optimizers.RectifiedAdam()) # Ranger []()
+    optmizer = tfa.optimizers.Lookahead(tfa.optimizers.RectifiedAdam())
     ```
 ## Multi GPU train using horovod or distribute strategy
   - **Horovod** usage is still under test. [Tensorflow multi GPU training using distribute strategies vs Horovod](https://github.com/leondgarse/Keras_insightface/discussions/17)
