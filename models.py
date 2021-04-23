@@ -17,6 +17,7 @@ def print_buildin_models():
         end="",
     )
 
+
 def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet", **kwargs):
     name_lower = name.lower()
     """ Basic model """
@@ -110,6 +111,7 @@ def buildin_models(
     use_bias=False,
     scale=True,
     weights="imagenet",
+    sam_rho=0,
     **kwargs
 ):
     if isinstance(stem_model, str):
@@ -162,8 +164,57 @@ def buildin_models(
     # `fix_gamma=True` in MXNet means `scale=False` in Keras
     embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, scale=scale)(nn)
     embedding_fp32 = keras.layers.Activation("linear", dtype="float32", name="embedding")(embedding)
-    basic_model = keras.models.Model(inputs, embedding_fp32, name=xx.name)
+    if sam_rho == 0:
+        basic_model = keras.models.Model(inputs, embedding_fp32, name=xx.name)
+    else:
+        basic_model = SAMModel(inputs, embedding_fp32, rho=sam_rho, name=xx.name)
     return basic_model
+
+
+class NormDense(keras.layers.Layer):
+    def __init__(self, units=1000, kernel_regularizer=None, loss_top_k=1, **kwargs):
+        super(NormDense, self).__init__(**kwargs)
+        self.init = keras.initializers.glorot_normal()
+        self.units, self.loss_top_k = units, loss_top_k
+        self.kernel_regularizer = keras.regularizers.get(kernel_regularizer)
+        self.supports_masking = True
+
+    def build(self, input_shape):
+        self.w = self.add_weight(
+            name="norm_dense_w",
+            shape=(input_shape[-1], self.units * self.loss_top_k),
+            initializer=self.init,
+            trainable=True,
+            regularizer=self.kernel_regularizer,
+        )
+        super(NormDense, self).build(input_shape)
+
+    def call(self, inputs, **kwargs):
+        norm_w = K.l2_normalize(self.w, axis=0)
+        inputs = K.l2_normalize(inputs, axis=1)
+        output = K.dot(inputs, norm_w)
+        if self.loss_top_k > 1:
+            output = K.reshape(output, (-1, self.units, self.loss_top_k))
+            output = K.max(output, axis=2)
+        return output
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], self.units)
+
+    def get_config(self):
+        config = super(NormDense, self).get_config()
+        config.update(
+            {
+                "units": self.units,
+                "loss_top_k": self.loss_top_k,
+                "kernel_regularizer": keras.regularizers.serialize(self.kernel_regularizer),
+            }
+        )
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
 
 
 def add_l2_regularizer_2_model(model, weight_decay, custom_objects={}, apply_to_batch_normal=True):
@@ -235,6 +286,10 @@ def replace_ReLU_with_PReLU(model, target_activation="PReLU", **kwargs):
                 layer_name = layer.name.replace("_relu", "_swish")
                 print(">>>> Convert ReLU:", layer.name, "-->", layer_name)
                 return Activation(activation="swish", name=layer_name, **kwargs)
+            elif target_activation == "aconC":
+                layer_name = layer.name.replace("_relu", "_aconc")
+                print(">>>> Convert ReLU:", layer.name, "-->", layer_name)
+                return AconC()
             else:
                 print(">>>> Convert ReLU:", layer.name)
                 return target_activation(**kwargs)
@@ -243,47 +298,135 @@ def replace_ReLU_with_PReLU(model, target_activation="PReLU", **kwargs):
     return keras.models.clone_model(model, clone_function=convert_ReLU)
 
 
-class NormDense(keras.layers.Layer):
-    def __init__(self, units=1000, kernel_regularizer=None, loss_top_k=1, **kwargs):
-        super(NormDense, self).__init__(**kwargs)
-        self.init = keras.initializers.glorot_normal()
-        self.units, self.loss_top_k = units, loss_top_k
-        self.kernel_regularizer = keras.regularizers.get(kernel_regularizer)
-        self.supports_masking = True
+def aconC(inputs, p1=1, p2=0, beta=1):
+    """
+    - [Github nmaac/acon](https://github.com/nmaac/acon/blob/main/acon.py)
+    - [Activate or Not: Learning Customized Activation, CVPR 2021](https://arxiv.org/pdf/2009.04759.pdf)
+    """
+    p1 = keras.layers.DepthwiseConv2D(1, use_bias=False, depthwise_initializer=tf.initializers.Constant(p1))(inputs)
+    p2 = keras.layers.DepthwiseConv2D(1, use_bias=False, depthwise_initializer=tf.initializers.Constant(p2))(inputs)
+    beta = keras.layers.DepthwiseConv2D(1, use_bias=False, depthwise_initializer=tf.initializers.Constant(beta))(p1)
+
+    return p1 * tf.nn.sigmoid(beta) + p2
+
+class AconC(keras.layers.Layer):
+    def __init__(self, p1=1, p2=0, beta=1, **kwargs):
+        super(AconC, self).__init__(**kwargs)
+        self.p1 = keras.layers.DepthwiseConv2D(1, use_bias=False, depthwise_initializer=tf.initializers.Constant(p1))
+        self.p2 = keras.layers.DepthwiseConv2D(1, use_bias=False, depthwise_initializer=tf.initializers.Constant(p2))
+        self.beta = keras.layers.DepthwiseConv2D(1, use_bias=False, depthwise_initializer=tf.initializers.Constant(beta))
 
     def build(self, input_shape):
-        self.w = self.add_weight(
-            name="norm_dense_w",
-            shape=(input_shape[-1], self.units * self.loss_top_k),
-            initializer=self.init,
-            trainable=True,
-            regularizer=self.kernel_regularizer,
-        )
-        super(NormDense, self).build(input_shape)
+        self.p1.build(input_shape)
+        self.p2.build(input_shape)
+        self.beta.build(input_shape)
+        super(AconC, self).build(input_shape)
 
     def call(self, inputs, **kwargs):
-        norm_w = K.l2_normalize(self.w, axis=0)
-        inputs = K.l2_normalize(inputs, axis=1)
-        output = K.dot(inputs, norm_w)
-        if self.loss_top_k > 1:
-            output = K.reshape(output, (-1, self.units, self.loss_top_k))
-            output = K.max(output, axis=2)
-        return output
+        p1 = self.p1(inputs)
+        p2 = self.p2(inputs)
+        beta = self.beta(p1)
+        return p1 * tf.nn.sigmoid(beta) + p2
 
     def compute_output_shape(self, input_shape):
-        return (input_shape[0], self.units)
+        return input_shape
 
-    def get_config(self):
-        config = super(NormDense, self).get_config()
-        config.update(
-            {
-                "units": self.units,
-                "loss_top_k": self.loss_top_k,
-                "kernel_regularizer": keras.regularizers.serialize(self.kernel_regularizer),
-            }
-        )
-        return config
 
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)
+class SAMModel(tf.keras.models.Model):
+    """
+    Arxiv article: [Sharpness-Aware Minimization for Efficiently Improving Generalization](https://arxiv.org/pdf/2010.01412.pdf)
+    Implementation by: [Keras SAM (Sharpness-Aware Minimization)](https://qiita.com/T-STAR/items/8c3afe3a116a8fc08429)
+    """
+
+    def __init__(self, *args, rho=0.05, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.rho = tf.constant(rho, dtype=tf.float32)
+
+    def train_step(self, data):
+        x, y = data
+
+        # 1st step
+        with tf.GradientTape() as tape:
+            y_pred = self(x, training=True)
+            loss = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
+
+        trainable_vars = self.trainable_variables
+        gradients = tape.gradient(loss, trainable_vars)
+
+        norm = tf.linalg.global_norm(gradients)
+        scale = self.rho / (norm + 1e-12)
+        e_w_list = []
+        for v, grad in zip(trainable_vars, gradients):
+            e_w = grad * scale
+            v.assign_add(e_w)
+            e_w_list.append(e_w)
+
+        # 2nd step
+        with tf.GradientTape() as tape:
+            y_pred_adv = self(x, training=True)
+            loss_adv = self.compiled_loss(y, y_pred_adv, regularization_losses=self.losses)
+        gradients_adv = tape.gradient(loss_adv, trainable_vars)
+        for v, e_w in zip(trainable_vars, e_w_list):
+            v.assign_sub(e_w)
+
+        # optimize
+        self.optimizer.apply_gradients(zip(gradients_adv, trainable_vars))
+
+        self.compiled_metrics.update_state(y, y_pred)
+        return_metrics = {}
+        for metric in self.metrics:
+            result = metric.result()
+            if isinstance(result, dict):
+                return_metrics.update(result)
+            else:
+                return_metrics[metric.name] = result
+        return return_metrics
+
+
+def replace_add_with_stochastic_depth(model, survivals=(1, 0.8)):
+    """
+    - [Deep Networks with Stochastic Depth](https://arxiv.org/pdf/1603.09382.pdf)
+    - [tfa.layers.StochasticDepth](https://www.tensorflow.org/addons/api_docs/python/tfa/layers/StochasticDepth)
+    """
+    from tensorflow_addons.layers import StochasticDepth
+
+    add_layers = [ii.name for ii in model.layers if isinstance(ii, keras.layers.Add)]
+    total_adds = len(add_layers)
+    if isinstance(survivals, float):
+        survivals = [survivals] * total_adds
+    elif isinstance(survivals, (list, tuple)) and len(survivals) == 2:
+        start, end = survivals
+        survivals = [start + (end - start) * ii / (total_adds - 1) for ii in range(total_adds)]
+    survivals_dict = dict(zip(add_layers, survivals))
+
+    def __replace_add_with_stochastic_depth__(layer):
+        if isinstance(layer, keras.layers.Add):
+            layer_name = layer.name
+            new_layer_name = layer_name.replace("_add", "_stochastic_depth")
+            survival_probability = survivals_dict[layer_name]
+            if survival_probability < 1:
+                print("Converting:", layer_name, "-->", new_layer_name, ", survival_probability:", survival_probability)
+                return StochasticDepth(survival_probability, name=new_layer_name)
+            else:
+                return layer
+        return layer
+
+    return keras.models.clone_model(model, clone_function=__replace_add_with_stochastic_depth__)
+
+
+def replace_stochastic_depth_with_add(model, drop_survival=False):
+    from tensorflow_addons.layers import StochasticDepth
+
+    def __replace_stochastic_depth_with_add__(layer):
+        if isinstance(layer, StochasticDepth):
+            layer_name = layer.name
+            new_layer_name = layer_name.replace("_stochastic_depth", "_lambda")
+            survival = layer.survival_probability
+            print("Converting:", layer_name, "-->", new_layer_name, ", survival_probability:", survival)
+            if drop_survival or not survival < 1:
+                return keras.layers.Add(name=new_layer_name)
+            else:
+                return keras.layers.Lambda(lambda xx: xx[0] + xx[1] * survival, name=new_layer_name)
+        return layer
+
+    return keras.models.clone_model(model, clone_function=__replace_stochastic_depth_with_add__)
