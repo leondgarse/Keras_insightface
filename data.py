@@ -193,7 +193,7 @@ def prepare_distill_dataset_tfrecord(
         return img, (embedding, label)
 
     ds = tf.data.TFRecordDataset([data_path])
-    ds = ds.shuffle(buffer_size=batch_size * 1000)
+    ds = ds.shuffle(buffer_size=batch_size * 1000).repeat()
     ds = ds.map(decode_fn, num_parallel_calls=AUTOTUNE)
     ds = ds.batch(batch_size)
     ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
