@@ -41,7 +41,11 @@ class My_history(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
         logs.pop("lr", None)
-        self.history.setdefault("lr", []).append(float(self.model.optimizer.lr))
+        lr = self.model.optimizer.lr
+        if hasattr(lr, 'value'):
+            lr = lr.value()
+
+        self.history.setdefault("lr", []).append(float(lr))
         for k, v in logs.items():
             k = "accuracy" if "accuracy" in k else k
             self.history.setdefault(k, []).append(float(v))

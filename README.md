@@ -442,7 +442,6 @@
     ```
     It's TOO slow training a `se_resnext 101`，takes almost 4 times longer than `ResNet101V2`.
 ## Optimizers
-
   - **SGDW / AdamW** [tensorflow_addons AdamW](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/AdamW).
     ```py
     # !pip install tensorflow-addons
@@ -462,11 +461,11 @@
     - [Train test of SGDW on cifar10](https://colab.research.google.com/drive/1tD2OrnrYtFPC7q_i62b8al1o3qelU-Vi?usp=sharing)
   - **RAdam / Lookahead / Ranger optimizer** [tensorflow_addons RectifiedAdam](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/RectifiedAdam).
     ```py
-    # Rectified Adam,a.k.a. RAdam, [ON THE VARIANCE OF THE ADAPTIVE LEARNING RATE AND BEYOND](https://arxiv.org/pdf/1908.03265v1.pdf)
+    # Rectified Adam,a.k.a. RAdam, [ON THE VARIANCE OF THE ADAPTIVE LEARNING RATE AND BEYOND](https://arxiv.org/pdf/1908.03265.pdf)
     optimizer = tfa.optimizers.RectifiedAdam()
-    # SGD with Lookahead [Lookahead Optimizer: k steps forward, 1 step back](https://arxiv.org/pdf/1907.08610v1.pdf)
+    # SGD with Lookahead [Lookahead Optimizer: k steps forward, 1 step back](https://arxiv.org/pdf/1907.08610.pdf)
     optmizer = tfa.optimizers.Lookahead(keras.optimizers.SGD(0.1))
-    # Ranger [Gradient Centralization: A New Optimization Technique for Deep Neural Networks](https://arxiv.org/pdf/2004.01461v2.pdf)
+    # Ranger [Gradient Centralization: A New Optimization Technique for Deep Neural Networks](https://arxiv.org/pdf/2004.01461.pdf)
     optmizer = tfa.optimizers.Lookahead(tfa.optimizers.RectifiedAdam())
     ```
 ## Multi GPU train using horovod or distribute strategy

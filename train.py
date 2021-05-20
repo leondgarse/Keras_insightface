@@ -38,13 +38,14 @@ class Train:
         random_status=0,
         image_per_class=0,  # For triplet, image_per_class will be `4` if it's `< 4`
         teacher_model_interf=None,  # Teacher model to generate embedding data, used for distilling training.
+        sam_rho=0,
     ):
         from inspect import getmembers, isfunction, isclass
 
         custom_objects.update(dict([ii for ii in getmembers(losses) if isfunction(ii[1]) or isclass(ii[1])]))
         custom_objects.update({"NormDense": models.NormDense})
 
-        self.model, self.basic_model, self.save_path, self.inited_from_model = None, None, save_path, False
+        self.model, self.basic_model, self.save_path, self.inited_from_model, self.sam_rho = None, None, save_path, False, sam_rho
         if isinstance(model, str):
             if model.endswith(".h5") and os.path.exists(model):
                 print(">>>> Load model from h5 file: %s..." % model)
@@ -177,7 +178,8 @@ class Train:
                 if isinstance(self.model.optimizer, keras.mixed_precision.LossScaleOptimizer):
                     inner_optimizer_pre = self.model.optimizer.inner_optimizer
                     inner_optimizer = inner_optimizer_pre.__class__(**inner_optimizer_pre.get_config())
-                    self.optimizer = keras.mixed_precision.LossScaleOptimizer(inner_optimizer)
+                    # self.optimizer = keras.mixed_precision.LossScaleOptimizer(inner_optimizer)
+                    self.optimizer = inner_optimizer
                 else:
                     self.optimizer = self.model.optimizer.__class__(**self.model.optimizer.get_config())
             else:
@@ -364,7 +366,7 @@ class Train:
         if self.is_lr_on_batch:
             self.lr_scheduler.steps_per_epoch = self.steps_per_epoch
 
-        basic_callbacks = [self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop]
+        basic_callbacks = [ii for ii in [self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop] if ii is not None]
         self.callbacks = self.my_evals + self.custom_callbacks + basic_callbacks
         # self.basic_model.trainable = True
         self.__init_optimizer__(optimizer)

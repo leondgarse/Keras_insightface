@@ -65,6 +65,7 @@ class Torch_model_interf:
 def keras_model_interf(model_file):
     import tensorflow as tf
     from backbones import botnet
+    from tensorflow_addons.layers import StochasticDepth
 
     for gpu in tf.config.experimental.list_physical_devices("GPU"):
         tf.config.experimental.set_memory_growth(gpu, True)

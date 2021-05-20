@@ -84,10 +84,12 @@ def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet"
         xx = ghost_model.GhostNet(input_shape=input_shape, include_top=False, width=1.3, **kwargs)
     elif name_lower.startswith("botnet"):
         from backbones import botnet
-
-        model_name = "BotNet" + name_lower[len("botnet") :]
+        if name_lower.endswith("v2"):
+            model_name = "BotNet" + name_lower[len("botnet") : -2] + "V2"
+        else:
+            model_name = "BotNet" + name_lower[len("botnet") :]
         model_class = getattr(botnet, model_name)
-        xx = model_class(include_top=False, input_shape=input_shape, strides=1, **kwargs)
+        xx = model_class(include_top=False, input_shape=input_shape, **kwargs)
     elif hasattr(keras.applications, name):
         model_class = getattr(keras.applications, name)
         xx = model_class(weights=weights, include_top=False, input_shape=input_shape, **kwargs)
@@ -138,31 +140,31 @@ def buildin_models(
 
     if output_layer == "E":
         """ Fully Connected """
-        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
+        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="E_batchnorm")(nn)
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
-        nn = keras.layers.Flatten()(nn)
-        nn = keras.layers.Dense(emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal")(nn)
+        nn = keras.layers.Flatten(name="E_flatten")(nn)
+        nn = keras.layers.Dense(emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal", name="E_dense")(nn)
     elif output_layer == "GAP":
         """ GlobalAveragePooling2D """
-        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
-        nn = keras.layers.GlobalAveragePooling2D()(nn)
+        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="GAP_batchnorm")(nn)
+        nn = keras.layers.GlobalAveragePooling2D(name="GAP_pool")(nn)
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
-        nn = keras.layers.Dense(emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal")(nn)
+        nn = keras.layers.Dense(emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal", name="GAP_dense")(nn)
     else:
         """ GDC """
-        nn = keras.layers.DepthwiseConv2D(int(nn.shape[1]), depth_multiplier=1, use_bias=False)(nn)
+        nn = keras.layers.DepthwiseConv2D(int(nn.shape[1]), depth_multiplier=1, use_bias=False, name="GDC_dw")(nn)
         # nn = keras.layers.Conv2D(512, int(nn.shape[1]), use_bias=False, padding="valid", groups=512)(nn)
-        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
+        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="GDC_batchnorm")(nn)
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
-        nn = keras.layers.Conv2D(emb_shape, 1, use_bias=use_bias, activation=None, kernel_initializer="glorot_normal")(nn)
-        nn = keras.layers.Flatten()(nn)
+        nn = keras.layers.Conv2D(emb_shape, 1, use_bias=use_bias, activation=None, kernel_initializer="glorot_normal", name="GDC_conv")(nn)
+        nn = keras.layers.Flatten(name="GDC_flatten")(nn)
         # nn = keras.layers.Dense(emb_shape, activation=None, use_bias=True, kernel_initializer="glorot_normal")(nn)
 
     # `fix_gamma=True` in MXNet means `scale=False` in Keras
-    embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, scale=scale)(nn)
+    embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, scale=scale, name="pre_embedding")(nn)
     embedding_fp32 = keras.layers.Activation("linear", dtype="float32", name="embedding")(embedding)
     if sam_rho == 0:
         basic_model = keras.models.Model(inputs, embedding_fp32, name=xx.name)
@@ -177,7 +179,7 @@ class NormDense(keras.layers.Layer):
         self.init = keras.initializers.glorot_normal()
         self.units, self.loss_top_k = units, loss_top_k
         self.kernel_regularizer = keras.regularizers.get(kernel_regularizer)
-        self.supports_masking = True
+        self.supports_masking = False
 
     def build(self, input_shape):
         self.w = self.add_weight(
@@ -217,7 +219,7 @@ class NormDense(keras.layers.Layer):
         return cls(**config)
 
 
-def add_l2_regularizer_2_model(model, weight_decay, custom_objects={}, apply_to_batch_normal=True):
+def add_l2_regularizer_2_model(model, weight_decay, custom_objects={}, apply_to_batch_normal=False, apply_to_bias=False):
     # https://github.com/keras-team/keras/issues/2717#issuecomment-456254176
     if 0:
         regularizers_type = {}
@@ -234,17 +236,17 @@ def add_l2_regularizer_2_model(model, weight_decay, custom_objects={}, apply_to_
         if isinstance(layer, keras.layers.Dense) or isinstance(layer, keras.layers.Conv2D):
             # print(">>>> Dense or Conv2D", layer.name, "use_bias:", layer.use_bias)
             attrs = ["kernel_regularizer"]
-            if layer.use_bias:
+            if apply_to_bias and layer.use_bias:
                 attrs.append("bias_regularizer")
         elif isinstance(layer, keras.layers.DepthwiseConv2D):
             # print(">>>> DepthwiseConv2D", layer.name, "use_bias:", layer.use_bias)
             attrs = ["depthwise_regularizer"]
-            if layer.use_bias:
+            if apply_to_bias and layer.use_bias:
                 attrs.append("bias_regularizer")
         elif isinstance(layer, keras.layers.SeparableConv2D):
             # print(">>>> SeparableConv2D", layer.name, "use_bias:", layer.use_bias)
             attrs = ["pointwise_regularizer", "depthwise_regularizer"]
-            if layer.use_bias:
+            if apply_to_bias and layer.use_bias:
                 attrs.append("bias_regularizer")
         elif apply_to_batch_normal and isinstance(layer, keras.layers.BatchNormalization):
             # print(">>>> BatchNormalization", layer.name, "scale:", layer.scale, ", center:", layer.center)
@@ -330,6 +332,13 @@ class AconC(keras.layers.Layer):
 
     def compute_output_shape(self, input_shape):
         return input_shape
+
+    def get_config(self):
+        return super(AconC, self).get_config()
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
 
 
 class SAMModel(tf.keras.models.Model):
@@ -430,3 +439,22 @@ def replace_stochastic_depth_with_add(model, drop_survival=False):
         return layer
 
     return keras.models.clone_model(model, clone_function=__replace_stochastic_depth_with_add__)
+
+def convert_to_mixed_float16(model, convert_batch_norm=False):
+    policy = keras.mixed_precision.Policy('mixed_float16')
+    policy_config = keras.utils.serialize_keras_object(policy)
+    from tensorflow.keras.layers import InputLayer, Activation
+    from tensorflow.keras.activations import linear
+
+    def do_convert_to_mixed_float16(layer):
+        if not convert_batch_norm and isinstance(layer, keras.layers.BatchNormalization):
+            return layer
+        if not isinstance(layer, InputLayer) and not (isinstance(layer, Activation) and layer.activation == linear):
+            aa = layer.get_config()
+            aa.update({'dtype': policy_config})
+            bb = layer.__class__.from_config(aa)
+            bb.build(layer.input_shape)
+            bb.set_weights(layer.get_weights())
+            return bb
+        return layer
+    return keras.models.clone_model(model, clone_function=do_convert_to_mixed_float16)

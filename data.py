@@ -64,7 +64,7 @@ def tf_imread(file_path):
 
 class RandomProcessImage:
     def __init__(self, img_shape=(112, 112), random_status=2, random_crop=None):
-        self.img_shape, self.random_status, self.random_crop = img_shape, random_status, random_crop
+        self.img_shape, self.random_status, self.random_crop = img_shape[:2], random_status, random_crop
         if random_status >= 100:
             import augment
 
@@ -87,6 +87,7 @@ class RandomProcessImage:
             img = tf.image.random_saturation(img, 1 - 0.1 * self.random_status, 1 + 0.1 * self.random_status)
         if self.random_status >= 3 and self.random_crop is not None:
             img = tf.image.random_crop(img, self.random_crop)
+        if img.shape[:2] != self.img_shape:
             img = tf.image.resize(img, self.img_shape)
 
         if self.random_status >= 1:
