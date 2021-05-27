@@ -12,7 +12,6 @@
   - [License](#license)
   - [Table of Contents](#table-of-contents)
   - [Current accuracy](#current-accuracy)
-  - [Comparing Resnet34 with original MXNet version](#comparing-resnet34-with-original-mxnet-version)
   - [Usage](#usage)
   	- [Environment](#environment)
   	- [Beforehand Data Prepare](#beforehand-data-prepare)
@@ -38,7 +37,7 @@
 
   | Model backbone | Training | lfw      | cfp_fp   | agedb_30 | IJBB     | IJBC     |
   | -------------- | ----- | -------- | -------- | -------- | -------- | -------- |
-  | [Resnet34](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [CASIA, E40](#comparing-resnet34-with-original-mxnet-version)  | 0.99417 | 0.95086 | 0.94733 |          |          |
+  | [Resnet34](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [CASIA, E40](https://github.com/leondgarse/Keras_insightface/discussions/36)  | 0.99417 | 0.95086 | 0.94733 |          |          |
   | [Mobilenet emb256](https://drive.google.com/file/d/1i0B6Hy1clGgfeOYtUXVPNveDEe2DTIBa/view?usp=sharing) | [Emore, E110](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-286398) | 0.996000 | 0.951714 | 0.959333 | 0.887147 | 0.911745 |
   | [Mobilenet_distill swish](https://drive.google.com/file/d/1yUjCG5rMeVCKTSPbST2F9BrRRlkDPzEA/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/30) | 0.997333    | 0.969    | 0.975333 | 0.91889   | 0.940328 |
   | [Ghostnet strides 2](https://drive.google.com/file/d/1--ZRa8v3j5KKEcHzwTVMV6F8gsRr0mLB/view?usp=sharing) | [MS1MV3, E49](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-322997) | 0.997167 | 0.959429 | 0.969333 | 0.912463 | 0.934499 |
@@ -47,62 +46,6 @@
   | [Botnet50 relu GDC](https://drive.google.com/file/d/12zD6Lba55WEHAcVAuCinJbaptrxH1pIW/view?usp=sharing) | [MS1MV3, E52](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-583259) | 0.9985 | 0.980286 | 0.979667 | 0.940019 | 0.95577 |
   | [Renet50V2 swish](https://drive.google.com/file/d/1spJ4q9bUut8W7GpswAmn2E9Yj0vE_VNC/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790754) | 0.9985 | 0.988571 | 0.9835 | 0.949951 | 0.963696 |
   | [Renet101V2 swish](https://drive.google.com/file/d/1joXsSpu22aa-kvnG1lQGNdVGfdPArUXM/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790754) | 0.9985 | 0.989143 | 0.9845 | 0.952483 | 0.966406 |
-***
-
-# Comparing Resnet34 with original MXNet version
-  - The [original MXNet version](https://github.com/deepinsight/insightface) has a self defined [resnet](https://github.com/deepinsight/insightface/blob/master/recognition/symbol/fresnet.py) which is different with keras build-in version.
-    - Basic block is different, containing less layers.
-    - In `Resnet50` case , blocks number changes from `[3, 4, 6, 3]` to `[3, 4, 14, 3]`.
-    - Remove `bias` from `Conv2D` layers.
-    - Use `PReLU` instead of `relu`.
-    - Use `strides=1` instead of `strides=2` in the first `Conv2d` layer.
-  - **Original MXNet version** Train `Resnet34` on `CASIA` dataset.
-    - `CASIA` dataset contains `490623` images belongs to `10572` classes, for `batch_size = 512`, means `959 steps` per epoch.
-    - Learning rate decay on `epochs = [20, 30]`, means `--lr-steps '19180,28770'`.
-    ```sh
-    cd ~/workspace/insightface/recognition/ArcFace
-    CUDA_VISIBLE_DEVICES='0' python train.py --network r34 --dataset casia --loss 'arcface' --per-batch-size 512 --lr-steps '19180,28770' --verbose 959
-    ```
-  - **Keras version**
-    - Use a self defined `Resnet34` based on [keras application resnet](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/keras/applications/resnet.py), which is similar with the MXNet version. Other parameters is almost a mimic of the MXNet version.
-    - `MXNet SGD` behaves different with `tfa SGDW`, detail explains [here the discussion](https://github.com/leondgarse/Keras_insightface/discussions/19). It's mathematically `adding l2 regularizer` works same with `MXNet SGD weight_decay with momentum`, as long as applying `wd_mult`.
-    - In my test, `MXNet wd_mult` is NOT working if just added in `mx.symbol.Variable`, has to be added by `opt.set_wd_mult`.
-    - Have to train 1 epoch to warmup first, maybe caused be the initializer.
-    - The difference in training accuracy is that the MXNet version calculating accuracy **after** applying `arcface` conversion, mine is before.
-    ```py
-    # import tensorflow_addons as tfa
-    import train, losses, models
-
-    data_basic_path = '/datasets/'
-    data_path = data_basic_path + 'faces_casia_112x112_folders'
-    eval_paths = [data_basic_path + ii for ii in ['faces_casia/lfw.bin', 'faces_casia/cfp_fp.bin', 'faces_casia/agedb_30.bin']]
-
-    basic_model = models.buildin_models("r34", dropout=0.4, emb_shape=512, output_layer='E', bn_momentum=0.9, bn_epsilon=2e-5, use_bias=True, scale=False)
-    basic_model = models.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=True)
-    tt = train.Train(data_path, save_path='resnet34_MXNET_E_SGD_REG_1e3_lr1e1_random0_arc_S32_E1_BS512_casia.h5',
-        eval_paths=eval_paths, basic_model=basic_model, model=None, lr_base=0.1, lr_decay=0.1, lr_decay_steps=[20, 30],
-        batch_size=512, random_status=0, output_weight_decay=1)
-
-    # optimizer = tfa.optimizers.SGDW(learning_rate=0.1, weight_decay=5e-4, momentum=0.9)
-    optimizer = keras.optimizers.SGD(learning_rate=0.1, momentum=0.9)
-    sch = [
-        {"loss": losses.ArcfaceLoss(scale=32), "epoch": 1, "optimizer": optimizer},
-        {"loss": losses.ArcfaceLoss(scale=64), "epoch": 40},
-    ]
-    tt.train(sch, 0)
-    ```
-  - **Results** This result is just showing `Keras` is able to reproduce `MXNet` accuracy using similar strategy and backbone.
-
-    | Backbone    | Optimizer | wd   | l2_reg | lfw,cfp_fp,agedb_30,epoch              |
-    | ----------- | --------- | ---- | ------ | -------------------------------------- |
-    | MXNet r34   | SGD       | 5e-4 | None   | 0.9933, 0.9514, 0.9448, E31            |
-    | TF resnet34 | SGD       | None | None   | 0.9897, 0.9269, 0.9228, E20            |
-    | TF resnet34 | SGDW      | 5e-4 | None   | 0.9927, 0.9476, 0.9388, E32            |
-    | TF resnet34 | SGDW      | 1e-3 | None   | 0.9935, **0.9549**, 0.9458, E35        |
-    | TF resnet34 | SGD       | None | 5e-4   | 0.9940, 0.9466, 0.9415, E31            |
-    | TF resnet34 | SGD       | None | 1e-3   | **0.99417**, 0.95086, **0.94733**, E31 |
-
-    ![](checkpoints/resnet34_casia.svg)
 ***
 
 # Usage
