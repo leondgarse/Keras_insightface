@@ -458,3 +458,18 @@ def convert_to_mixed_float16(model, convert_batch_norm=False):
             return bb
         return layer
     return keras.models.clone_model(model, clone_function=do_convert_to_mixed_float16)
+
+def convert_mixed_float16_to_float32(model):
+    from tensorflow.keras.layers import InputLayer, Activation
+    from tensorflow.keras.activations import linear
+
+    def do_convert_to_mixed_float16(layer):
+        if not isinstance(layer, InputLayer) and not (isinstance(layer, Activation) and layer.activation == linear):
+            aa = layer.get_config()
+            aa.update({'dtype': "float32"})
+            bb = layer.__class__.from_config(aa)
+            bb.build(layer.input_shape)
+            bb.set_weights(layer.get_weights())
+            return bb
+        return layer
+    return keras.models.clone_model(model, clone_function=do_convert_to_mixed_float16)

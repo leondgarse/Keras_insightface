@@ -42,7 +42,7 @@
   | [Mobilenet_distill swish](https://drive.google.com/file/d/1yUjCG5rMeVCKTSPbST2F9BrRRlkDPzEA/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/30) | 0.997333    | 0.969    | 0.975333 | 0.91889   | 0.940328 |
   | [Ghostnet strides 2](https://drive.google.com/file/d/1--ZRa8v3j5KKEcHzwTVMV6F8gsRr0mLB/view?usp=sharing) | [MS1MV3, E49](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-322997) | 0.997167 | 0.959429 | 0.969333 | 0.912463 | 0.934499 |
   | [Ghostnet strides 1](https://drive.google.com/file/d/18RzKJDcrpdeYlJ70sMsYBOXwg4nh3EbA/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-583252) | 0.997833 | 0.978286 | 0.980000 | 0.931159 | 0.94943 |
-  | [EfficientNetV2 B0](https://drive.google.com/file/d/1PgH87fznclAVI8Fsiu2x5BaY4UUiukNG/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790627) | 0.997167 | 0.975429 | 0.975 | 0.937098 | 0.951935 |
+  | [EfficientNetV2 B0](https://drive.google.com/file/d/1PgH87fznclAVI8Fsiu2x5BaY4UUiukNG/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790627) | 0.997167 | 0.975286 | 0.975 | 0.937098 | 0.951935 |
   | [Botnet50 relu GDC](https://drive.google.com/file/d/12zD6Lba55WEHAcVAuCinJbaptrxH1pIW/view?usp=sharing) | [MS1MV3, E52](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-583259) | 0.9985 | 0.980286 | 0.979667 | 0.940019 | 0.95577 |
   | [Renet50V2 swish](https://drive.google.com/file/d/1spJ4q9bUut8W7GpswAmn2E9Yj0vE_VNC/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790754) | 0.9985 | 0.988571 | 0.9835 | 0.949951 | 0.963696 |
   | [Renet101V2 swish](https://drive.google.com/file/d/1joXsSpu22aa-kvnG1lQGNdVGfdPArUXM/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790754) | 0.9985 | 0.989143 | 0.9845 | 0.952483 | 0.966406 |
@@ -119,10 +119,10 @@
   - **Evaluating bin files** include jpeg image data pairs, and a label indicating if it's a same person, so there are double images than labels
     ```sh
     #    bins   | issame_list
-    img_1 img_2 | 1
-    img_3 img_4 | 1
-    img_5 img_6 | 0
-    img_7 img_8 | 0
+    img_1 img_2 | True
+    img_3 img_4 | True
+    img_5 img_6 | False
+    img_7 img_8 | False
     ```
     Image data in bin files like `CFP-FP` `AgeDB-30` is not compatible with `tf.image.decode_jpeg`, we need to reformat it, which is done by `-T` parameter.
     ```py
