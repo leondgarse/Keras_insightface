@@ -50,7 +50,7 @@
 
 # Usage
 ## Environment
-  - **Nvidia CUDA and cudnn** `Tensorflow 2.4.0` now using `cuda==11.0` `cudnn==8.0`
+  - **Nvidia CUDA and cudnn** `Tensorflow 2.5.0` now using `cuda==11.2` `cudnn==8.1`
     - [Install cuda-toolkit](https://developer.nvidia.com/cuda-toolkit)
     - [Install cudnn](https://developer.nvidia.com/rdp/cudnn-download)
   - **python and tensorflow version**
@@ -58,11 +58,11 @@
     # $ ipython
     Python 3.8.5 (default, Sep  4 2020, 07:30:14)
     In [1]: tf.__version__
-    Out[1]: '2.4.1'
+    Out[1]: '2.5.0'
 
     In [2]: import tensorflow_addons as tfa
     In [3]: tfa.__version__
-    Out[3]: '0.12.1'
+    Out[3]: '0.13.0'
     ```
     Or `tf-nightly`
     ```sh
@@ -73,7 +73,7 @@
     ```
     ```py
     In [1]: tf.__version__
-    Out[1]: '2.6.0-dev20210401'
+    Out[1]: '2.6.0-dev20210525'
     ```
   - **Default import for ipython**
     ```py
