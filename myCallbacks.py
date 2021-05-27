@@ -204,7 +204,7 @@ def constant_scheduler(epoch, lr_base, lr_decay_steps, decay_rate=0.1):
 
 
 def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_decay=0.05, lr_min=0, lr_decay_steps=0):
-    checkpoint_base = "./checkpoints"
+    checkpoint_base = "checkpoints"
     if not os.path.exists(checkpoint_base):
         os.mkdir(checkpoint_base)
     checkpoint = os.path.join(checkpoint_base, checkpoint)
