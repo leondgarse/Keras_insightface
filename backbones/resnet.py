@@ -51,22 +51,16 @@ def se_module(inputs, se_ratio=4, name=""):
     return layers.Multiply()([inputs, se])
 
 
-def block(inputs, out_channel, strides=1, activation="relu", use_se=False, use_ir=False, conv_shortcut=False, name=""):
+def block(inputs, out_channel, strides=1, activation="relu", use_se=False, conv_shortcut=False, name=""):
     if conv_shortcut:
         shortcut = conv2d_no_bias(inputs, out_channel, 1, strides=strides, name=name + "_0_")
         shortcut = batchnorm_with_activation(shortcut, activation=None, name=name + "_0_")
-    elif strides != 1:
-        shortcut = layers.MaxPooling2D(1, strides=strides, name=name + "_pooling")(inputs)
     else:
         shortcut = inputs
 
     nn = batchnorm_with_activation(inputs, activation=None, name=name + "_1_")
     nn = conv2d_no_bias(nn, out_channel, 3, strides=1, padding="same", name=name + "_1_")
-    if use_ir:
-        nn = layers.Activation(activation=activation, name=name + "_2_" + activation)(nn)
-    else:
-        nn = batchnorm_with_activation(nn, activation=activation, name=name + "_2_")
-        
+    nn = batchnorm_with_activation(nn, activation=activation, name=name + "_2_")
     nn = conv2d_no_bias(nn, out_channel, 3, strides=strides, padding="same", name=name + "_2_")
     nn = batchnorm_with_activation(nn, activation=None, name=name + "_3_")
     if use_se:
@@ -74,11 +68,10 @@ def block(inputs, out_channel, strides=1, activation="relu", use_se=False, use_i
     return layers.Add(name=name + "_add")([shortcut, nn])
 
 
-def stack(inputs, out_channel, num_blocks, strides=2, activation="relu", use_se=False, use_ir=False, name=""):
-    conv_shortcut = False if use_ir and inputs.shape[-1] == out_channel else True
-    nn = block(inputs, out_channel, strides, activation, use_se, use_ir, conv_shortcut, name=name + "_block1")
+def stack(inputs, out_channel, num_blocks, strides=2, activation="relu", use_se=False, name=""):
+    nn = block(inputs, out_channel, strides, activation, use_se, True, name=name + "_block1")
     for ii in range(2, num_blocks + 1):
-        nn = block(nn, out_channel, 1, activation, use_se, use_ir, False, name=name + "_block" + str(ii))
+        nn = block(nn, out_channel, 1, activation, use_se, False, name=name + "_block" + str(ii))
     return nn
 
 
@@ -97,41 +90,41 @@ def ResNet(input_shape, stack_fn, classes=1000, classifier_activation="softmax",
     return model
 
 
-def ResNet34(input_shape, classes=1000, activation="relu", use_se=False, use_ir=False, model_name="resnet34", **kwargs):
+def ResNet34(input_shape, classes=1000, activation="relu", use_se=False, model_name="resnet34", **kwargs):
     def stack_fn(nn):
-        nn = stack(nn, 64, 3, activation=activation, use_se=use_se, use_ir=use_ir, name="stack2")
-        nn = stack(nn, 128, 4, activation=activation, use_se=use_se, use_ir=use_ir, name="stack3")
-        nn = stack(nn, 256, 6, activation=activation, use_se=use_se, use_ir=use_ir, name="stack4")
-        return stack(nn, 512, 3, activation=activation, use_se=use_se, use_ir=use_ir, name="stack5")
+        nn = stack(nn, 64, 3, activation=activation, use_se=use_se, name="stack2")
+        nn = stack(nn, 128, 4, activation=activation, use_se=use_se, name="stack3")
+        nn = stack(nn, 256, 6, activation=activation, use_se=use_se, name="stack4")
+        return stack(nn, 512, 3, activation=activation, use_se=use_se, name="stack5")
 
     return ResNet(input_shape, stack_fn, classes, model_name=model_name, **kwargs)
 
 
-def ResNet50(input_shape, classes=1000, activation="relu", use_se=False, use_ir=False, model_name="resnet50", **kwargs):
+def ResNet50(input_shape, classes=1000, activation="relu", use_se=False, model_name="resnet50", **kwargs):
     def stack_fn(nn):
-        nn = stack(nn, 64, 3, activation=activation, use_se=use_se, use_ir=use_ir, name="stack2")
-        nn = stack(nn, 128, 4, activation=activation, use_se=use_se, use_ir=use_ir, name="stack3")
-        nn = stack(nn, 256, 14, activation=activation, use_se=use_se, use_ir=use_ir, name="stack4")
-        return stack(nn, 512, 3, activation=activation, use_se=use_se, use_ir=use_ir, name="stack5")
+        nn = stack(nn, 64, 3, activation=activation, use_se=use_se, name="stack2")
+        nn = stack(nn, 128, 4, activation=activation, use_se=use_se, name="stack3")
+        nn = stack(nn, 256, 14, activation=activation, use_se=use_se, name="stack4")
+        return stack(nn, 512, 3, activation=activation, use_se=use_se, name="stack5")
 
     return ResNet(input_shape, stack_fn, classes, model_name=model_name, **kwargs)
 
 
-def ResNet100(input_shape, classes=1000, activation="relu", use_se=False, use_ir=False, model_name="resnet100", **kwargs):
+def ResNet100(input_shape, classes=1000, activation="relu", use_se=False, model_name="resnet100", **kwargs):
     def stack_fn(nn):
-        nn = stack(nn, 64, 3, activation=activation, use_se=use_se, use_ir=use_ir, name="stack2")
-        nn = stack(nn, 128, 13, activation=activation, use_se=use_se, use_ir=use_ir, name="stack3")
-        nn = stack(nn, 256, 30, activation=activation, use_se=use_se, use_ir=use_ir, name="stack4")
-        return stack(nn, 512, 3, activation=activation, use_se=use_se, use_ir=use_ir, name="stack5")
+        nn = stack(nn, 64, 3, activation=activation, use_se=use_se, name="stack2")
+        nn = stack(nn, 128, 13, activation=activation, use_se=use_se, name="stack3")
+        nn = stack(nn, 256, 30, activation=activation, use_se=use_se, name="stack4")
+        return stack(nn, 512, 3, activation=activation, use_se=use_se, name="stack5")
 
     return ResNet(input_shape, stack_fn, classes, model_name=model_name, **kwargs)
 
 
-def ResNet101(input_shape, classes=1000, activation="relu", use_se=False, use_ir=False, model_name="resnet101", **kwargs):
+def ResNet101(input_shape, classes=1000, activation="relu", use_se=False, model_name="resnet101", **kwargs):
     def stack_fn(nn):
-        nn = stack(nn, 64, 3, activation=activation, use_se=use_se, use_ir=use_ir, name="stack2")
-        nn = stack(nn, 128, 4, activation=activation, use_se=use_se, use_ir=use_ir, name="stack3")
-        nn = stack(nn, 256, 23, activation=activation, use_se=use_se, use_ir=use_ir, name="stack4")
-        return stack(nn, 512, 3, activation=activation, use_se=use_se, use_ir=use_ir, name="stack5")
+        nn = stack(nn, 64, 3, activation=activation, use_se=use_se, name="stack2")
+        nn = stack(nn, 128, 4, activation=activation, use_se=use_se, name="stack3")
+        nn = stack(nn, 256, 23, activation=activation, use_se=use_se, name="stack4")
+        return stack(nn, 512, 3, activation=activation, use_se=use_se, name="stack5")
 
     return ResNet(input_shape, stack_fn, classes, model_name=model_name, **kwargs)
