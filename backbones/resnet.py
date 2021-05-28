@@ -1,7 +1,6 @@
-from tensorflow.python.keras import backend
+import tensorflow as tf
 from tensorflow.python.keras import layers
 from tensorflow.keras import backend as K
-import tensorflow as tf
 
 BATCH_NORM_DECAY = 0.9
 BATCH_NORM_EPSILON = 1e-5
@@ -11,7 +10,7 @@ CONV_KERNEL_INITIALIZER = tf.keras.initializers.VarianceScaling(scale=2.0, mode=
 
 def batchnorm_with_activation(inputs, activation="relu", zero_gamma=False, name=""):
     """Performs a batch normalization followed by an activation. """
-    bn_axis = 3 if backend.image_data_format() == "channels_last" else 1
+    bn_axis = 3 if K.image_data_format() == "channels_last" else 1
     gamma_initializer = tf.zeros_initializer() if zero_gamma else tf.ones_initializer()
     nn = layers.BatchNormalization(
         axis=bn_axis,
@@ -52,23 +51,7 @@ def se_module(inputs, se_ratio=4, name=""):
     return layers.Multiply()([inputs, se])
 
 
-def res_block(inputs, out_channel, strides=1, activation="relu", use_se=False, conv_shortcut=False, name=""):
-    if conv_shortcut:
-        shortcut = conv2d_no_bias(inputs, out_channel, 1, strides=strides, name=name + "_0_")
-        shortcut = batchnorm_with_activation(shortcut, activation=None, name=name + "_0_")
-    else:
-        shortcut = inputs
-
-    nn = batchnorm_with_activation(inputs, activation=None, name=name + "_1_")
-    nn = conv2d_no_bias(nn, out_channel, 3, strides=1, padding="same", name=name + "_1_")
-    nn = batchnorm_with_activation(nn, activation=activation, name=name + "_2_")
-    nn = conv2d_no_bias(nn, out_channel, 3, strides=strides, padding="same", name=name + "_2_")
-    nn = batchnorm_with_activation(nn, activation=None, name=name + "_3_")
-    if use_se:
-        nn = se_module(nn, se_ratio=16, name=name + "_se")
-    return layers.Add(name=name + '_add')([shortcut, nn])
-
-def ir_block(inputs, out_channel, strides=1, activation="relu", use_se=False, conv_shortcut=False, name=""):
+def block(inputs, out_channel, strides=1, activation="relu", use_se=False, use_ir=False, conv_shortcut=False, name=""):
     if conv_shortcut:
         shortcut = conv2d_no_bias(inputs, out_channel, 1, strides=strides, name=name + "_0_")
         shortcut = batchnorm_with_activation(shortcut, activation=None, name=name + "_0_")
@@ -79,26 +62,23 @@ def ir_block(inputs, out_channel, strides=1, activation="relu", use_se=False, co
 
     nn = batchnorm_with_activation(inputs, activation=None, name=name + "_1_")
     nn = conv2d_no_bias(nn, out_channel, 3, strides=1, padding="same", name=name + "_1_")
-    nn = layers.Activation(activation=activation, name=name + "_1_" + activation)(nn)
+    if use_ir:
+        nn = layers.Activation(activation=activation, name=name + "_2_" + activation)(nn)
+    else:
+        nn = batchnorm_with_activation(nn, activation=activation, name=name + "_2_")
+        
     nn = conv2d_no_bias(nn, out_channel, 3, strides=strides, padding="same", name=name + "_2_")
-    nn = batchnorm_with_activation(nn, activation=None, name=name + "_2_")
+    nn = batchnorm_with_activation(nn, activation=None, name=name + "_3_")
     if use_se:
         nn = se_module(nn, se_ratio=16, name=name + "_se")
     return layers.Add(name=name + "_add")([shortcut, nn])
 
 
 def stack(inputs, out_channel, num_blocks, strides=2, activation="relu", use_se=False, use_ir=False, name=""):
-    if use_ir:
-        basic_block = ir_block
-        in_channel = inputs.shape[-1]
-        conv_shortcut = True if in_channel != out_channel else False
-    else:
-        basic_block = res_block
-        conv_shortcut = True
-    nn = basic_block(inputs, out_channel, strides=strides, use_se=use_se, conv_shortcut=conv_shortcut, name=name + "_block1")
-
+    conv_shortcut = False if use_ir and inputs.shape[-1] == out_channel else True
+    nn = block(inputs, out_channel, strides, activation, use_se, use_ir, conv_shortcut, name=name + "_block1")
     for ii in range(2, num_blocks + 1):
-        nn = basic_block(nn, out_channel, strides=1, activation=activation, use_se=use_se, name=name + "_block" + str(ii))
+        nn = block(nn, out_channel, 1, activation, use_se, use_ir, False, name=name + "_block" + str(ii))
     return nn
 
 
@@ -126,6 +106,7 @@ def ResNet34(input_shape, classes=1000, activation="relu", use_se=False, use_ir=
 
     return ResNet(input_shape, stack_fn, classes, model_name=model_name, **kwargs)
 
+
 def ResNet50(input_shape, classes=1000, activation="relu", use_se=False, use_ir=False, model_name="resnet50", **kwargs):
     def stack_fn(nn):
         nn = stack(nn, 64, 3, activation=activation, use_se=use_se, use_ir=use_ir, name="stack2")
@@ -135,6 +116,7 @@ def ResNet50(input_shape, classes=1000, activation="relu", use_se=False, use_ir=
 
     return ResNet(input_shape, stack_fn, classes, model_name=model_name, **kwargs)
 
+
 def ResNet100(input_shape, classes=1000, activation="relu", use_se=False, use_ir=False, model_name="resnet100", **kwargs):
     def stack_fn(nn):
         nn = stack(nn, 64, 3, activation=activation, use_se=use_se, use_ir=use_ir, name="stack2")
@@ -143,6 +125,7 @@ def ResNet100(input_shape, classes=1000, activation="relu", use_se=False, use_ir
         return stack(nn, 512, 3, activation=activation, use_se=use_se, use_ir=use_ir, name="stack5")
 
     return ResNet(input_shape, stack_fn, classes, model_name=model_name, **kwargs)
+
 
 def ResNet101(input_shape, classes=1000, activation="relu", use_se=False, use_ir=False, model_name="resnet101", **kwargs):
     def stack_fn(nn):
