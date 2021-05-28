@@ -75,7 +75,7 @@ def stack(inputs, out_channel, num_blocks, strides=2, activation="relu", use_se=
     return nn
 
 
-def ResNet(input_shape, stack_fn, classes=1000, classifier_activation="softmax", model_name="ir_resnet", **kwargs):
+def ResNet(input_shape, stack_fn, classes=1000, classifier_activation="softmax", model_name="resnet", **kwargs):
     img_input = layers.Input(shape=input_shape)
     nn = conv2d_no_bias(img_input, 64, 3, strides=1, padding="SAME", name="conv1_conv")
     nn = batchnorm_with_activation(nn, name="conv1_bn")
