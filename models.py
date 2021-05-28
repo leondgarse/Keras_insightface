@@ -34,7 +34,7 @@ def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet"
 
         model_name = "ResNet" + name_lower[1:]
         model_class = getattr(resnet, model_name)
-        xx = model_class(input_shape=input_shape, include_top=False, weights=None, **kwargs)
+        xx = model_class(input_shape=input_shape, classes=0, **kwargs)
     elif name_lower.startswith("resnet"):  # keras.applications.ResNetxxx
         if name_lower.endswith("v2"):
             model_name = "ResNet" + name_lower[len("resnet") : -2] + "V2"
