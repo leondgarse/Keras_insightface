@@ -44,7 +44,7 @@
   | [Ghostnet strides 1](https://drive.google.com/file/d/18RzKJDcrpdeYlJ70sMsYBOXwg4nh3EbA/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-583252) | 0.997833 | 0.978286 | 0.980000 | 0.931159 | 0.94943 |
   | [EfficientNetV2 B0](https://drive.google.com/file/d/1PgH87fznclAVI8Fsiu2x5BaY4UUiukNG/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790627) | 0.997167 | 0.975286 | 0.975 | 0.937098 | 0.951935 |
   | [Botnet50 relu GDC](https://drive.google.com/file/d/12zD6Lba55WEHAcVAuCinJbaptrxH1pIW/view?usp=sharing) | [MS1MV3, E52](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-583259) | 0.9985 | 0.980286 | 0.979667 | 0.940019 | 0.95577 |
-  | [Renet50V2 swish](https://drive.google.com/file/d/1spJ4q9bUut8W7GpswAmn2E9Yj0vE_VNC/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790754) | 0.9985 | 0.988571 | 0.9835 | 0.949951 | 0.963696 |
+  | [r50 swish](https://drive.google.com/file/d/1Mb2ZjBHFSQha8y2UOXO6-vxNWdzw815P/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-824090) | 0.998333 | 0.989571 | 0.984333 | 0.950828 | 0.964463 |
   | [Renet101V2 swish](https://drive.google.com/file/d/1joXsSpu22aa-kvnG1lQGNdVGfdPArUXM/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790754) | 0.9985 | 0.989143 | 0.9845 | 0.952483 | 0.966406 |
 ***
 
