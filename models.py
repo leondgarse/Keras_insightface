@@ -297,7 +297,8 @@ def replace_ReLU_with_PReLU(model, target_activation="PReLU", **kwargs):
                 return target_activation(**kwargs)
         return layer
 
-    return keras.models.clone_model(model, clone_function=convert_ReLU)
+    input_tensors = keras.layers.Input(model.input_shape[1:])
+    return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=convert_ReLU)
 
 
 def aconC(inputs, p1=1, p2=0, beta=1):
@@ -405,13 +406,14 @@ def replace_add_with_stochastic_depth(model, survivals=(1, 0.8)):
         survivals = [survivals] * total_adds
     elif isinstance(survivals, (list, tuple)) and len(survivals) == 2:
         start, end = survivals
-        survivals = [start + (end - start) * ii / (total_adds - 1) for ii in range(total_adds)]
+        survivals = [start - (1 - end) * float(ii) / total_adds for ii in range(total_adds)]
     survivals_dict = dict(zip(add_layers, survivals))
 
     def __replace_add_with_stochastic_depth__(layer):
         if isinstance(layer, keras.layers.Add):
             layer_name = layer.name
             new_layer_name = layer_name.replace("_add", "_stochastic_depth")
+            new_layer_name = layer_name.replace("add_", "stochastic_depth_")
             survival_probability = survivals_dict[layer_name]
             if survival_probability < 1:
                 print("Converting:", layer_name, "-->", new_layer_name, ", survival_probability:", survival_probability)
@@ -420,7 +422,8 @@ def replace_add_with_stochastic_depth(model, survivals=(1, 0.8)):
                 return layer
         return layer
 
-    return keras.models.clone_model(model, clone_function=__replace_add_with_stochastic_depth__)
+    input_tensors = keras.layers.Input(model.input_shape[1:])
+    return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=__replace_add_with_stochastic_depth__)
 
 
 def replace_stochastic_depth_with_add(model, drop_survival=False):
@@ -438,7 +441,8 @@ def replace_stochastic_depth_with_add(model, drop_survival=False):
                 return keras.layers.Lambda(lambda xx: xx[0] + xx[1] * survival, name=new_layer_name)
         return layer
 
-    return keras.models.clone_model(model, clone_function=__replace_stochastic_depth_with_add__)
+    input_tensors = keras.layers.Input(model.input_shape[1:])
+    return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=__replace_stochastic_depth_with_add__)
 
 def convert_to_mixed_float16(model, convert_batch_norm=False):
     policy = keras.mixed_precision.Policy('mixed_float16')
@@ -457,7 +461,8 @@ def convert_to_mixed_float16(model, convert_batch_norm=False):
             bb.set_weights(layer.get_weights())
             return bb
         return layer
-    return keras.models.clone_model(model, clone_function=do_convert_to_mixed_float16)
+    input_tensors = keras.layers.Input(model.input_shape[1:])
+    return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=do_convert_to_mixed_float16)
 
 def convert_mixed_float16_to_float32(model):
     from tensorflow.keras.layers import InputLayer, Activation
@@ -472,4 +477,5 @@ def convert_mixed_float16_to_float32(model):
             bb.set_weights(layer.get_weights())
             return bb
         return layer
-    return keras.models.clone_model(model, clone_function=do_convert_to_mixed_float16)
+    input_tensors = keras.layers.Input(model.input_shape[1:])
+    return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=do_convert_to_mixed_float16)
