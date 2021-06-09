@@ -57,9 +57,9 @@ class Face_detection:
 
 
 def detection_in_folder(data_path):
-    while data_path.endswith("/"):
+    while data_path.endswith(os.sep):
         data_path = data_path[:-1]
-    imms = glob(os.path.join(data_path, "*/*"))
+    imms = glob2.glob(os.path.join(data_path, "*", "*"))
     dest_path = data_path + "_aligned_112_112"
     det = Face_detection()
 

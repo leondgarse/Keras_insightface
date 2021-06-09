@@ -6,7 +6,7 @@ import tensorflow as tf
 from skimage.io import imread
 
 # /datasets/faces_emore_112x112_folders/*/*.jpg'
-default_image_names_reg = "*/*.jpg"
+default_image_names_reg = os.path.join("*", "*.jpg")
 default_image_classes_rule = lambda path: int(os.path.basename(os.path.dirname(path)))
 
 
@@ -23,10 +23,10 @@ class ImageClassesRule_map:
 
 
 def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None):
-    while data_path.endswith("/"):
+    while data_path.endswith(os.sep):
         data_path = data_path[:-1]
     if not data_path.endswith(".npz"):
-        dest_pickle = os.path.join("./", os.path.basename(data_path) + "_shuffle.npz")
+        dest_pickle = os.path.basename(data_path) + "_shuffle.npz"
     else:
         dest_pickle = data_path
 

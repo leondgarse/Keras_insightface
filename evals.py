@@ -128,7 +128,7 @@ class eval_callback(tf.keras.callbacks.Callback):
             self.max_accuracy = acc_max
             if self.save_model:
                 save_name_base = "%s_basic_%s_epoch_" % (self.save_model, self.test_names)
-                save_path_base = os.path.join("./checkpoints", save_name_base)
+                save_path_base = os.path.join("checkpoints", save_name_base)
                 for ii in glob2.glob(save_path_base + "*.h5"):
                     os.remove(ii)
                 save_path = save_path_base + "%s_%f.h5" % (cur_step, self.max_accuracy)
