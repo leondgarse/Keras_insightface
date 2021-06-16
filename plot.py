@@ -325,3 +325,35 @@ def hist_plot_split(
         eval_split=eval_split,
         limit_loss_max=limit_loss_max,
     )
+
+def choose_accuracy(aa, skip_name_len=0, sort_agedb=False):
+    import json
+    import pandas as pd
+
+    evals = ['lfw', 'cfp_fp', 'agedb_30']
+    dd_agedb_max, dd_all_max, dd_sum_max = {}, {}, {}
+    for pp in aa:
+        with open(pp, 'r') as ff:
+            hh = json.load(ff)
+        nn = os.path.splitext(os.path.basename(pp))[0][skip_name_len:]
+        agedb_arg_max = np.argmax(hh['agedb_30'])
+        dd_agedb_max[nn] = {kk: hh[kk][agedb_arg_max] for kk in evals}
+        dd_agedb_max[nn]["epoch"] = int(agedb_arg_max)
+
+        dd_all_max[nn] = {kk: "%.4f, %2d" % (max(hh[kk]), np.argmax(hh[kk])) for kk in evals}
+        # dd_all_max[nn] = {kk: max(hh[kk]) for kk in evals}
+        # dd_all_max[nn].update({kk + "_epoch": np.argmax(hh[kk]) for kk in evals})
+
+        sum_arg_max = np.argmax(np.sum([hh[kk] for kk in evals], axis=0))
+        dd_sum_max[nn] = {kk: hh[kk][sum_arg_max] for kk in evals}
+        dd_sum_max[nn]["epoch"] = int(sum_arg_max)
+
+    names = ["agedb max", "all max", "sum max"]
+    for nn, dd in zip(names, [dd_agedb_max, dd_all_max, dd_sum_max]):
+        print()
+        print(">>>>", nn, ":")
+        # print(pd.DataFrame(dd).T.to_markdown())
+        rr = pd.DataFrame(dd).T
+        rr = rr.sort_values('agedb_30') if sort_agedb else rr
+        print(rr.to_markdown())
+    return dd_agedb_max, dd_all_max, dd_sum_max
