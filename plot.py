@@ -5,7 +5,7 @@ import matplotlib.cm as cm
 from cycler import cycler
 
 plt.style.use("seaborn")
-EVALS_NAME = ["lfw", "cfp_fp", "agedb_30"]
+EVALS_NAME = ["lfw", "cfp_fp", "agedb_30", "IJBB", "IJBC"]
 EVALS_LINE_STYLE = ["-", "--", "-.", ":"]
 MAX_COLORS = 10
 Scale = 1
@@ -202,8 +202,8 @@ def hist_plot(
             title = kk if len(ax.get_title()) == 0 else ax.get_title() + ", " + kk
             ax.set_title(title)
             linestyle = EVALS_LINE_STYLE[eval_id]
-            eval_id += 0 if eval_split else 1
-            eval_ax += eval_ax_step
+            eval_id += 0 if eval_split and eval_ax != 5 else 1
+            eval_ax = min(eval_ax + eval_ax_step, 5)
         else:
             ax = axes[other_custom_ax]
             title = kk if len(ax.get_title()) == 0 else ax.get_title() + ", " + kk
@@ -216,8 +216,8 @@ def hist_plot(
         )
         peak_scatter(ax, vv, np.argmax, init_epoch=init_epoch)
 
-    eval_ax = eval_ax if eval_split else eval_ax + 1
-    for ii in range(eval_ax_start, eval_ax):
+    # eval_ax = eval_ax if eval_split else eval_ax + 1
+    for ii in range(eval_ax_start, eval_ax + 1):
         axes[ii].legend(loc="lower left", fontsize=Default_legend_font_size)
 
     if len(axes) > 3 and other_custom_id > 0:
@@ -326,26 +326,26 @@ def hist_plot_split(
         limit_loss_max=limit_loss_max,
     )
 
-def choose_accuracy(aa, skip_name_len=0, sort_agedb=False):
+def choose_accuracy(aa, skip_name_len=0, sort_agedb=False, evals=EVALS_NAME):
     import json
     import pandas as pd
 
-    evals = ['lfw', 'cfp_fp', 'agedb_30']
+    # evals = ['lfw', 'cfp_fp', 'agedb_30']
     dd_agedb_max, dd_all_max, dd_sum_max = {}, {}, {}
     for pp in aa:
         with open(pp, 'r') as ff:
             hh = json.load(ff)
         nn = os.path.splitext(os.path.basename(pp))[0][skip_name_len:]
         agedb_arg_max = np.argmax(hh['agedb_30'])
-        dd_agedb_max[nn] = {kk: hh[kk][agedb_arg_max] for kk in evals}
+        dd_agedb_max[nn] = {kk: hh[kk][agedb_arg_max] for kk in evals if kk in hh}
         dd_agedb_max[nn]["epoch"] = int(agedb_arg_max)
 
-        dd_all_max[nn] = {kk: "%.4f, %2d" % (max(hh[kk]), np.argmax(hh[kk])) for kk in evals}
+        dd_all_max[nn] = {kk: "%.4f, %2d" % (max(hh[kk]), np.argmax(hh[kk])) for kk in evals if kk in hh}
         # dd_all_max[nn] = {kk: max(hh[kk]) for kk in evals}
         # dd_all_max[nn].update({kk + "_epoch": np.argmax(hh[kk]) for kk in evals})
 
-        sum_arg_max = np.argmax(np.sum([hh[kk] for kk in evals], axis=0))
-        dd_sum_max[nn] = {kk: hh[kk][sum_arg_max] for kk in evals}
+        sum_arg_max = np.argmax(np.sum([hh[kk] for kk in evals if kk in hh], axis=0))
+        dd_sum_max[nn] = {kk: hh[kk][sum_arg_max] for kk in evals if kk in hh}
         dd_sum_max[nn]["epoch"] = int(sum_arg_max)
 
     names = ["agedb max", "all max", "sum max"]
