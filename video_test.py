@@ -16,7 +16,8 @@ from tqdm import tqdm
 
 
 def init_det_and_emb_model(model_file):
-    det = insightface.model_zoo.face_detection.retinaface_mnet025_v1()
+    # det = insightface.model_zoo.face_detection.retinaface_mnet025_v1()
+    det = insightface.model_zoo.SCRFD(model_file=os.path.expanduser('~/.insightface/models/antelope/scrfd_10g_bnkps.onnx'))
     det.prepare(-1)
     if model_file is not None:
         face_model = tf.keras.models.load_model(model_file, compile=False)
@@ -41,7 +42,7 @@ def face_align_landmarks_sk(img, landmarks, image_size=(112, 112), method="simil
 def do_detect_in_image(image, det, image_format="BGR"):
     imm_BGR = image if image_format == "BGR" else image[:, :, ::-1]
     imm_RGB = image[:, :, ::-1] if image_format == "BGR" else image
-    bboxes, pps = det.detect(imm_BGR)
+    bboxes, pps = det.detect(imm_BGR, (640, 640))
     nimgs = face_align_landmarks_sk(imm_RGB, pps)
     bbs, ccs = bboxes[:, :4].astype("int"), bboxes[:, -1]
     return bbs, ccs, nimgs
