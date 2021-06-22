@@ -168,8 +168,9 @@
                     lr_base=0.1, lr_decay=0.5, lr_decay_steps=16, lr_min=1e-5)
     optimizer = tfa.optimizers.SGDW(learning_rate=0.1, momentum=0.9, weight_decay=5e-5)
     sch = [
-      {"loss": losses.ArcfaceLoss(scale=32), "epoch": 1, "optimizer": optimizer},
-      {"loss": losses.ArcfaceLoss(scale=64), "epoch": 49},
+      {"loss": losses.ArcfaceLoss(scale=16), "epoch": 5, "optimizer": optimizer},
+      {"loss": losses.ArcfaceLoss(scale=32), "epoch": 5},
+      {"loss": losses.ArcfaceLoss(scale=64), "epoch": 40},
       # {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.35},
     ]
     tt.train(sch, 0)
@@ -246,10 +247,11 @@
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
     tt = train.Train(data_path, 'keras_mobilenet_emore_II.h5', eval_paths, model='./checkpoints/keras_mobilenet_emore.h5',
-                    compile=True, lr_base=0.001, batch_size=480, random_status=3)
+                    batch_size=512, random_status=0, lr_base=0.1, lr_decay=0.5, lr_decay_steps=16, lr_min=1e-5)
 
     sch = [
-      # {"loss": losses.ArcfaceLoss(scale=32), "epoch": 1, "optimizer": optimizer},
+      # {"loss": losses.ArcfaceLoss(scale=16), "epoch": 5, "optimizer": optimizer},
+      # {"loss": losses.ArcfaceLoss(scale=32), "epoch": 5},
       {"loss": losses.ArcfaceLoss(scale=64), "epoch": 35},
       # {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.35},
     ]
