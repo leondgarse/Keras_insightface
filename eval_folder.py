@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import cv2
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -18,139 +19,245 @@ for gpu in gpus:
 
 
 class Face_detection:
-    def __init__(self):
-        import insightface
-        import cv2
+    def __init__(self, det_shape=640):
+        self.det = self.download_and_prepare_det()
+        self.det_shape = (det_shape, det_shape)
 
-        cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
-        if len(cvd) > 0 and int(cvd) != -1:
-            ctx = 0
-        else:
-            ctx = -1
-        # self.det = insightface.model_zoo.face_detection.retinaface_r50_v1()
-        self.det = insightface.model_zoo.face_detection.retinaface_mnet025_v1()
-        self.det.prepare(ctx)
-        self.cv2 = cv2
-
-    def face_align_landmark(self, img, landmark, image_size=(112, 112), method="similar"):
+    def face_align_landmarks(self, img, landmarks, image_size=(112, 112), method="similar"):
         tform = transform.AffineTransform() if method == "affine" else transform.SimilarityTransform()
         src = np.array(
             [[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.729904, 92.2041]],
             dtype=np.float32,
         )
-        tform.estimate(landmark, src)
-        M = tform.params[0:2, :]
-        ndimage = self.cv2.warpAffine(img, M, image_size, borderValue=0.0)
-        if len(ndimage.shape) == 2:
-            ndimage = np.stack([ndimage, ndimage, ndimage], -1)
-        else:
-            ndimage = self.cv2.cvtColor(ndimage, self.cv2.COLOR_BGR2RGB)
-        return ndimage
+        ret = []
+        for landmark in landmarks:
+            # landmark = np.array(landmark).reshape(2, 5)[::-1].T
+            tform.estimate(landmark, src)
+            M = tform.params[0:2, :]
+            ndimage = cv2.warpAffine(img, M, image_size, borderValue=0.0)
+            if len(ndimage.shape) == 2:
+                ndimage = np.stack([ndimage, ndimage, ndimage], -1)
+            ret.append(ndimage)
+        return np.array(ret)
 
-    def do_detect_in_image(self, image, image_format="RGB"):
-        imm_BGR = self.cv2.imread(image)
-        bboxes, pps = self.det.detect(imm_BGR)
+    def detect_in_image(self, image, image_format="RGB"):
+        if isinstance(image, str):
+            imm_BGR = cv2.imread(image)
+        else:
+            imm_BGR = image if image_format == "BGR" else image[:, :, ::-1]
+        bboxes, pps = self.det.detect(imm_BGR, self.det_shape)
         if len(bboxes) != 0:
-            return self.face_align_landmark(imm_BGR, pps[0])
+            bbs, ccs = bboxes[:, :4], bboxes[:, -1]
+            image_RGB = imm_BGR[:, :, ::-1]
+
+            return bbs, ccs, pps, self.face_align_landmarks(image_RGB, pps)
         else:
-            return np.array([])
+            return np.array([]), np.array([]), np.array([]), np.array([])
+
+    def detect_in_folder(self, data_path):
+        while data_path.endswith(os.sep):
+            data_path = data_path[:-1]
+        imms = glob2.glob(os.path.join(data_path, "*", "*"))
+        dest_path = data_path + "_aligned_112_112"
+
+        for imm in tqdm(imms, "Detecting"):
+            _, _, _, nimages = self.detect_in_image(imm)
+            if nimages.shape[0] != 0:
+                file_name = os.path.basename(imm)
+                class_name = os.path.basename(os.path.dirname(imm))
+                save_dir = os.path.join(dest_path, class_name)
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)
+                imsave(os.path.join(save_dir, file_name), nimages[0])   # Use only the first one
+            else:
+                print(">>>> None face detected in image:", imm)
+        print(">>>> Saved aligned face images in:", dest_path)
+        return dest_path
+
+    def show_result(self, image, bbs, ccs=[], pps=[]):
+        import matplotlib.pyplot as plt
+
+        plt.figure()
+        plt.imshow(image)
+        for id, bb in enumerate(bbs):
+            plt.plot([bb[0], bb[2], bb[2], bb[0], bb[0]], [bb[1], bb[1], bb[3], bb[3], bb[1]])
+            if len(ccs) != 0:
+                plt.text(bb[0], bb[1], '{:.4f}'.format(ccs[id]))
+            if len(pps) != 0:
+                pp = pps[id]
+                if len(pp.shape) == 2:
+                    plt.scatter(pp[:, 0], pp[:, 1], s=8)
+                else:
+                    plt.scatter(pp[::2], pp[1::2], s=8)
+        plt.axis('off')
+        plt.tight_layout()
+
+    def download_and_prepare_det(self):
+        import insightface
+
+        cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+        ctx = 0 if len(cvd) > 0 and int(cvd) != -1 else -1
+
+        model_file = os.path.expanduser('~/.insightface/models/antelope/scrfd_10g_bnkps.onnx')
+        if not os.path.exists(model_file):
+            import zipfile
+            model_url = 'http://storage.insightface.ai/files/models/antelope.zip'
+            zip_file = os.path.expanduser('~/.insightface/models/antelope.zip')
+            zip_extract_path = os.path.splitext(zip_file)[0]
+            if not os.path.exists(os.path.dirname(zip_file)):
+                os.makedirs(os.path.dirname(zip_file))
+            insightface.utils.download(model_url, path=zip_file, overwrite=True)
+            with zipfile.ZipFile(zip_file) as zf:
+                zf.extractall(zip_extract_path)
+            os.remove(zip_file)
+
+        det = insightface.model_zoo.SCRFD(model_file=model_file)
+        det.prepare(ctx)
+        return det
 
 
-def detection_in_folder(data_path):
-    while data_path.endswith(os.sep):
-        data_path = data_path[:-1]
-    imms = glob2.glob(os.path.join(data_path, "*", "*"))
-    dest_path = data_path + "_aligned_112_112"
-    det = Face_detection()
-
-    for imm in tqdm(imms, "Detecting"):
-        nimage = det.do_detect_in_image(imm)
-        if nimage.shape[0] != 0:
-            file_name = os.path.basename(imm)
-            class_name = os.path.basename(os.path.dirname(imm))
-            save_dir = os.path.join(dest_path, class_name)
-            if not os.path.exists(save_dir):
-                os.makedirs(save_dir)
-            imsave(os.path.join(save_dir, file_name), nimage)
+class Eval_folder:
+    def __init__(self, model_interf, data_path, batch_size=128, save_embeddings=None):
+        if isinstance(model_interf, str) and model_interf.endswith("h5"):
+            model = tf.keras.models.load_model(model_interf)
+            self.model_interf = lambda imms: model((imms - 127.5) * 0.0078125).numpy()
         else:
-            print(">>>> None face detected in image:", imm)
-    print(">>>> Saved aligned face images in:", dest_path)
-    return dest_path
+            self.model_interf = model_interf
+        self.dist_func = lambda aa, bb: np.dot(aa, bb)
+        self.embs, self.imm_classes, self.filenames = self.prepare_images_and_embeddings(data_path, batch_size, save_embeddings)
+        self.data_path = data_path
 
+    def prepare_images_and_embeddings(self, data_path, batch_size=128, save_embeddings=None):
+        if save_embeddings and os.path.exists(save_embeddings):
+            print(">>>> Reloading from backup:", save_embeddings)
+            aa = np.load(save_embeddings)
+            embs, imm_classes, filenames = aa["embs"], aa["imm_classes"], aa["filenames"]
+            embs, imm_classes = embs.astype("float32"), imm_classes.astype("int")
+        else:
+            img_shape = (112, 112)
 
-def eval_folder(model_file, data_path, batch_size=128, save_embeddings=None, debug=True):
-    if save_embeddings and os.path.exists(save_embeddings):
-        print(">>>> Reloading from backup:", save_embeddings)
-        aa = np.load(save_embeddings)
-        embs, imm_classes, filenames = aa["embs"], aa["imm_classes"], aa["filenames"]
-        embs, imm_classes = embs.astype("float32"), imm_classes.astype("int")
+            img_gen = ImageDataGenerator().flow_from_directory(
+                data_path, class_mode="binary", target_size=img_shape, batch_size=batch_size, shuffle=False
+            )
+            steps = int(np.ceil(img_gen.classes.shape[0] / img_gen.batch_size))
+            filenames = np.array(img_gen.filenames)
 
-    else:
-        img_shape = (112, 112)
-        mm = tf.keras.models.load_model(model_file)
-        img_gen = ImageDataGenerator().flow_from_directory(
-            data_path, class_mode="binary", target_size=img_shape, batch_size=batch_size, shuffle=False
-        )
-        steps = int(np.ceil(img_gen.classes.shape[0] / img_gen.batch_size))
-        filenames = np.array(img_gen.filenames)
+            embs, imm_classes = [], []
+            for _ in tqdm(range(steps), "Embedding"):
+                imm, imm_class = img_gen.next()
+                emb = self.model_interf(imm)
+                embs.extend(emb)
+                imm_classes.extend(imm_class)
+            embs, imm_classes = normalize(np.array(embs).astype("float32")), np.array(imm_classes).astype("int")
+            if save_embeddings:
+                print(">>>> Saving embeddings to:", save_embeddings)
+                np.savez(save_embeddings, embs=embs, imm_classes=imm_classes, filenames=filenames)
 
-        embs, imm_classes = [], []
-        for _ in tqdm(range(steps), "Embedding"):
-            imm, imm_class = img_gen.next()
-            emb = mm((imm - 127.5) * 0.0078125)
-            embs.extend(emb)
-            imm_classes.extend(imm_class)
-        embs, imm_classes = normalize(np.array(embs).astype("float32")), np.array(imm_classes).astype("int")
-        if save_embeddings:
-            print(">>>> Saving embeddings to:", save_embeddings)
-            np.savez(save_embeddings, embs=embs, imm_classes=imm_classes, filenames=filenames)
-    if save_embeddings:
-        result_name = os.path.splitext(os.path.basename(save_embeddings))[0]
-    else:
-        result_name = os.path.splitext(os.path.basename(model_file))[0]
+        return embs, imm_classes, filenames
 
-    register_ids = np.unique(imm_classes)
-    if debug:
-        print(">>>> [base info] embs:", embs.shape, "imm_classes:", imm_classes.shape, "register_ids:", register_ids.shape)
-    try:
-        import cupy as cp
+    def do_evaluation(self):
+        register_ids = np.unique(self.imm_classes)
+        print(">>>> [base info] embs:", self.embs.shape, "imm_classes:", self.imm_classes.shape, "register_ids:", register_ids.shape)
 
-        embs = cp.array(embs)
-        dist_func = lambda aa, bb: cp.dot(aa, bb).get()
-        if debug:
-            print(">>>> Using cupy.")
-    except:
-        dist_func = lambda aa, bb: np.dot(aa, bb)
+        register_base_embs = np.array([]).reshape(0, self.embs.shape[-1])
+        register_base_dists = []
+        for register_id in tqdm(register_ids, "Evaluating"):
+            pos_pick_cond = self.imm_classes == register_id
+            pos_embs = self.embs[pos_pick_cond]
+            register_base_emb = normalize([np.sum(pos_embs, 0)])[0]
 
-    pos_dists, neg_dists, register_base_dists = [], [], []
-    for register_id in tqdm(register_ids, "Evaluating"):
-        pick_cond = imm_classes == register_id
-        pos_embs = embs[pick_cond]
-        dists = dist_func(pos_embs, pos_embs.T)
-        register_base = dists.sum(0).argmax()
-        register_base_dist = dists[register_base]
-        register_base_emb = embs[pick_cond][register_base]
-        pos_dist = register_base_dist[np.arange(dists.shape[0]) != register_base]
+            register_base_dist = self.dist_func(self.embs, register_base_emb)
+            register_base_dists.append(register_base_dist)
+            register_base_embs = np.vstack([register_base_embs, register_base_emb])
+        register_base_dists = np.array(register_base_dists).T
+        accuracy = (register_base_dists.argmax(1) == self.imm_classes).sum() / register_base_dists.shape[0]
 
-        register_base_dist = dist_func(embs, register_base_emb)
-        neg_dist = register_base_dist[imm_classes != register_id]
+        reg_pos_cond = np.equal(register_ids, np.expand_dims(self.imm_classes, 1))
+        reg_pos_dists = register_base_dists[reg_pos_cond].ravel()
+        reg_neg_dists = register_base_dists[np.logical_not(reg_pos_cond)].ravel()
+        label = np.concatenate([np.ones_like(reg_pos_dists), np.zeros_like(reg_neg_dists)])
+        score = np.concatenate([reg_pos_dists, reg_neg_dists])
 
-        pos_dists.extend(pos_dist)
-        neg_dists.extend(neg_dist)
-        register_base_dists.append(register_base_dist)
-        # print(">>> [register info] register_id:", register_id, "register_base_img:", filenames[pick_cond][register_base])
-    pos_dists = np.array(pos_dists).astype("float")
-    neg_dists = np.array(neg_dists).astype("float")
-    register_base_dists = np.array(register_base_dists).T
-    if debug:
-        print(
-            ">>>> pos_dists:", pos_dists.shape, "neg_dists:", neg_dists.shape, "register_base_dists:", register_base_dists.shape
-        )
+        self.register_base_embs, self.register_ids = register_base_embs, register_ids
+        return accuracy, score, label
 
-    accuracy = (register_base_dists.argmax(1) == imm_classes).sum() / register_base_dists.shape[0]
-    label = np.concatenate([np.ones_like(pos_dists), np.zeros_like(neg_dists)])
-    score = np.concatenate([pos_dists, neg_dists])
-    return accuracy, score, label
+    def generate_eval_pair_bin(self, save_dest, pos_num=3000, neg_num=3000, min_pos=0, max_neg=1.0, nfold=10):
+        import pickle
+
+        p1_images, p2_images, pos_scores = [], [], []
+        n1_images, n2_images, neg_scores = [], [], []
+
+        for idx, register_id in tqdm(enumerate(self.register_ids), "Evaluating", total=self.register_ids.shape[0]):
+            register_emb = self.register_base_embs[idx]
+
+            """ Pick pos images """
+            pos_pick_cond = self.imm_classes == register_id
+            pos_embs = self.embs[pos_pick_cond]
+            pos_dists = self.dist_func(pos_embs, pos_embs.T)
+
+            curr_pos_num = pos_embs.shape[0]
+            xx, yy = np.meshgrid(np.arange(1, curr_pos_num), np.arange(curr_pos_num - 1))
+            p1_ids = []
+            for id, ii in enumerate(yy):
+                p1_ids.extend(ii[id:])
+            p2_ids = []
+            for id, ii in enumerate(xx):
+                p2_ids.extend(ii[id:])
+            pos_images = self.filenames[pos_pick_cond]
+            p1_images.extend(pos_images[p1_ids])
+            p2_images.extend(pos_images[p2_ids])
+            pos_scores.extend([pos_dists[ii, jj] for ii, jj in zip(p1_ids, p2_ids)])
+
+            """ Pick neg images for current register_id """
+            if idx == 0:
+                continue
+
+            neg_argmax = self.dist_func(self.register_base_embs[:idx], register_emb).argmax()
+            # print(idx, register_id, neg_argmax)
+            neg_id = self.register_ids[neg_argmax]
+            neg_pick_cond = self.imm_classes == neg_id
+            neg_embs = self.embs[neg_pick_cond]
+            neg_dists = self.dist_func(pos_embs, neg_embs.T)
+
+            curr_neg_num = neg_embs.shape[0]
+            xx, yy = np.meshgrid(np.arange(curr_pos_num), np.arange(curr_neg_num))
+            n1_ids, n2_ids = xx.ravel().tolist(), yy.ravel().tolist()
+            neg_images = self.filenames[neg_pick_cond]
+            n1_images.extend(pos_images[n1_ids])
+            n2_images.extend(neg_images[n2_ids])
+            neg_scores.extend([neg_dists[ii, jj] for ii, jj in zip(n1_ids, n2_ids)])
+
+        print(">>>> len(pos_scores):", len(pos_scores), "len(neg_scores):", len(neg_scores))
+        pos_scores, neg_scores = np.array(pos_scores), np.array(neg_scores)
+        pos_score_cond, neg_score_cond = pos_scores > min_pos, neg_scores < max_neg
+        pos_scores, neg_scores = pos_scores[pos_score_cond], neg_scores[neg_score_cond]
+        p1_images, p2_images = np.array(p1_images)[pos_score_cond], np.array(p2_images)[pos_score_cond]
+        n1_images, n2_images = np.array(n1_images)[neg_score_cond], np.array(n2_images)[neg_score_cond]
+
+        """ pick by sorted score values """
+        pos_pick_cond = np.argsort(pos_scores)[:pos_num]
+        neg_pick_cond = np.argsort(neg_scores)[-neg_num:]
+        pos_scores, p1_images, p2_images = pos_scores[pos_pick_cond], p1_images[pos_pick_cond], p2_images[pos_pick_cond]
+        neg_scores, n1_images, n2_images = neg_scores[neg_pick_cond], n1_images[neg_pick_cond], n2_images[neg_pick_cond]
+
+        bins = []
+        total = pos_num + neg_num
+        for img_1, img_2 in tqdm(list(zip(p1_images, p2_images)) + list(zip(n1_images, n2_images)), "Creating bins", total=total):
+            bins.append(tf.image.encode_jpeg(imread(os.path.join(self.data_path, img_1))).numpy())
+            bins.append(tf.image.encode_jpeg(imread(os.path.join(self.data_path, img_2))).numpy())
+
+        """ nfold """
+        pos_fold, neg_fold = pos_num // nfold, neg_num // nfold
+        issame_list = ([True] * pos_fold + [False] * neg_fold) * nfold
+        pos_bin_fold = lambda ii: bins[ii * pos_fold * 2: (ii + 1) * pos_fold * 2]
+        neg_bin_fold = lambda ii: bins[pos_num * 2 :][ii * neg_fold * 2: (ii + 1) * neg_fold * 2]
+        bins = [pos_bin_fold(ii) + neg_bin_fold(ii) for ii in range(nfold)]
+        bins = np.ravel(bins).tolist()
+
+        print("Saving to %s" % save_dest)
+        with open(save_dest, "wb") as ff:
+            pickle.dump([bins, issame_list], ff)
+        return p1_images, p2_images, pos_scores, n1_images, n2_images, neg_scores
 
 
 def plot_tpr_far(score, label):
@@ -196,6 +303,7 @@ if __name__ == "__main__":
     parser.add_argument("-b", "--batch_size", type=int, default=64, help="Batch size")
     parser.add_argument("-D", "--detection", action="store_true", help="Run face detection before embedding")
     parser.add_argument("-S", "--save_embeddings", type=str, default=None, help="Save / Reload embeddings data")
+    parser.add_argument("-B", "--save_bins", type=str, default=None, help="Save evaluating pair bin")
     args = parser.parse_known_args(sys.argv[1:])[0]
 
     if args.model_file == None and args.data_path == None and args.save_embeddings == None:
@@ -204,10 +312,15 @@ if __name__ == "__main__":
 
     data_path = args.data_path
     if args.detection:
-        data_path = detection_in_folder(args.data_path)
+        data_path = Face_detection().detect_in_folder(args.data_path)
         print()
-    accuracy, score, label = eval_folder(args.model_file, data_path, args.batch_size, args.save_embeddings, debug=True)
+    ee = Eval_folder(args.model_file, data_path, args.batch_size, args.save_embeddings)
+    accuracy, score, label = ee.do_evaluation()
     print(">>>> top1 accuracy:", accuracy)
+
+    if args.save_bins is not None:
+        _ = ee.generate_eval_pair_bin(args.save_bins)
+
     plot_tpr_far(score, label)
 elif __name__ == "__test__":
     data_path = "temp_test/faces_emore_test/"
