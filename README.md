@@ -46,6 +46,7 @@
   | [EfficientNetV2 B0](https://drive.google.com/file/d/1PgH87fznclAVI8Fsiu2x5BaY4UUiukNG/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790627) | 0.997167 | 0.975286 | 0.975 | 0.937098 | 0.951935 |
   | [Botnet50 relu GDC](https://drive.google.com/file/d/12zD6Lba55WEHAcVAuCinJbaptrxH1pIW/view?usp=sharing) | [MS1MV3, E52](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-583259) | 0.9985 | 0.980286 | 0.979667 | 0.940019 | 0.95577 |
   | [r50 swish](https://drive.google.com/file/d/1Mb2ZjBHFSQha8y2UOXO6-vxNWdzw815P/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-824090) | 0.998333 | 0.989571 | 0.984333 | 0.950828 | 0.964463 |
+  | [se_r50 swish SD](https://drive.google.com/file/d/16R9weVSlXBgXPq7tduZGI6mDuB1nQ5MC/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-903227) | 0.9985 | 0.989429 | 0.9845 | 0.954333 | 0.966252 |
   | [Renet101V2 swish](https://drive.google.com/file/d/1joXsSpu22aa-kvnG1lQGNdVGfdPArUXM/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790754) | 0.9985 | 0.989143 | 0.9845 | 0.952483 | 0.966406 |
 ***
 
@@ -71,6 +72,8 @@
     conda create -n tf-nightly python==3.8.5
     conda activate tf-nightly
     pip install tf-nightly tfa-nightly glob2 pandas tqdm scikit-image scikit-learn ipython
+    # Not required
+    pip install pip-search icecream opencv-python cupy-cuda112 tensorflow-datasets tabulate mxnet-cu112 torch
     ```
     ```py
     In [1]: tf.__version__
@@ -165,15 +168,12 @@
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
 
     tt = train.Train(data_path, save_path='keras_mobilenet_emore.h5', eval_paths=eval_paths,
-                    basic_model=basic_model, lr_base=0.001, batch_size=512, random_status=2)
+                    basic_model=basic_model, lr_base=0.001, batch_size=512, random_status=0)
     optimizer = tfa.optimizers.AdamW(weight_decay=5e-5)
     sch = [
-      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.01, "optimizer": optimizer, "epoch": 20},
-      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.1, "epoch": 20},
-      {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.5, "epoch": 20},
-      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.3},
-      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.25},
-      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.2},
+      {"loss": losses.ArcfaceLoss(scale=32), "epoch": 1, "optimizer": optimizer},
+      {"loss": losses.ArcfaceLoss(scale=64), "epoch": 49},
+      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.35},
     ]
     tt.train(sch, 0)
     ```
@@ -224,12 +224,15 @@
         {"loss": losses.BatchAllTripletLoss(0.3), "epoch": 2},
         {"loss": losses.BatchHardTripletLoss(0.25), "epoch": 2},
         {"loss": losses.CenterLoss(num_classes=85742, emb_shape=256), "epoch": 2},
+        {"loss": losses.CurricularFaceLoss(), "epoch": 2},
     ]
     ```
     Some more complicated combinations are also supported.
     ```py
-    # `softmax` / `arcface` + `triplet`
-    sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "triplet": 1, "alpha": 0.3, "epoch": 2}]
+    # `softmax` + `centerloss`, `"centerloss": 0.1` means loss_weight
+    sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.1, "epoch": 2}]
+    # `softmax` / `arcface` + `triplet`, `"triplet": 64` means loss_weight
+    sch = [{"loss": keras.losses.ArcfaceLoss(scale=64), "triplet": 64, "alpha": 0.3, "epoch": 2}]
     # `triplet` + `centerloss`
     sch = [{"loss": losses.BatchHardTripletLoss(0.25), "centerloss": 0.01, "epoch": 2}]
     sch = [{"loss": losses.CenterLoss(num_classes=85742, emb_shape=256), "triplet": 10, "alpha": 0.25, "epoch": 2}]
@@ -247,15 +250,13 @@
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
     tt = train.Train(data_path, 'keras_mobilenet_emore_II.h5', eval_paths, model='./checkpoints/keras_mobilenet_emore.h5',
                     compile=True, lr_base=0.001, batch_size=480, random_status=3)
+
     sch = [
-      # {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.01, "optimizer": optimizer, "epoch": 20},
-      # {"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1), "centerloss": 0.1, "epoch": 20},
-      {"centerloss": 1, "epoch": 5},
-      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.3},
-      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.25},
-      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.2},
+      # {"loss": losses.ArcfaceLoss(scale=32), "epoch": 1, "optimizer": optimizer},
+      {"loss": losses.ArcfaceLoss(scale=64), "epoch": 25},
+      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.35},
     ]
-    tt.train(sch, 45) # 45 is the initial_epoch
+    tt.train(sch, 25) # 25 is the initial_epoch
     ```
     If reload a `centerloss` trained model, please keep `save_path` same as previous, as `centerloss` needs to reload saved `xxx_centers.npy` by `save_path` name.
   - **Gently stop** is a callback to stop training gently. Input an `n` and `<Enter>` anytime during training, will set training stop on that epoch ends.
