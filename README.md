@@ -159,21 +159,18 @@
     import tensorflow_addons as tfa
 
     # basic_model = models.buildin_models("ResNet101V2", dropout=0.4, emb_shape=512, output_layer="E")
-    # basic_model = models.buildin_models("ResNest50", dropout=0.4, emb_shape=512, output_layer="E")
-    # basic_model = models.buildin_models('EfficientNetB4', dropout=0, emb_shape=256, output_layer="GDC")
-    # basic_model = mobile_facenet.mobile_facenet(256, dropout=0, name="mobile_facenet_256")
-    # basic_model = mobile_facenet.mobile_facenet(256, dropout=0, name="se_mobile_facenet_256", use_se=True)
     basic_model = models.buildin_models("MobileNet", dropout=0, emb_shape=256, output_layer="GDC")
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
 
     tt = train.Train(data_path, save_path='keras_mobilenet_emore.h5', eval_paths=eval_paths,
-                    basic_model=basic_model, lr_base=0.001, batch_size=512, random_status=0)
-    optimizer = tfa.optimizers.AdamW(weight_decay=5e-5)
+                    basic_model=basic_model, batch_size=512, random_status=0,
+                    lr_base=0.1, lr_decay=0.5, lr_decay_steps=16, lr_min=1e-5)
+    optimizer = tfa.optimizers.SGDW(learning_rate=0.1, momentum=0.9, weight_decay=5e-5)
     sch = [
       {"loss": losses.ArcfaceLoss(scale=32), "epoch": 1, "optimizer": optimizer},
       {"loss": losses.ArcfaceLoss(scale=64), "epoch": 49},
-      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.35},
+      # {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.35},
     ]
     tt.train(sch, 0)
     ```
@@ -253,10 +250,10 @@
 
     sch = [
       # {"loss": losses.ArcfaceLoss(scale=32), "epoch": 1, "optimizer": optimizer},
-      {"loss": losses.ArcfaceLoss(scale=64), "epoch": 25},
-      {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.35},
+      {"loss": losses.ArcfaceLoss(scale=64), "epoch": 35},
+      # {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.35},
     ]
-    tt.train(sch, 25) # 25 is the initial_epoch
+    tt.train(sch, 15) # 15 is the initial_epoch
     ```
     If reload a `centerloss` trained model, please keep `save_path` same as previous, as `centerloss` needs to reload saved `xxx_centers.npy` by `save_path` name.
   - **Gently stop** is a callback to stop training gently. Input an `n` and `<Enter>` anytime during training, will set training stop on that epoch ends.
