@@ -68,48 +68,23 @@ class GroupedConv2D(object):
 class ResNest:
     def __init__(
         self,
-        verbose=False,
         input_shape=(224, 224, 3),
         active="relu",
         blocks_set=[3, 4, 6, 3],
         radix=2,
         groups=1,
-        bottleneck_width=64,
-        deep_stem=True,
         stem_width=32,
-        block_expansion=4,
-        avg_down=True,
-        avd=True,
-        avd_first=False,
-        preact=False,
-        using_basic_block=False,
         name="model",
     ):
         self.channel_axis = -1  # not for change
-        self.verbose = verbose
         self.active = active  # default relu
         self.input_shape = input_shape
-        # self.n_classes = n_classes
-        # self.fc_activation = fc_activation
         self.name = name
-
         self.blocks_set = blocks_set
         self.radix = radix
-        self.cardinality = groups
-        self.bottleneck_width = bottleneck_width
-
-        self.deep_stem = deep_stem
         self.stem_width = stem_width
-        self.block_expansion = block_expansion
-        self.avg_down = avg_down
-        self.avd = avd
-        self.avd_first = avd_first
 
-        # self.cardinality = 1
-        self.preact = preact
-        self.using_basic_block = using_basic_block
-
-    def _make_stem(self, input_tensor, stem_width=64, deep_stem=False):
+    def _make_stem(self, input_tensor, stem_width=64):
         x = Conv2D(stem_width, kernel_size=3, strides=2, padding="same", kernel_initializer="he_normal", use_bias=False)(
             input_tensor
         )
@@ -207,7 +182,7 @@ class ResNest:
 
     def build(self):
         input_sig = Input(shape=self.input_shape)
-        x = self._make_stem(input_sig, stem_width=self.stem_width, deep_stem=self.deep_stem)
+        x = self._make_stem(input_sig, stem_width=self.stem_width)
 
         x = BatchNormalization(axis=self.channel_axis, epsilon=1.001e-5)(x)
         x = Activation(self.active)(x)
@@ -223,13 +198,9 @@ class ResNest:
         return model
 
 
-def ResNest50(input_shape=(112, 112, 3), verbose=False, model_name="ResNest50", **kwargs):
-    return ResNest(
-        verbose=verbose, input_shape=input_shape, blocks_set=[3, 4, 6, 3], stem_width=32, name=model_name, **kwargs
-    ).build()
+def ResNest50(input_shape=(112, 112, 3), model_name="ResNest50", **kwargs):
+    return ResNest(input_shape=input_shape, blocks_set=[3, 4, 6, 3], stem_width=32, name=model_name, **kwargs).build()
 
 
-def ResNest101(input_shape=(112, 112, 3), verbose=False, model_name="ResNest101", **kwargs):
-    return ResNest(
-        verbose=verbose, input_shape=input_shape, blocks_set=[3, 4, 23, 3], stem_width=64, name=model_name, **kwargs
-    ).build()
+def ResNest101(input_shape=(112, 112, 3), model_name="ResNest101", **kwargs):
+    return ResNest(input_shape=input_shape, blocks_set=[3, 4, 23, 3], stem_width=64, name=model_name, **kwargs).build()
