@@ -284,16 +284,14 @@ def replace_ReLU_with_PReLU(model, target_activation="PReLU", **kwargs):
                 print(">>>> Convert ReLU:", layer.name, "-->", layer_name)
                 # Default initial value in mxnet and pytorch is 0.25
                 return PReLU(shared_axes=[1, 2], alpha_initializer=tf.initializers.Constant(0.25), name=layer_name, **kwargs)
-            if target_activation == "swish":
-                layer_name = layer.name.replace("_relu", "_swish")
+            elif isinstance(target_activation, str):
+                layer_name = layer.name.replace("_relu", "_" + target_activation)
                 print(">>>> Convert ReLU:", layer.name, "-->", layer_name)
-                return Activation(activation="swish", name=layer_name, **kwargs)
-            elif target_activation == "aconC":
-                layer_name = layer.name.replace("_relu", "_aconc")
-                print(">>>> Convert ReLU:", layer.name, "-->", layer_name)
-                return AconC()
+                return Activation(activation=target_activation, name=layer_name, **kwargs)
             else:
-                print(">>>> Convert ReLU:", layer.name)
+                act_class_name = target_activation.__name__
+                layer_name = layer.name.replace("_relu", "_" + act_class_name)
+                print(">>>> Convert ReLU:", layer.name, "-->", layer_name)
                 return target_activation(**kwargs)
         return layer
 
@@ -301,34 +299,28 @@ def replace_ReLU_with_PReLU(model, target_activation="PReLU", **kwargs):
     return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=convert_ReLU)
 
 
-def aconC(inputs, p1=1, p2=0, beta=1):
+class AconC(keras.layers.Layer):
     """
     - [Github nmaac/acon](https://github.com/nmaac/acon/blob/main/acon.py)
     - [Activate or Not: Learning Customized Activation, CVPR 2021](https://arxiv.org/pdf/2009.04759.pdf)
     """
-    p1 = keras.layers.DepthwiseConv2D(1, use_bias=False, depthwise_initializer=tf.initializers.Constant(p1))(inputs)
-    p2 = keras.layers.DepthwiseConv2D(1, use_bias=False, depthwise_initializer=tf.initializers.Constant(p2))(inputs)
-    beta = keras.layers.DepthwiseConv2D(1, use_bias=False, depthwise_initializer=tf.initializers.Constant(beta))(p1)
-
-    return p1 * tf.nn.sigmoid(beta) + p2
-
-class AconC(keras.layers.Layer):
     def __init__(self, p1=1, p2=0, beta=1, **kwargs):
         super(AconC, self).__init__(**kwargs)
-        self.p1 = keras.layers.DepthwiseConv2D(1, use_bias=False, depthwise_initializer=tf.initializers.Constant(p1))
-        self.p2 = keras.layers.DepthwiseConv2D(1, use_bias=False, depthwise_initializer=tf.initializers.Constant(p2))
-        self.beta = keras.layers.DepthwiseConv2D(1, use_bias=False, depthwise_initializer=tf.initializers.Constant(beta))
+        self.p1_init = tf.initializers.Constant(p1)
+        self.p2_init = tf.initializers.Constant(p2)
+        self.beta_init = tf.initializers.Constant(beta)
+        self.supports_masking = False
 
     def build(self, input_shape):
-        self.p1.build(input_shape)
-        self.p2.build(input_shape)
-        self.beta.build(input_shape)
+        self.p1 = self.add_weight(name="p1", shape=(1, 1, 1, input_shape[-1]), initializer=self.p1_init, trainable=True)
+        self.p2 = self.add_weight(name="p2", shape=(1, 1, 1, input_shape[-1]), initializer=self.p2_init, trainable=True)
+        self.beta = self.add_weight(name="beta", shape=(1, 1, 1, input_shape[-1]), initializer=self.beta_init, trainable=True)
         super(AconC, self).build(input_shape)
 
     def call(self, inputs, **kwargs):
-        p1 = self.p1(inputs)
-        p2 = self.p2(inputs)
-        beta = self.beta(p1)
+        p1 = inputs * self.p1
+        p2 = inputs * self.p2
+        beta = inputs * self.beta
         return p1 * tf.nn.sigmoid(beta) + p2
 
     def compute_output_shape(self, input_shape):
@@ -444,6 +436,7 @@ def replace_stochastic_depth_with_add(model, drop_survival=False):
     input_tensors = keras.layers.Input(model.input_shape[1:])
     return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=__replace_stochastic_depth_with_add__)
 
+
 def convert_to_mixed_float16(model, convert_batch_norm=False):
     policy = keras.mixed_precision.Policy('mixed_float16')
     policy_config = keras.utils.serialize_keras_object(policy)
@@ -463,6 +456,7 @@ def convert_to_mixed_float16(model, convert_batch_norm=False):
         return layer
     input_tensors = keras.layers.Input(model.input_shape[1:])
     return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=do_convert_to_mixed_float16)
+
 
 def convert_mixed_float16_to_float32(model):
     from tensorflow.keras.layers import InputLayer, Activation
