@@ -479,3 +479,17 @@ def convert_mixed_float16_to_float32(model):
         return layer
     input_tensors = keras.layers.Input(model.input_shape[1:])
     return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=do_convert_to_mixed_float16)
+
+
+def convert_to_batch_renorm(model):
+    def do_convert_to_batch_renorm(layer):
+        if isinstance(layer, keras.layers.BatchNormalization):
+            aa = layer.get_config()
+            aa.update({'renorm': True, "renorm_clipping": {}, "renorm_momentum": aa["momentum"]})
+            bb = layer.__class__.from_config(aa)
+            bb.build(layer.input_shape)
+            bb.set_weights(layer.get_weights() + bb.get_weights()[-3:])
+            return bb
+        return layer
+    input_tensors = keras.layers.Input(model.input_shape[1:])
+    return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=do_convert_to_batch_renorm)

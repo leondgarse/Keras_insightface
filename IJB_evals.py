@@ -130,15 +130,16 @@ def extract_IJB_data_11(data_path, subset, save_path=None, force_reload=False):
     print(">>>> Loading templates and medias...")
     templates, medias = read_IJB_meta_columns_to_int(media_list_path, columns=[1, 2])  # ['1.jpg', '1', '69544']
     print("templates: %s, medias: %s, unique templates: %s" % (templates.shape, medias.shape, np.unique(templates).shape))
-    # (227630,) (227630,) (12115,)
+    # templates: (227630,), medias: (227630,), unique templates: (12115,)
 
     print(">>>> Loading pairs...")
     p1, p2, label = read_IJB_meta_columns_to_int(pair_list_path, columns=[0, 1, 2])  # ['1', '11065', '1']
     print("p1: %s, unique p1: %s" % (p1.shape, np.unique(p1).shape))
     print("p2: %s, unique p2: %s" % (p2.shape, np.unique(p2).shape))
     print("label: %s, label value counts: %s" % (label.shape, dict(zip(*np.unique(label, return_counts=True)))))
-    # (8010270,) (8010270,) (8010270,) (1845,) (10270,) # 10270 + 1845 = 12115
-    # {0: 8000000, 1: 10270}
+    # p1: (8010270,), unique p1: (1845,)
+    # p2: (8010270,), unique p2: (10270,) # 10270 + 1845 = 12115 --> np.unique(templates).shape
+    # label: (8010270,), label value counts: {0: 8000000, 1: 10270}
 
     print(">>>> Loading images...")
     with open(img_list_path, "r") as ff:
@@ -149,7 +150,7 @@ def extract_IJB_data_11(data_path, subset, save_path=None, force_reload=False):
     landmarks = img_records[:, 1:-1].astype("float32").reshape(-1, 5, 2)
     face_scores = img_records[:, -1].astype("float32")
     print("img_names: %s, landmarks: %s, face_scores: %s" % (img_names.shape, landmarks.shape, face_scores.shape))
-    # (227630,) (227630, 5, 2) (227630,)
+    # img_names: (227630,), landmarks: (227630, 5, 2), face_scores: (227630,)
     print("face_scores value counts:", dict(zip(*np.histogram(face_scores, bins=9)[::-1])))
     # {0.1: 2515, 0.2: 0, 0.3: 62, 0.4: 94, 0.5: 136, 0.6: 197, 0.7: 291, 0.8: 538, 0.9: 223797}
 
@@ -236,6 +237,7 @@ def get_embeddings(model_interf, img_names, landmarks, batch_size=64, flip=True)
 
 
 def process_embeddings(embs, embs_f=[], use_flip_test=True, use_norm_score=False, use_detector_score=True, face_scores=None):
+    print(">>>> process_embeddings:", use_flip_test, use_norm_score, use_detector_score)
     if use_flip_test and len(embs_f) != 0:
         embs = embs + embs_f
     if use_norm_score:
@@ -276,18 +278,17 @@ def image2template_feature(img_feats=None, templates=None, medias=None, choose_t
 
 def verification_11(template_norm_feats=None, unique_templates=None, p1=None, p2=None, batch_size=10000):
     try:
+        print(">>>> Trying cupy.")
         import cupy as cp
 
         template_norm_feats = cp.array(template_norm_feats)
         score_func = lambda feat1, feat2: cp.sum(feat1 * feat2, axis=-1).get()
         test = score_func(template_norm_feats[:batch_size], template_norm_feats[:batch_size])
-        print(">>>> Using cupy.")
     except:
         score_func = lambda feat1, feat2: np.sum(feat1 * feat2, -1)
 
     template2id = np.zeros(max(unique_templates) + 1, dtype=int)
-    for count_template, uqt in enumerate(unique_templates):
-        template2id[uqt] = count_template
+    template2id[unique_templates] = np.arange(len(unique_templates))
 
     steps = int(np.ceil(len(p1) / batch_size))
     score = []
@@ -501,7 +502,7 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
 
         plt.grid(linestyle="--", linewidth=1)
         plt.title(title)
-        plt.legend(loc="lower right")
+        plt.legend(loc="lower right", fontsize='x-small')
         plt.tight_layout()
         plt.show()
     except:
@@ -535,7 +536,7 @@ def plot_dir_far_cmc_scores(scores, names=None):
         plt.ylim([0, 1])
 
         plt.grid(linestyle="--", linewidth=1)
-        plt.legend()
+        plt.legend(fontsize='x-small')
         plt.tight_layout()
         plt.show()
     except:
