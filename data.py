@@ -71,7 +71,7 @@ class RandomProcessImage:
             magnitude = 5 * random_status / 100
             print(">>>> RandAugment: magnitude =", magnitude)
             aa = augment.RandAugment(magnitude=magnitude)
-            aa.available_ops = ["AutoContrast", "Equalize", "Color", "Contrast", "Brightness", "Sharpness", "ShearX", "ShearY"]
+            aa.available_ops = ["AutoContrast", "Equalize", "Color", "Contrast", "Brightness", "Sharpness", "Cutout"]
             self.process = lambda img: aa.distort(tf.image.random_flip_left_right(img))
         else:
             self.process = lambda img: self.tf_buildin_image_random(img)
@@ -95,6 +95,38 @@ class RandomProcessImage:
         return img
 
 
+def sample_beta_distribution(size, concentration_0=0.4, concentration_1=0.4):
+    gamma_1_sample = tf.random.gamma(shape=[size], alpha=concentration_1)
+    gamma_2_sample = tf.random.gamma(shape=[size], alpha=concentration_0)
+    return gamma_1_sample / (gamma_1_sample + gamma_2_sample)
+
+
+def mixup(image, label, alpha=0.4):
+    """Applies Mixup regularization to a batch of images and labels.
+
+    [1] Hongyi Zhang, Moustapha Cisse, Yann N. Dauphin, David Lopez-Paz
+    Mixup: Beyond Empirical Risk Minimization.
+    ICLR'18, https://arxiv.org/abs/1710.09412
+    """
+    # mix_weight = tfp.distributions.Beta(alpha, alpha).sample([batch_size, 1])
+    batch_size = tf.shape(image)[0]
+    mix_weight = sample_beta_distribution(batch_size, alpha, alpha)
+    mix_weight = tf.maximum(mix_weight, 1. - mix_weight)
+
+    # Regard values with `> 0.9` as no mixup, this probability is near `1 - alpha`
+    # alpha: no_mixup --> {0.2: 0.6714, 0.4: 0.47885, 0.6: 0.35132, 0.8: 0.26354, 1.0: 0.19931}
+    mix_weight = tf.where(mix_weight > 0.9, tf.ones_like(mix_weight), mix_weight)
+
+    label_mix_weight = tf.cast(tf.expand_dims(mix_weight, -1), "float32")
+    img_mix_weight = tf.cast(tf.reshape(mix_weight, [batch_size, 1, 1, 1]), image.dtype)
+
+    shuffle_index = tf.random.shuffle(tf.range(batch_size))
+    image = image * img_mix_weight + tf.gather(image, shuffle_index) * (1. - img_mix_weight)
+    label = tf.cast(label, "float32")
+    label = label * label_mix_weight + tf.gather(label, shuffle_index) * (1 - label_mix_weight)
+    return image, label
+
+
 def pick_by_image_per_class(image_classes, image_per_class):
     cc = pd.value_counts(image_classes)
     class_pick = cc[cc >= image_per_class].index
@@ -109,6 +141,7 @@ def prepare_dataset(
     img_shape=(112, 112),
     random_status=0,
     random_crop=(100, 100, 3),
+    mixup=0,
     image_per_class=0,
     cache=False,
     shuffle_buffer_size=None,
@@ -144,16 +177,19 @@ def prepare_dataset(
         random_process_func = lambda xx, yy: (random_process_image.process(xx), yy)
         ds = ds.map(random_process_func, num_parallel_calls=AUTOTUNE)
 
-    ds = ds.batch(batch_size)  # Use batch --> map has slightly effect on dataset reading time, but harm the randomness
+    ds = ds.batch(batch_size, drop_remainder=True)  # Use batch --> map has slightly effect on dataset reading time, but harm the randomness
     # ds = ds.map(lambda xx, yy: (random_rotate(xx), yy), num_parallel_calls=AUTOTUNE)
     if teacher_model_interf is not None:
         print(">>>> Teacher model interface provided.")
         emb_func = lambda imm, label: (imm, (teacher_model_interf(imm), label))
         ds = ds.map(emb_func, num_parallel_calls=AUTOTUNE)
 
-    ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
+    if mixup > 0 and mixup <= 1:
+        ds = ds.map(lambda xx, yy: mixup((xx - 127.5) * 0.0078125, yy))
+    else:
+        ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
     ds = ds.prefetch(buffer_size=AUTOTUNE)
-    steps_per_epoch = int(np.ceil(len(image_names) / float(batch_size)))
+    steps_per_epoch = int(np.floor(len(image_names) / float(batch_size)))
     return ds, steps_per_epoch
 
 
@@ -196,10 +232,10 @@ def prepare_distill_dataset_tfrecord(
     ds = tf.data.TFRecordDataset([data_path])
     ds = ds.shuffle(buffer_size=batch_size * 1000).repeat()
     ds = ds.map(decode_fn, num_parallel_calls=AUTOTUNE)
-    ds = ds.batch(batch_size)
+    ds = ds.batch(batch_size, drop_remainder=True)
     ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
     ds = ds.prefetch(buffer_size=AUTOTUNE)
-    steps_per_epoch = int(np.ceil(total / float(batch_size)))
+    steps_per_epoch = int(np.floor(total / float(batch_size)))
     return ds, steps_per_epoch
 
 
@@ -249,7 +285,7 @@ class Triplet_dataset:
             process_func = lambda imm, label: (random_imread(imm), one_hot_label(label))
         ds = ds.map(process_func, num_parallel_calls=AUTOTUNE)
 
-        ds = ds.batch(self.batch_size)
+        ds = ds.batch(self.batch_size, drop_remainder=True)
         if teacher_model_interf is not None:
             print(">>>> Teacher model interference provided.")
             emb_func = lambda imm, label: (imm, (teacher_model_interf(imm), label))
@@ -260,7 +296,7 @@ class Triplet_dataset:
 
         shuffle_dataset = self.image_dataframe.map(self.split_func)
         self.total = np.vstack(shuffle_dataset.values).flatten().shape[0]
-        self.steps_per_epoch = int(np.ceil(self.total / float(batch_size)))
+        self.steps_per_epoch = int(np.floor(self.total / float(batch_size)))
 
     def image_shuffle_gen(self):
         while True:
