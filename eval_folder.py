@@ -243,8 +243,8 @@ class Eval_folder:
         bins = []
         total = pos_num + neg_num
         for img_1, img_2 in tqdm(list(zip(p1_images, p2_images)) + list(zip(n1_images, n2_images)), "Creating bins", total=total):
-            bins.append(tf.image.encode_jpeg(imread(os.path.join(self.data_path, img_1))).numpy())
-            bins.append(tf.image.encode_jpeg(imread(os.path.join(self.data_path, img_2))).numpy())
+            bins.append(tf.image.encode_png(imread(os.path.join(self.data_path, img_1))).numpy())
+            bins.append(tf.image.encode_png(imread(os.path.join(self.data_path, img_2))).numpy())
 
         """ nfold """
         pos_fold, neg_fold = pos_num // nfold, neg_num // nfold
@@ -296,6 +296,7 @@ def plot_tpr_far(score, label):
 if __name__ == "__main__":
     import sys
     import argparse
+    import tensorflow_addons as tfa
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-d", "--data_path", type=str, default=None, help="Data path, containing images in class folders")

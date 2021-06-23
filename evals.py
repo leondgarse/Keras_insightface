@@ -22,7 +22,7 @@ class eval_callback(tf.keras.callbacks.Callback):
         super(eval_callback, self).__init__()
         bins, issame_list = np.load(test_bin_file, encoding="bytes", allow_pickle=True)
         ds = tf.data.Dataset.from_tensor_slices(bins)
-        _imread = lambda xx: (tf.cast(tf.image.decode_jpeg(xx, channels=3), "float32") - 127.5) * 0.0078125
+        _imread = lambda xx: (tf.cast(tf.image.decode_image(xx, channels=3), "float32") - 127.5) * 0.0078125
         ds = ds.map(_imread)
         self.ds = ds.batch(batch_size)
         self.test_issame = np.array(issame_list)
@@ -264,6 +264,7 @@ def evaluate(embeddings, actual_issame, nrof_folds=10, pca=0):
 if __name__ == "__main__":
     import sys
     import argparse
+    import tensorflow_addons as tfa
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-m", "--basic_model", type=str, required=True, help="Model file, keras h5")
