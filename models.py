@@ -161,7 +161,7 @@ def buildin_models(
             nn = keras.layers.Dropout(dropout)(nn)
         nn = keras.layers.Conv2D(emb_shape, 1, use_bias=use_bias, activation=None, kernel_initializer="glorot_normal", name="GDC_conv")(nn)
         nn = keras.layers.Flatten(name="GDC_flatten")(nn)
-        # nn = keras.layers.Dense(emb_shape, activation=None, use_bias=True, kernel_initializer="glorot_normal")(nn)
+        # nn = keras.layers.Dense(emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal", name="GDC_dense")(nn)
 
     # `fix_gamma=True` in MXNet means `scale=False` in Keras
     embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, scale=scale, name="pre_embedding")(nn)

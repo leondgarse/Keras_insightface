@@ -196,13 +196,16 @@ class Eval_folder:
             pos_dists = self.dist_func(pos_embs, pos_embs.T)
 
             curr_pos_num = pos_embs.shape[0]
-            xx, yy = np.meshgrid(np.arange(1, curr_pos_num), np.arange(curr_pos_num - 1))
+            # xx, yy = np.meshgrid(np.arange(1, curr_pos_num), np.arange(curr_pos_num - 1))
+            # triangle_pick = np.triu(np.ones_like(xx)).astype('bool')
+            # p1_ids, p2_ids = yy[triangle_pick], xx[triangle_pick]
             p1_ids = []
-            for id, ii in enumerate(yy):
-                p1_ids.extend(ii[id:])
+            for ii in range(curr_pos_num - 1):
+                p1_ids.extend([ii] * (curr_pos_num - 1 - ii))
             p2_ids = []
-            for id, ii in enumerate(xx):
-                p2_ids.extend(ii[id:])
+            for ii in range(1, curr_pos_num):
+                p2_ids.extend(range(ii, curr_pos_num))
+            # curr_pos_num = 5 --> p1_ids: [0, 0, 0, 0, 1, 1, 1, 2, 2, 3], p2_ids: [1, 2, 3, 4, 2, 3, 4, 3, 4, 4]
             pos_images = self.filenames[pos_pick_cond]
             p1_images.extend(pos_images[p1_ids])
             p2_images.extend(pos_images[p2_ids])

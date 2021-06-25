@@ -141,7 +141,7 @@ def prepare_dataset(
     img_shape=(112, 112),
     random_status=0,
     random_crop=(100, 100, 3),
-    mixup=0,
+    mixup_alpha=0,
     image_per_class=0,
     cache=False,
     shuffle_buffer_size=None,
@@ -184,8 +184,9 @@ def prepare_dataset(
         emb_func = lambda imm, label: (imm, (teacher_model_interf(imm), label))
         ds = ds.map(emb_func, num_parallel_calls=AUTOTUNE)
 
-    if mixup > 0 and mixup <= 1:
-        ds = ds.map(lambda xx, yy: mixup((xx - 127.5) * 0.0078125, yy))
+    if mixup_alpha > 0 and mixup_alpha <= 1:
+        print(">>>> mixup_alpha provided:", mixup_alpha)
+        ds = ds.map(lambda xx, yy: mixup((xx - 127.5) * 0.0078125, yy, alpha=mixup_alpha))
     else:
         ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
     ds = ds.prefetch(buffer_size=AUTOTUNE)
@@ -251,6 +252,7 @@ class Triplet_dataset:
         random_status=3,
         random_crop=(100, 100, 3),
         teacher_model_interf=None,
+        **kw,
     ):
         AUTOTUNE = tf.data.experimental.AUTOTUNE
         image_names, image_classes, embeddings, classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)

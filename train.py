@@ -37,6 +37,7 @@ class Train:
         eval_freq=1,
         random_status=0,
         image_per_class=0,  # For triplet, image_per_class will be `4` if it's `< 4`
+        mixup_alpha=0,  # mixup alpha, value in (0, 1] to enable
         teacher_model_interf=None,  # Teacher model to generate embedding data, used for distilling training.
         sam_rho=0,
     ):
@@ -110,7 +111,7 @@ class Train:
         self.metrics = ["accuracy"]
         self.default_optimizer = "adam"
 
-        self.data_path, self.random_status, self.image_per_class = data_path, random_status, image_per_class
+        self.data_path, self.random_status, self.image_per_class, self.mixup_alpha = data_path, random_status, image_per_class, mixup_alpha
         self.train_ds, self.steps_per_epoch, self.classes, self.is_triplet_dataset = None, None, 0, False
         self.teacher_model_interf, self.is_distill_ds = teacher_model_interf, False
         self.distill_emb_map_layer = None
@@ -130,6 +131,7 @@ class Train:
             "batch_size": self.batch_size,
             "random_status": self.random_status,
             "image_per_class": self.image_per_class,
+            "mixup_alpha": self.mixup_alpha,
             "teacher_model_interf": self.teacher_model_interf,
         }
         if init_as_triplet:
