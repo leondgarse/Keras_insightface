@@ -192,12 +192,13 @@
     basic_model = models.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=False)
     ```
   - **train.Train model parameters** including `basic_model` / `model`. Combine them to initialize model from different sources. Sometimes may need `custom_objects` to load model.
-    | basic_model                                                     | model           | Used for                                   |
-    | --------------------------------------------------------------- | --------------- | ------------------------------------------ |
-    | model structure                                                 | None            | Scratch train                              |
-    | basic model .h5 file                                            | None            | Continue training from a saved basic model |
-    | None for 'embedding' layer or layer index of basic model output | model .h5 file  | Continue training from last saved model    |
-    | None for 'embedding' layer or layer index of basic model output | model structure | Continue training from a modified model    |
+    | basic_model                                                     | model           | Used for                                    |
+    | --------------------------------------------------------------- | --------------- | ------------------------------------------- |
+    | model structure                                                 | None            | Scratch train                               |
+    | basic model .h5 file                                            | None            | Continue training from a saved basic model  |
+    | None for 'embedding' layer or layer index of basic model output | model .h5 file  | Continue training from last saved model     |
+    | None for 'embedding' layer or layer index of basic model output | model structure | Continue training from a modified model     |
+    | None                                                            | None            | Reload model from "checkpoints/{save_path}" |
   - **train.Train output_weight_decay** controls `L2 regularizer` value added to `output_layer`.
     - `0` for None.
     - `(0, 1)` for specific value, actual added value will also divided by `2`.

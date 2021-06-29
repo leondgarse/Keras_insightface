@@ -47,6 +47,10 @@ class Train:
         custom_objects.update({"NormDense": models.NormDense})
 
         self.model, self.basic_model, self.save_path, self.inited_from_model, self.sam_rho = None, None, save_path, False, sam_rho
+        if model is None and basic_model is None:
+            model = os.path.join("checkpoints", save_path)
+            print(">>>> Try reload from:", model)
+
         if isinstance(model, str):
             if model.endswith(".h5") and os.path.exists(model):
                 print(">>>> Load model from h5 file: %s..." % model)
