@@ -266,6 +266,9 @@ if __name__ == "__main__":
     import argparse
     import tensorflow_addons as tfa
 
+    # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    # tf.get_logger().setLevel('ERROR')
+
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-m", "--basic_model", type=str, required=True, help="Model file, keras h5")
     parser.add_argument("-b", "--batch_size", type=int, default=128, help="Batch size")

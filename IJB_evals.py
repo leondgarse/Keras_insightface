@@ -480,6 +480,7 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
         tpr_result[name] = [tpr[np.argmin(abs(fpr - ii))] for ii in x_labels]
         fpr_dict[name], tpr_dict[name], roc_auc_dict[name] = fpr, tpr, roc_auc
     tpr_result_df = pd.DataFrame(tpr_result, index=x_labels).T
+    tpr_result_df['AUC'] = pd.Series(roc_auc_dict)
     tpr_result_df.columns.name = "Methods"
     print(tpr_result_df.to_markdown())
     # print(tpr_result_df)
