@@ -29,7 +29,7 @@ def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet"
         xx = mobilenet.MobileNet(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name_lower == "mobilenetv2":
         xx = keras.applications.MobileNetV2(input_shape=input_shape, include_top=False, weights=weights, **kwargs)
-    elif name_lower == "r34" or name_lower == "r50" or name_lower == "r100" or name_lower == "r101":
+    elif name_lower == "r18" or name_lower == "r34" or name_lower == "r50" or name_lower == "r100" or name_lower == "r101":
         from backbones import resnet  # MXNet insightface version resnet
 
         model_name = "ResNet" + name_lower[1:]
@@ -84,6 +84,7 @@ def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet"
         xx = ghost_model.GhostNet(input_shape=input_shape, include_top=False, width=1.3, **kwargs)
     elif name_lower.startswith("botnet"):
         from backbones import botnet
+
         if name_lower.endswith("v2"):
             model_name = "BotNet" + name_lower[len("botnet") : -2] + "V2"
         else:
@@ -144,14 +145,18 @@ def buildin_models(
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
         nn = keras.layers.Flatten(name="E_flatten")(nn)
-        nn = keras.layers.Dense(emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal", name="E_dense")(nn)
+        nn = keras.layers.Dense(
+            emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal", name="E_dense"
+        )(nn)
     elif output_layer == "GAP":
         """ GlobalAveragePooling2D """
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="GAP_batchnorm")(nn)
         nn = keras.layers.GlobalAveragePooling2D(name="GAP_pool")(nn)
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
-        nn = keras.layers.Dense(emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal", name="GAP_dense")(nn)
+        nn = keras.layers.Dense(
+            emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal", name="GAP_dense"
+        )(nn)
     else:
         """ GDC """
         nn = keras.layers.DepthwiseConv2D(int(nn.shape[1]), depth_multiplier=1, use_bias=False, name="GDC_dw")(nn)
@@ -159,7 +164,9 @@ def buildin_models(
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="GDC_batchnorm")(nn)
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
-        nn = keras.layers.Conv2D(emb_shape, 1, use_bias=use_bias, activation=None, kernel_initializer="glorot_normal", name="GDC_conv")(nn)
+        nn = keras.layers.Conv2D(
+            emb_shape, 1, use_bias=use_bias, activation=None, kernel_initializer="glorot_normal", name="GDC_conv"
+        )(nn)
         nn = keras.layers.Flatten(name="GDC_flatten")(nn)
         # nn = keras.layers.Dense(emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal", name="GDC_dense")(nn)
 
@@ -304,6 +311,7 @@ class AconC(keras.layers.Layer):
     - [Github nmaac/acon](https://github.com/nmaac/acon/blob/main/acon.py)
     - [Activate or Not: Learning Customized Activation, CVPR 2021](https://arxiv.org/pdf/2009.04759.pdf)
     """
+
     def __init__(self, p1=1, p2=0, beta=1, **kwargs):
         super(AconC, self).__init__(**kwargs)
         self.p1_init = tf.initializers.Constant(p1)
@@ -438,7 +446,7 @@ def replace_stochastic_depth_with_add(model, drop_survival=False):
 
 
 def convert_to_mixed_float16(model, convert_batch_norm=False):
-    policy = keras.mixed_precision.Policy('mixed_float16')
+    policy = keras.mixed_precision.Policy("mixed_float16")
     policy_config = keras.utils.serialize_keras_object(policy)
     from tensorflow.keras.layers import InputLayer, Activation
     from tensorflow.keras.activations import linear
@@ -448,12 +456,13 @@ def convert_to_mixed_float16(model, convert_batch_norm=False):
             return layer
         if not isinstance(layer, InputLayer) and not (isinstance(layer, Activation) and layer.activation == linear):
             aa = layer.get_config()
-            aa.update({'dtype': policy_config})
+            aa.update({"dtype": policy_config})
             bb = layer.__class__.from_config(aa)
             bb.build(layer.input_shape)
             bb.set_weights(layer.get_weights())
             return bb
         return layer
+
     input_tensors = keras.layers.Input(model.input_shape[1:])
     return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=do_convert_to_mixed_float16)
 
@@ -465,12 +474,13 @@ def convert_mixed_float16_to_float32(model):
     def do_convert_to_mixed_float16(layer):
         if not isinstance(layer, InputLayer) and not (isinstance(layer, Activation) and layer.activation == linear):
             aa = layer.get_config()
-            aa.update({'dtype': "float32"})
+            aa.update({"dtype": "float32"})
             bb = layer.__class__.from_config(aa)
             bb.build(layer.input_shape)
             bb.set_weights(layer.get_weights())
             return bb
         return layer
+
     input_tensors = keras.layers.Input(model.input_shape[1:])
     return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=do_convert_to_mixed_float16)
 
@@ -479,11 +489,12 @@ def convert_to_batch_renorm(model):
     def do_convert_to_batch_renorm(layer):
         if isinstance(layer, keras.layers.BatchNormalization):
             aa = layer.get_config()
-            aa.update({'renorm': True, "renorm_clipping": {}, "renorm_momentum": aa["momentum"]})
+            aa.update({"renorm": True, "renorm_clipping": {}, "renorm_momentum": aa["momentum"]})
             bb = layer.__class__.from_config(aa)
             bb.build(layer.input_shape)
             bb.set_weights(layer.get_weights() + bb.get_weights()[-3:])
             return bb
         return layer
+
     input_tensors = keras.layers.Input(model.input_shape[1:])
     return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=do_convert_to_batch_renorm)

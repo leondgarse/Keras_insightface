@@ -78,7 +78,7 @@ def resnet_stack_fn(inputs, out_channels, depthes, strides=2, activation="relu",
     nn = inputs
     use_ses = use_se if isinstance(use_se, (list, tuple)) else [use_se] * len(out_channels)
     for id, (out_channel, depth, use_se) in enumerate(zip(out_channels, depthes, use_ses)):
-        name="stack" + str(id + 1)
+        name = "stack" + str(id + 1)
         nn = block(nn, out_channel, strides, activation, use_se, True, name=name + "_block1")
         for ii in range(2, depth + 1):
             nn = block(nn, out_channel, 1, activation, use_se, False, name=name + "_block" + str(ii))
@@ -98,6 +98,13 @@ def ResNet(input_shape, stack_fn, classes=1000, activation="relu", model_name="r
 
     model = tf.keras.models.Model(img_input, nn, name=model_name)
     return model
+
+
+def ResNet18(input_shape, classes=1000, activation="relu", use_se=False, model_name="ResNet18", **kwargs):
+    out_channels = [64, 128, 256, 512]
+    depthes = [2, 2, 2, 2]
+    stack_fn = lambda nn: resnet_stack_fn(nn, out_channels, depthes, activation=activation, use_se=use_se)
+    return ResNet(input_shape, stack_fn, classes, activation, model_name=model_name, **kwargs)
 
 
 def ResNet34(input_shape, classes=1000, activation="relu", use_se=False, model_name="ResNet34", **kwargs):
