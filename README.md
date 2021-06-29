@@ -35,6 +35,7 @@
   - Model structures may change due to changing default behavior of building models.
   - `IJBB` and `IJBC` are scored at `TAR@FAR=1e-4`
   - Links in `Model backbone` are `h5` models in Google drive. Links in `Training` are training details.
+  - The `r50` / `r100` on `glint360k` models are loaded weights from official publication.
 
   | Model backbone | Training | lfw      | cfp_fp   | agedb_30 | IJBB     | IJBC     |
   | -------------- | ----- | -------- | -------- | -------- | -------- | -------- |
