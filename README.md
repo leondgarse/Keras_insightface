@@ -39,7 +39,7 @@
 
   | Model backbone | Training | lfw      | cfp_fp   | agedb_30 | IJBB     | IJBC     |
   | -------------- | ----- | -------- | -------- | -------- | -------- | -------- |
-  | [Resnet34](https://drive.google.com/file/d/1evH39rCBtdJ_wysv8LFHwT2GrgIYcCP0/view?usp=sharing) | [CASIA, E40](https://github.com/leondgarse/Keras_insightface/discussions/36)  | 0.99417 | 0.95086 | 0.94733 |          |          |
+  | [Resnet34](https://drive.google.com/file/d/1Mh9mZaMw-0lqfMO7xDABq6yirAWciv4c/view?usp=sharing) | [CASIA, E40](https://github.com/leondgarse/Keras_insightface/discussions/36)  | 0.99417 | 0.95086 | 0.94733 |          |          |
   | [Mobilenet emb256](https://drive.google.com/file/d/1i0B6Hy1clGgfeOYtUXVPNveDEe2DTIBa/view?usp=sharing) | [Emore, E110](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-286398) | 0.996000 | 0.951714 | 0.959333 | 0.887147 | 0.911745 |
   | [Mobilenet_distill swish](https://drive.google.com/file/d/1yUjCG5rMeVCKTSPbST2F9BrRRlkDPzEA/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/30) | 0.997333    | 0.969    | 0.975333 | 0.91889   | 0.940328 |
   | [Ghostnet strides 2](https://drive.google.com/file/d/1--ZRa8v3j5KKEcHzwTVMV6F8gsRr0mLB/view?usp=sharing) | [MS1MV3, E49](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-322997) | 0.997167 | 0.959429 | 0.969333 | 0.912463 | 0.934499 |
