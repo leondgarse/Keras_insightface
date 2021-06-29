@@ -20,16 +20,22 @@ def batchnorm_with_activation(inputs, activation="relu", zero_gamma=False, name=
         name=name + "bn",
     )(inputs)
     if activation:
-        nn = layers.Activation(activation=activation, name=name + activation)(nn)
+        act_name = name + activation
+        if activation == "PReLU":
+            nn = layers.PReLU(shared_axes=[1, 2], alpha_initializer=tf.initializers.Constant(0.25), name=act_name)(nn)
+        else:
+            nn = layers.Activation(activation=activation, name=act_name)(nn)
     return nn
 
 
 def conv2d_no_bias(inputs, filters, kernel_size, strides=1, padding="VALID", name=""):
+    if padding.upper() == "SAME":
+        inputs = layers.ZeroPadding2D(((1, 1), (1, 1)))(inputs)
     return layers.Conv2D(
         filters,
         kernel_size,
         strides=strides,
-        padding=padding,
+        padding="VALID",
         use_bias=False,
         kernel_initializer=CONV_KERNEL_INITIALIZER,
         name=name + "conv",
@@ -53,8 +59,8 @@ def se_module(inputs, se_ratio=4, name=""):
 
 def block(inputs, out_channel, strides=1, activation="relu", use_se=False, conv_shortcut=False, name=""):
     if conv_shortcut:
-        shortcut = conv2d_no_bias(inputs, out_channel, 1, strides=strides, name=name + "_0_")
-        shortcut = batchnorm_with_activation(shortcut, activation=None, name=name + "_0_")
+        shortcut = conv2d_no_bias(inputs, out_channel, 1, strides=strides, name=name + "_shortcut_")
+        shortcut = batchnorm_with_activation(shortcut, activation=None, name=name + "_shortcut_")
     else:
         shortcut = inputs
 
@@ -81,8 +87,8 @@ def resnet_stack_fn(inputs, out_channels, depthes, strides=2, activation="relu",
 
 def ResNet(input_shape, stack_fn, classes=1000, activation="relu", model_name="resnet", **kwargs):
     img_input = layers.Input(shape=input_shape)
-    nn = conv2d_no_bias(img_input, 64, 3, strides=1, padding="SAME", name="conv1_conv")
-    nn = batchnorm_with_activation(nn, activation=activation, name="conv1_bn")
+    nn = conv2d_no_bias(img_input, 64, 3, strides=1, padding="SAME", name="0_")
+    nn = batchnorm_with_activation(nn, activation=activation, name="0_")
 
     nn = stack_fn(nn)
 
