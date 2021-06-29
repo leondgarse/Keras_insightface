@@ -48,6 +48,9 @@
   | [r50 swish](https://drive.google.com/file/d/1Mb2ZjBHFSQha8y2UOXO6-vxNWdzw815P/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-824090) | 0.998333 | 0.989571 | 0.984333 | 0.950828 | 0.964463 |
   | [se_r50 swish SD](https://drive.google.com/file/d/16R9weVSlXBgXPq7tduZGI6mDuB1nQ5MC/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-903227) | 0.9985 | 0.989429 | 0.9845 | 0.954333 | 0.966252 |
   | [Renet101V2 swish](https://drive.google.com/file/d/1joXsSpu22aa-kvnG1lQGNdVGfdPArUXM/view?usp=sharing) | [MS1MV3, E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790754) | 0.9985 | 0.989143 | 0.9845 | 0.952483 | 0.966406 |
+  | [r50 relu](https://drive.google.com/file/d/1KBn8b7MttJqHqCdOsqCv6WHDfHdgatVO/view?usp=sharing) | [glint360k Converted](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.998333 | 0.991 | 0.9835 | 0.957157 | 0.970292 |
+  | [r100 relu](https://drive.google.com/file/d/15rNSg0-S-X8NyBQlr0kJqYmhRJ-T9v3y/view?usp=sharing) | [glint360k Converted](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.9985 | 0.992286 | 0.985167 | 0.962512 | 0.974689 |
+
 ***
 
 # Usage
