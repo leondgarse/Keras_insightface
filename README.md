@@ -18,7 +18,6 @@
   	- [Training scripts](#training-scripts)
   	- [Mixed precision float16](#mixed-precision-float16)
   	- [Learning rate](#learning-rate)
-  	- [Other backbones](#other-backbones)
   	- [Optimizers](#optimizers)
   	- [Multi GPU train using horovod or distribute strategy](#multi-gpu-train-using-horovod-or-distribute-strategy)
   - [TFLite model inference time test on ARM64](#tflite-model-inference-time-test-on-arm64)
@@ -185,7 +184,7 @@
   - **models.print_buildin_models** is used to print build-in model names in `models.py`, which can be used in `models.buildin_models`.
     ```py
     >>>> buildin_models
-    MXNet version resnet: mobilenet_m1, r34, r50, r100, r101,
+    MXNet version resnet: mobilenet_m1, r34, r50, r100, r101, se_r50, se_r100
     Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
     EfficientNet: efficientnetb[0-7], efficientnetl2,
     Custom 1: ghostnet, mobilefacenet, mobilenetv3_small, mobilenetv3_large, se_mobilefacenet
@@ -355,43 +354,6 @@
     plt.tight_layout()
     ```
     ![](checkpoints/learning_rate_decay.svg)
-## Other backbones
-  - **EfficientNet** `tf-nightly` / `tf 2.3.0` now includes all `EfficientNet` backbone in `tensorflow.keras.applications`, but it has a `Rescaling` and `Normalization` layer on the head.
-    ```py
-    tf.__version__
-    # '2.3.0-dev20200523'
-    mm = tf.keras.applications.efficientnet.EfficientNetB4(include_top=False, weights='imagenet', input_shape=(112, 112, 3))
-    [ii.name for ii in mm.layers[:6]]
-    # ['input_17', 'rescaling_2', 'normalization_2', 'stem_conv_pad', 'stem_conv', 'stem_bn']
-    ```
-    So I'm using a modified version in `backbones/efficientnet.py`
-    ```py
-    from backbones import efficientnet
-    mm = efficientnet.EfficientNetB0(weights='imagenet', include_top=False, input_shape=(112, 112, 3))
-    [ii.name for ii in mm.layers[:3]]
-    # ['input_1', 'stem_conv_pad', 'stem_conv']
-    ```
-    Other's implementation can be found here [Github qubvel/EfficientNet](https://github.com/qubvel/efficientnet).
-  - **ResNeSt / RegNet** [Github QiaoranC/tf_ResNeSt_RegNet_model](https://github.com/QiaoranC/tf_ResNeSt_RegNet_model)
-    ```py
-    from models.model_factory import get_model
-    input_shape = [112, 112, 3]
-    n_classes = 100
-    fc_activation = 'softmax'
-    mm = get_model(model_name="ResNest101",input_shape=input_shape,n_classes=n_classes, verbose=False,fc_activation=fc_activation)
-    ```
-  - [SE nets](https://github.com/titu1994/keras-squeeze-excite-network)
-    ```py
-    # This should be under tf 2.3, NOT tf nightly
-    tf.__version__
-    # '2.3.0'
-
-    !pip install -U git+https://github.com/titu1994/keras-squeeze-excite-network
-
-    from keras_squeeze_excite_network import se_resnext
-    mm = se_resnext.SEResNextImageNet(weights='imagenet', input_shape=(112, 112, 3), include_top=False)
-    ```
-    It's TOO slow training a `se_resnext 101`，takes almost 4 times longer than `ResNet101V2`.
 ## Optimizers
   - **SGDW / AdamW** [tensorflow_addons AdamW](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/AdamW).
     ```py
@@ -665,7 +627,7 @@
 ***
 
 # Evaluating on IJB datasets
-  - [IJB_evals.py](IJB_evals.py) evaluates model accuracy using [insightface/evaluation/IJB/](https://github.com/deepinsight/insightface/tree/master/evaluation/IJB) datasets.
+  - [IJB_evals.py](IJB_evals.py) evaluates model accuracy using [insightface/evaluation/IJB/](https://github.com/deepinsight/insightface/tree/master/recognition/_evaluation_/ijb) datasets.
   - In case placing `IJB` dataset `/media/SD/IJB_release`, basic usage will be:
     ```sh
     # Test mxnet model, default scenario N0D1F1

@@ -7,7 +7,7 @@ def print_buildin_models():
     print(
         """
     >>>> buildin_models
-    MXNet version resnet: mobilenet_m1, r34, r50, r100, r101,
+    MXNet version resnet: mobilenet_m1, r34, r50, r100, r101, se_r50, se_r100
     Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
     EfficientNet: efficientnetb[0-7], efficientnetl2,
     Custom 1: ghostnet, mobilefacenet, mobilenetv3_small, mobilenetv3_large, se_mobilefacenet
