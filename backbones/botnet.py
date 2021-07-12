@@ -8,37 +8,45 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.python.keras import backend
-from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import special_math_ops
-from tensorflow.python.util.tf_export import keras_export
+# from tensorflow.python.ops import special_math_ops
 
 BATCH_NORM_DECAY = 0.9
 BATCH_NORM_EPSILON = 1e-5
 
 
-@keras_export("keras.layers.MHSAWithRelativePosition")
-class MHSAWithRelativePosition(keras.layers.MultiHeadAttention):
+# @tf.keras.utils.register_keras_serializable(package="Custom")
+class MHSAWithPositionEmbedding(keras.layers.MultiHeadAttention):
     def __init__(self, num_heads=4, bottleneck_dimension=512, relative=True, **kwargs):
         self.key_dim = bottleneck_dimension // num_heads
-        super(MHSAWithRelativePosition, self).__init__(num_heads=num_heads, key_dim=self.key_dim, **kwargs)
+        super(MHSAWithPositionEmbedding, self).__init__(num_heads=num_heads, key_dim=self.key_dim, **kwargs)
         self.num_heads, self.bottleneck_dimension, self.relative = num_heads, bottleneck_dimension, relative
 
     def _build_from_signature(self, query, value, key=None):
-        super(MHSAWithRelativePosition, self)._build_from_signature(query=query, value=value)
+        super(MHSAWithPositionEmbedding, self)._build_from_signature(query=query, value=value)
         if hasattr(query, "shape"):
             _, hh, ww, _ = query.shape
         else:
             _, hh, ww, _ = query
         stddev = self.key_dim ** -0.5
-        self.rel_emb_w = self.add_weight(
+
+        if self.relative:
+            # Relative positional embedding
+            pos_emb_w_shape = (self.key_dim, 2 * ww - 1)
+            pos_emb_h_shape = (self.key_dim, 2 * hh - 1)
+        else:
+            # Absolute positional embedding
+            pos_emb_w_shape = (ww, self.key_dim)
+            pos_emb_h_shape = (hh, self.key_dim)
+
+        self.pos_emb_w = self.add_weight(
             name="r_width",
-            shape=(self.key_dim, 2 * ww - 1),
+            shape=pos_emb_w_shape,
             initializer=tf.random_normal_initializer(stddev=stddev),
             trainable=True,
         )
-        self.rel_emb_h = self.add_weight(
+        self.pos_emb_h = self.add_weight(
             name="r_height",
-            shape=(self.key_dim, 2 * hh - 1),
+            shape=pos_emb_h_shape,
             initializer=tf.random_normal_initializer(stddev=stddev),
             trainable=True,
         )
@@ -83,10 +91,15 @@ class MHSAWithRelativePosition(keras.layers.MultiHeadAttention):
 
     def relative_logits(self, query):
         query = tf.transpose(query, [0, 3, 1, 2, 4])
-        rel_logits_w = self.relative_logits_1d(query=query, rel_k=self.rel_emb_w, transpose_mask=[0, 1, 2, 4, 3, 5])
+        rel_logits_w = self.relative_logits_1d(query=query, rel_k=self.pos_emb_w, transpose_mask=[0, 1, 2, 4, 3, 5])
         query = tf.transpose(query, [0, 1, 3, 2, 4])
-        rel_logits_h = self.relative_logits_1d(query=query, rel_k=self.rel_emb_h, transpose_mask=[0, 1, 4, 2, 5, 3])
+        rel_logits_h = self.relative_logits_1d(query=query, rel_k=self.pos_emb_h, transpose_mask=[0, 1, 4, 2, 5, 3])
         return rel_logits_h + rel_logits_w
+
+    def absolute_logits(self, query):
+        pos_emb = tf.expand_dims(self.pos_emb_h, 1) + tf.expand_dims(self.pos_emb_w, 0)
+        abs_logits = tf.einsum('bxyhd,pqd->bhxypq', query, pos_emb)
+        return abs_logits
 
     def call(self, inputs, attention_mask=None, return_attention_scores=False, training=None):
         if not self._built_from_signature:
@@ -102,13 +115,21 @@ class MHSAWithRelativePosition(keras.layers.MultiHeadAttention):
         # `value` = [B, S, N, H]
         value = self._value_dense(inputs)
 
-        query = math_ops.multiply(query, 1.0 / math.sqrt(float(self._key_dim)))
-        attention_scores = special_math_ops.einsum(self._dot_product_equation, key, query)
+        # query = math_ops.multiply(query, 1.0 / math.sqrt(float(self._key_dim)))
+        # attention_scores = special_math_ops.einsum(self._dot_product_equation, key, query)
+        query = query / tf.sqrt(float(self._key_dim))
+        attention_scores = tf.einsum(self._dot_product_equation, key, query)
         if self.relative:
+            # Add relative positional embedding
             attention_scores += self.relative_logits(query)
+        else:
+            # Add absolute positional embedding
+            attention_scores += self.absolute_logits(query)
+
         attention_scores = self._masked_softmax(attention_scores, attention_mask)
         attention_scores_dropout = self._dropout_layer(attention_scores, training=training)
-        attention_output = special_math_ops.einsum(self._combine_equation, attention_scores_dropout, value)
+        # attention_output = special_math_ops.einsum(self._combine_equation, attention_scores_dropout, value)
+        attention_output = tf.einsum(self._combine_equation, attention_scores_dropout, value)
 
         # attention_output = self._output_dense(attention_output)
         hh, ww = inputs.shape[1], inputs.shape[2]
@@ -144,7 +165,7 @@ def bot_block(
     heads=4,
     proj_factor=4,
     activation="relu",
-    pos_enc_type="relative",
+    relative_pe=True,
     strides=1,
     target_dimension=2048,
     name="all2all",
@@ -162,7 +183,7 @@ def bot_block(
     if use_MHSA:    # BotNet block
         nn = conv2d_no_bias(featuremap, bottleneck_dimension, 1, strides=1, padding="VALID", name=name + "_1_")
         nn = batchnorm_with_activation(nn, activation=activation, zero_gamma=False, name=name + "_1_")
-        nn = MHSAWithRelativePosition(num_heads=heads, bottleneck_dimension=bottleneck_dimension, name=name + "_2_mhsa")(nn)
+        nn = MHSAWithPositionEmbedding(num_heads=heads, bottleneck_dimension=bottleneck_dimension, relative=relative_pe, name=name + "_2_mhsa")(nn)
         if strides != 1:
             nn = layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding="same")(nn)
     else:   # ResNet block
@@ -186,7 +207,7 @@ def bot_stack(
     activation="relu",
     heads=4,
     proj_factor=4,
-    pos_enc_type="relative",
+    relative_pe=True,
     name="all2all_stack",
     use_MHSA=True,
 ):
@@ -197,7 +218,7 @@ def bot_stack(
             heads=heads,
             proj_factor=proj_factor,
             activation=activation,
-            pos_enc_type=pos_enc_type,
+            relative_pe=relative_pe,
             strides=strides if i == 0 else 1,
             target_dimension=target_dimension,
             name=name + "_block{}".format(i+1),
@@ -211,7 +232,7 @@ def bot_block_2(
     heads=4,
     proj_factor=4,
     activation="relu",
-    pos_enc_type="relative",
+    relative_pe=True,
     strides=1,
     target_dimension=2048,
     conv_shortcut=False,
@@ -230,7 +251,7 @@ def bot_block_2(
     nn = batchnorm_with_activation(nn, activation=activation, name=name + "_1_")
 
     if use_MHSA:    # BotNet block
-        nn = MHSAWithRelativePosition(num_heads=heads, bottleneck_dimension=bottleneck_dimension, name=name + "_2_mhsa")(nn)
+        nn = MHSAWithRelativePosition(num_heads=heads, bottleneck_dimension=bottleneck_dimension, relative=relative_pe, name=name + "_2_mhsa")(nn)
         if strides != 1:
             nn = layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding="same", name=name + '_2_pool')(nn)
     else:   # ResNet block
@@ -248,7 +269,7 @@ def bot_stack_2(
     target_dimension=2048,
     num_layers=3,
     strides=2,
-    activation="relu",
+    relative_pe=True,
     heads=4,
     proj_factor=4,
     pos_enc_type="relative",
@@ -262,7 +283,7 @@ def bot_stack_2(
             heads=heads,
             proj_factor=proj_factor,
             activation=activation,
-            pos_enc_type=pos_enc_type,
+            relative_pe=relative_pe,
             strides=strides if ii == num_layers - 1 else 1,
             target_dimension=target_dimension,
             conv_shortcut=True if ii == 0 else False,
@@ -307,7 +328,7 @@ def BotNet(
     return keras.models.Model(img_input, nn, name=model_name)
 
 
-def BotNet50(strides=2, activation="relu", include_top=True, weights=None, input_shape=None, classes=1000, use_MHSA=True, **kwargs):
+def BotNet50(strides=2, activation="relu", relative_pe=True, include_top=True, weights=None, input_shape=None, classes=1000, use_MHSA=True, **kwargs):
     def stack_fn(nn):
         nn = bot_stack(nn, 64 * 4, 3, strides=1, activation=activation, name="conv2", use_MHSA=False)
         nn = bot_stack(nn, 128 * 4, 4, strides=2, activation=activation, name="conv3", use_MHSA=False)
@@ -323,37 +344,37 @@ def BotNet101(strides=2, activation="relu", include_top=True, weights=None, inpu
         nn = bot_stack(nn, 64 * 4, 3, strides=1, activation=activation, name="conv2", use_MHSA=False)
         nn = bot_stack(nn, 128 * 4, 4, strides=2, activation=activation, name="conv3", use_MHSA=False)
         nn = bot_stack(nn, 256 * 4, 23, strides=2, activation=activation, name="conv4", use_MHSA=False)
-        nn = bot_stack(nn, 512 * 4, 3, strides=strides, activation=activation, use_MHSA=use_MHSA)
+        nn = bot_stack(nn, 512 * 4, 3, strides=strides, activation=activation, relative_pe=relative_pe, use_MHSA=use_MHSA)
         return nn
 
     return BotNet(stack_fn, False, True, "botnet50", activation, include_top, weights, input_shape, classes, **kwargs)
 
 
-def BotNet152(strides=2, activation="relu", include_top=True, weights=None, input_shape=None, classes=1000, use_MHSA=True, **kwargs):
+def BotNet152(strides=2, activation="relu", relative_pe=True, include_top=True, weights=None, input_shape=None, classes=1000, use_MHSA=True, **kwargs):
     def stack_fn(nn):
         nn = bot_stack(nn, 64 * 4, 3, strides=1, activation=activation, name="conv2", use_MHSA=False)
         nn = bot_stack(nn, 128 * 4, 8, strides=2, activation=activation, name="conv3", use_MHSA=False)
         nn = bot_stack(nn, 256 * 4, 36, strides=2, activation=activation, name="conv4", use_MHSA=False)
-        nn = bot_stack(nn, 512 * 4, 3, strides=strides, activation=activation, use_MHSA=use_MHSA)
+        nn = bot_stack(nn, 512 * 4, 3, strides=strides, activation=activation, relative_pe=relative_pe, use_MHSA=use_MHSA)
         return nn
 
     return BotNet(stack_fn, False, True, "botnet50", activation, include_top, weights, input_shape, classes, **kwargs)
 
 
-def BotNet50V2(strides=2, activation="relu", include_top=True, weights=None, input_shape=None, classes=1000, use_MHSA=True, **kwargs):
+def BotNet50V2(strides=2, activation="relu", relative_pe=True, include_top=True, weights=None, input_shape=None, classes=1000, use_MHSA=True, **kwargs):
     def stack_fn(nn):
         nn = bot_stack_2(nn, 64 * 4, 3, name='conv2', use_MHSA=False)
         nn = bot_stack_2(nn, 128 * 4, 4, name='conv3', use_MHSA=False)
         nn = bot_stack_2(nn, 256 * 4, 6, strides=strides, name='conv4', use_MHSA=False)
-        return bot_stack_2(nn, 512 * 4, 3, strides=1, name='conv5', use_MHSA=use_MHSA)
+        return bot_stack_2(nn, 512 * 4, 3, strides=1, name='conv5', relative_pe=relative_pe, use_MHSA=use_MHSA)
 
     return BotNet(stack_fn, True, True, "botnet50v2", activation, include_top, weights, input_shape, classes, **kwargs)
 
-def BotNet101V2(strides=2, activation="relu", include_top=True, weights=None, input_shape=None, classes=1000, use_MHSA=True, **kwargs):
+def BotNet101V2(strides=2, activation="relu", relative_pe=True, include_top=True, weights=None, input_shape=None, classes=1000, use_MHSA=True, **kwargs):
     def stack_fn(nn):
         nn = bot_stack_2(nn, 64 * 4, 3, name='conv2', use_MHSA=False)
         nn = bot_stack_2(nn, 128 * 4, 4, name='conv3', use_MHSA=False)
         nn = bot_stack_2(nn, 256 * 4, 23, strides=strides, name='conv4', use_MHSA=False)
-        return bot_stack_2(nn, 512 * 4, 3, strides=1, name='conv5', use_MHSA=use_MHSA)
+        return bot_stack_2(nn, 512 * 4, 3, strides=1, name='conv5', relative_pe=relative_pe, use_MHSA=use_MHSA)
 
     return BotNet(stack_fn, True, True, "botnet101v2", activation, include_top, weights, input_shape, classes, **kwargs)
