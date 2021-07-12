@@ -93,6 +93,32 @@ class OptimizerWeightDecay(keras.callbacks.Callback):
             print("Weight decay is {}".format(wd))
 
 
+class CosineLrSchedulerEpoch(keras.callbacks.Callback):
+    def __init__(self, lr_base, first_restart_step, m_mul=0.5, t_mul=2.0, lr_min=1e-5, warmup=0):
+        super(CosineLrSchedulerEpoch, self).__init__()
+        self.warmup = warmup
+
+        if lr_min == lr_base * m_mul:
+            self.schedule = keras.experimental.CosineDecay(lr_base, first_restart_step, alpha=lr_min / lr_base)
+        else:
+            self.schedule = keras.experimental.CosineDecayRestarts(
+                lr_base, first_restart_step, t_mul=t_mul, m_mul=m_mul, alpha=lr_min / lr_base
+            )
+
+        if warmup != 0:
+            self.warmup_lr_func = lambda ii: lr_min + (lr_base - lr_min) * ii / warmup
+
+    def on_epoch_begin(self, epoch, logs=None):
+        if epoch < self.warmup:
+            lr = self.warmup_lr_func(epoch)
+        else:
+            lr = self.schedule(epoch - self.warmup)
+        if self.model is not None:
+            K.set_value(self.model.optimizer.lr, lr)
+
+        print("\nLearning rate for iter {} is {}".format(epoch + 1, lr))
+        return lr
+
 class CosineLrScheduler(keras.callbacks.Callback):
     def __init__(
         self, lr_base, first_restart_step, m_mul=0.5, t_mul=2.0, lr_min=1e-5, warmup=0, steps_per_epoch=-1, keep_as_min=1,
