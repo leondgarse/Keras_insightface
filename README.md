@@ -182,15 +182,6 @@
     ```
     Using `tt.train_single_scheduler` can control the behavior more detail.
   - **models.print_buildin_models** is used to print build-in model names in `models.py`, which can be used in `models.buildin_models`.
-    ```py
-    >>>> buildin_models
-    MXNet version resnet: mobilenet_m1, r34, r50, r100, r101, se_r50, se_r100
-    Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
-    EfficientNet: efficientnetb[0-7], efficientnetl2,
-    Custom 1: ghostnet, mobilefacenet, mobilenetv3_small, mobilenetv3_large, se_mobilefacenet
-    Custom 2: botnet50, botnet101, botnet152, resnest50, resnest101, se_resnext
-    Or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
-    ```
   - **models.add_l2_regularizer_2_model** will add `l2_regularizer` to `dense` / `convolution` layers, or set `apply_to_batch_normal=True` also to `PReLU` / `BatchNormalization` layers. The actual added `l2` value is divided by `2`.
     ```py
     # Will add keras.regularizers.L2(5e-4) to `dense` / `convolution` layers.

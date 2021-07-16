@@ -10,8 +10,7 @@ def print_buildin_models():
     MXNet version resnet: mobilenet_m1, r18, r34, r50, r100, r101, se_r34, se_r50, se_r100
     Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
     EfficientNet: efficientnetb[0-7], efficientnetl2,
-    Custom 1: ghostnet, mobilefacenet, mobilenetv3_small, mobilenetv3_large, se_mobilefacenet
-    Custom 2: botnet50, botnet101, botnet152, resnest50, resnest101, se_resnext
+    Custom 1: ghostnet, mobilefacenet, mobilenetv3_small, mobilenetv3_large, se_mobilefacenet, se_resnext
     Or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
     """,
         end="",
@@ -59,13 +58,6 @@ def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet"
         else:  # se_resnext50
             depth = [3, 4, 6, 3]
         xx = se_resnext.SEResNextImageNet(weights=weights, input_shape=input_shape, include_top=False, depth=depth)
-    elif name_lower.startswith("resnest"):
-        from backbones import resnest
-
-        if name_lower == "resnest50":
-            xx = resnest.ResNest50(input_shape=input_shape)
-        else:
-            xx = resnest.ResNest101(input_shape=input_shape)
     elif name_lower.startswith("mobilenetv3"):
         from backbones import mobilenet_v3
 
@@ -84,15 +76,6 @@ def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet"
         from backbones import ghost_model
 
         xx = ghost_model.GhostNet(input_shape=input_shape, include_top=False, width=1.3, **kwargs)
-    elif name_lower.startswith("botnet"):
-        from backbones import botnet
-
-        if name_lower.endswith("v2"):
-            model_name = "BotNet" + name_lower[len("botnet") : -2] + "V2"
-        else:
-            model_name = "BotNet" + name_lower[len("botnet") :]
-        model_class = getattr(botnet, model_name)
-        xx = model_class(include_top=False, input_shape=input_shape, **kwargs)
     elif hasattr(keras.applications, name):
         model_class = getattr(keras.applications, name)
         xx = model_class(weights=weights, include_top=False, input_shape=input_shape, **kwargs)
