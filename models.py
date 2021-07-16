@@ -7,7 +7,7 @@ def print_buildin_models():
     print(
         """
     >>>> buildin_models
-    MXNet version resnet: mobilenet_m1, r34, r50, r100, r101, se_r50, se_r100
+    MXNet version resnet: mobilenet_m1, r18, r34, r50, r100, r101, se_r34, se_r50, se_r100
     Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
     EfficientNet: efficientnetb[0-7], efficientnetl2,
     Custom 1: ghostnet, mobilefacenet, mobilenetv3_small, mobilenetv3_large, se_mobilefacenet
@@ -29,12 +29,14 @@ def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet"
         xx = mobilenet.MobileNet(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name_lower == "mobilenetv2":
         xx = keras.applications.MobileNetV2(input_shape=input_shape, include_top=False, weights=weights, **kwargs)
-    elif name_lower == "r18" or name_lower == "r34" or name_lower == "r50" or name_lower == "r100" or name_lower == "r101":
+    elif "r18" in name_lower or "r34" in name_lower or "r50" in name_lower or "r100" in name_lower or "r101" in name_lower:
         from backbones import resnet  # MXNet insightface version resnet
 
-        model_name = "ResNet" + name_lower[1:]
+        use_se = True if name_lower.startswith("se_") else False
+        model_name = "ResNet" + name_lower[4:] if use_se else "ResNet" + name_lower[1:]
+        use_se = kwargs.pop("use_se", use_se)
         model_class = getattr(resnet, model_name)
-        xx = model_class(input_shape=input_shape, classes=0, model_name=model_name, **kwargs)
+        xx = model_class(input_shape=input_shape, classes=0, use_se=use_se, model_name=model_name, **kwargs)
     elif name_lower.startswith("resnet"):  # keras.applications.ResNetxxx
         if name_lower.endswith("v2"):
             model_name = "ResNet" + name_lower[len("resnet") : -2] + "V2"

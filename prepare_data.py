@@ -52,6 +52,22 @@ def MXnet_bin_files_to_tf(test_bins, limit=0):
             pickle.dump([bb, issame_list[:limit] + issame_list[-limit:]], ff)
 
 
+def resize_dataset(dataset_dir, target_shape=224):
+    from tqdm import tqdm
+    from glob2 import glob
+    import cv2
+
+    target_dataset_dir = dataset_dir.replace("112", str(target_shape))
+    aa = glob(os.path.join(dataset_dir, "*/*"))
+    for ii in tqdm(aa):
+        target_imm = ii.replace(dataset_dir, target_dataset_dir)
+        target_dir = os.path.dirname(target_imm)
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
+        imm = cv2.imread(ii)
+        cv2.imwrite(target_imm, cv2.resize(imm, (target_shape, target_shape), interpolation=cv2.INTER_CUBIC))
+
+
 """ CUDA_VISIBLE_DEVICES='-1' ./prepare_data.py -D /datasets/faces_emore """
 """ CUDA_VISIBLE_DEVICES='-1' ./prepare_data.py -D /datasets/faces_emore -T lfw.bin cfp_fp.bin agedb_30.bin """
 if __name__ == "__main__":

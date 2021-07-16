@@ -82,6 +82,8 @@ class Train:
                 "| basic model .h5 file                                            | None            |\n"
                 "| None for 'embedding' layer or layer index of basic model output | model .h5 file  |\n"
                 "| None for 'embedding' layer or layer index of basic model output | model structure |\n"
+                "| None                                                            | None            |\n"
+                "* Both None for reload model from 'checkpoints/{}'\n".format(save_path)
             )
             return
 

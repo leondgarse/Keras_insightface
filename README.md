@@ -2,7 +2,7 @@
 ***
 
 # License
-  This is the keras implementation of [deepinsight/insightface](https://github.com/deepinsight/insightface), and is released under the MIT License. There is no limitation for both acadmic and commercial usage.
+  This is the keras implementation of [deepinsight/insightface](https://github.com/deepinsight/insightface), and is released under the MIT License. There is no limitation for both academic and commercial usage.
 
   The training data containing the annotation (and the models trained with these data) are available for non-commercial research purposes only.
 # Table of Contents
