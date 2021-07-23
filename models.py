@@ -99,7 +99,6 @@ def buildin_models(
     use_bias=False,
     scale=True,
     weights="imagenet",
-    sam_rho=0,
     **kwargs
 ):
     if isinstance(stem_model, str):
@@ -142,7 +141,7 @@ def buildin_models(
         nn = keras.layers.Dense(
             emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal", name="GAP_dense"
         )(nn)
-    else:
+    elif output_layer == "GDC":
         """ GDC """
         nn = keras.layers.DepthwiseConv2D(int(nn.shape[1]), depth_multiplier=1, use_bias=False, name="GDC_dw")(nn)
         # nn = keras.layers.Conv2D(512, int(nn.shape[1]), use_bias=False, padding="valid", groups=512)(nn)
@@ -158,10 +157,8 @@ def buildin_models(
     # `fix_gamma=True` in MXNet means `scale=False` in Keras
     embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, scale=scale, name="pre_embedding")(nn)
     embedding_fp32 = keras.layers.Activation("linear", dtype="float32", name="embedding")(embedding)
-    if sam_rho == 0:
-        basic_model = keras.models.Model(inputs, embedding_fp32, name=xx.name)
-    else:
-        basic_model = SAMModel(inputs, embedding_fp32, rho=sam_rho, name=xx.name)
+
+    basic_model = keras.models.Model(inputs, embedding_fp32, name=xx.name)
     return basic_model
 
 
@@ -331,6 +328,8 @@ class SAMModel(tf.keras.models.Model):
     """
     Arxiv article: [Sharpness-Aware Minimization for Efficiently Improving Generalization](https://arxiv.org/pdf/2010.01412.pdf)
     Implementation by: [Keras SAM (Sharpness-Aware Minimization)](https://qiita.com/T-STAR/items/8c3afe3a116a8fc08429)
+
+    Usage is same with `keras.modeols.Model`: `model = SAMModel(inputs, outputs, rho=sam_rho, name=name)`
     """
 
     def __init__(self, *args, rho=0.05, **kwargs):
@@ -338,12 +337,16 @@ class SAMModel(tf.keras.models.Model):
         self.rho = tf.constant(rho, dtype=tf.float32)
 
     def train_step(self, data):
-        x, y = data
+        if len(data) == 3:
+            x, y, sample_weight = data
+        else:
+            sample_weight = None
+            x, y = data
 
         # 1st step
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
-            loss = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
+            loss = self.compiled_loss(y, y_pred, sample_weight=sample_weight, regularization_losses=self.losses)
 
         trainable_vars = self.trainable_variables
         gradients = tape.gradient(loss, trainable_vars)
@@ -359,7 +362,7 @@ class SAMModel(tf.keras.models.Model):
         # 2nd step
         with tf.GradientTape() as tape:
             y_pred_adv = self(x, training=True)
-            loss_adv = self.compiled_loss(y, y_pred_adv, regularization_losses=self.losses)
+            loss_adv = self.compiled_loss(y, y_pred_adv, sample_weight=sample_weight, regularization_losses=self.losses)
         gradients_adv = tape.gradient(loss_adv, trainable_vars)
         for v, e_w in zip(trainable_vars, e_w_list):
             v.assign_sub(e_w)
@@ -367,7 +370,7 @@ class SAMModel(tf.keras.models.Model):
         # optimize
         self.optimizer.apply_gradients(zip(gradients_adv, trainable_vars))
 
-        self.compiled_metrics.update_state(y, y_pred)
+        self.compiled_metrics.update_state(y, y_pred, sample_weight=sample_weight)
         return_metrics = {}
         for metric in self.metrics:
             result = metric.result()
