@@ -30,7 +30,7 @@
 ***
 
 # Current accuracy
-  - [Training results with different backbones / activation / data augmentation / loss function / others](https://www.xmind.net/m/rhrHGE/)
+  - [Some comparing on EfficientNetV2_b0 with activation / data augmentation / loss function / others](https://github.com/leondgarse/Keras_insightface/discussions/42)
   - Model structures may change due to changing default behavior of building models.
   - `IJBB` and `IJBC` are scored at `TAR@FAR=1e-4`
   - Links in `Model backbone` are `h5` models in Google drive. Links in `Training` are training details.
