@@ -106,7 +106,7 @@ class Face_detection:
             zip_extract_path = os.path.splitext(zip_file)[0]
             if not os.path.exists(os.path.dirname(zip_file)):
                 os.makedirs(os.path.dirname(zip_file))
-            insightface.utils.download(model_url, path=zip_file, overwrite=True)
+            insightface.utils.storage.download_file(model_url, path=zip_file, overwrite=True)
             with zipfile.ZipFile(zip_file) as zf:
                 zf.extractall(zip_extract_path)
             os.remove(zip_file)
