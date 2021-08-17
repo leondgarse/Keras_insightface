@@ -23,9 +23,9 @@ def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet"
     if name_lower == "mobilenet":
         xx = keras.applications.MobileNet(input_shape=input_shape, include_top=False, weights=weights, **kwargs)
     elif name_lower == "mobilenet_m1":
-        from backbones import mobilenet
+        from backbones import mobilenet_m1
 
-        xx = mobilenet.MobileNet(input_shape=input_shape, include_top=False, weights=None, **kwargs)
+        xx = mobilenet_m1.MobileNet(input_shape=input_shape, include_top=False, weights=None, **kwargs)
     elif name_lower == "mobilenetv2":
         xx = keras.applications.MobileNetV2(input_shape=input_shape, include_top=False, weights=weights, **kwargs)
     elif "r18" in name_lower or "r34" in name_lower or "r50" in name_lower or "r100" in name_lower or "r101" in name_lower:
@@ -59,14 +59,8 @@ def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet"
             depth = [3, 4, 6, 3]
         xx = se_resnext.SEResNextImageNet(weights=weights, input_shape=input_shape, include_top=False, depth=depth)
     elif name_lower.startswith("mobilenetv3"):
-        from backbones import mobilenet_v3
-
-        # from backbones import mobilenetv3 as mobilenet_v3
-        model_class = mobilenet_v3.MobileNetV3Small if "small" in name_lower else mobilenet_v3.MobileNetV3Large
-        # from tensorflow.keras.layers.experimental.preprocessing import Rescaling
-        # model_class = keras.applications.MobileNetV3Small if "small" in name_lower else keras.applications.MobileNetV3Large
-        xx = model_class(input_shape=input_shape, include_top=False, weights=weights)
-        # xx = keras.models.clone_model(xx, clone_function=lambda layer: Rescaling(1.) if isinstance(layer, Rescaling) else layer)
+        model_class = keras.applications.MobileNetV3Small if "small" in name_lower else keras.applications.MobileNetV3Large
+        xx = model_class(input_shape=input_shape, include_top=False, weights=weights, include_preprocessing=False)
     elif "mobilefacenet" in name_lower or "mobile_facenet" in name_lower:
         from backbones import mobile_facenet
 
@@ -129,18 +123,14 @@ def buildin_models(
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
         nn = keras.layers.Flatten(name="E_flatten")(nn)
-        nn = keras.layers.Dense(
-            emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal", name="E_dense"
-        )(nn)
+        nn = keras.layers.Dense(emb_shape, use_bias=use_bias, kernel_initializer="glorot_normal", name="E_dense")(nn)
     elif output_layer == "GAP":
         """ GlobalAveragePooling2D """
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="GAP_batchnorm")(nn)
         nn = keras.layers.GlobalAveragePooling2D(name="GAP_pool")(nn)
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
-        nn = keras.layers.Dense(
-            emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal", name="GAP_dense"
-        )(nn)
+        nn = keras.layers.Dense(emb_shape, use_bias=use_bias, kernel_initializer="glorot_normal", name="GAP_dense")(nn)
     elif output_layer == "GDC":
         """ GDC """
         nn = keras.layers.DepthwiseConv2D(int(nn.shape[1]), depth_multiplier=1, use_bias=False, name="GDC_dw")(nn)
@@ -148,11 +138,15 @@ def buildin_models(
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="GDC_batchnorm")(nn)
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
-        nn = keras.layers.Conv2D(
-            emb_shape, 1, use_bias=use_bias, activation=None, kernel_initializer="glorot_normal", name="GDC_conv"
-        )(nn)
+        nn = keras.layers.Conv2D(emb_shape, 1, use_bias=use_bias, kernel_initializer="glorot_normal", name="GDC_conv")(nn)
         nn = keras.layers.Flatten(name="GDC_flatten")(nn)
         # nn = keras.layers.Dense(emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal", name="GDC_dense")(nn)
+    elif output_layer == "F":
+        """ F, E without first BatchNormalization """
+        if dropout > 0 and dropout < 1:
+            nn = keras.layers.Dropout(dropout)(nn)
+        nn = keras.layers.Flatten(name="E_flatten")(nn)
+        nn = keras.layers.Dense(emb_shape, use_bias=use_bias, kernel_initializer="glorot_normal", name="E_dense")(nn)
 
     # `fix_gamma=True` in MXNet means `scale=False` in Keras
     embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, scale=scale, name="pre_embedding")(nn)

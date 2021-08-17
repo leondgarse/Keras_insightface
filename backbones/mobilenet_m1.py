@@ -61,27 +61,16 @@ Reference:
      for Mobile Vision Applications](
       https://arxiv.org/abs/1704.04861)
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
-from tensorflow.python.keras import backend
+from tensorflow.keras import backend
+from tensorflow import keras
 from tensorflow.python.keras.applications import imagenet_utils
-from tensorflow.python.keras.engine import training
-from tensorflow.python.keras.layers import VersionAwareLayers
+from tensorflow.keras import layers
 from tensorflow.python.keras.utils import data_utils
-from tensorflow.python.keras.utils import layer_utils
-from tensorflow.python.lib.io import file_io
-from tensorflow.python.platform import tf_logging as logging
-from tensorflow.python.util.tf_export import keras_export
 
 BASE_WEIGHT_PATH = ('https://storage.googleapis.com/tensorflow/'
                     'keras-applications/mobilenet/')
-layers = None
 
-
-@keras_export('keras.applications.mobilenet.MobileNet',
-              'keras.applications.MobileNet')
 def MobileNet(input_shape=None,
               alpha=1.0,
               depth_multiplier=1,
@@ -158,14 +147,9 @@ def MobileNet(input_shape=None,
     ValueError: if `classifier_activation` is not `softmax` or `None` when
       using a pretrained top layer.
   """
-  global layers
-  if 'layers' in kwargs:
-    layers = kwargs.pop('layers')
-  else:
-    layers = VersionAwareLayers()
   if kwargs:
     raise ValueError('Unknown argument(s): %s' % (kwargs,))
-  if not (weights in {'imagenet', None} or file_io.file_exists_v2(weights)):
+  if not weights in {'imagenet', None}:
     raise ValueError('The `weights` argument should be either '
                      '`None` (random initialization), `imagenet` '
                      '(pre-training on ImageNet), '
@@ -218,7 +202,7 @@ def MobileNet(input_shape=None,
 
     if rows != cols or rows not in [128, 160, 192, 224]:
       rows = 224
-      logging.warning('`input_shape` is undefined or non-square, '
+      print('`input_shape` is undefined or non-square, '
                       'or `rows` is not in [128, 160, 192, 224]. '
                       'Weights for input shape (224, 224) will be'
                       ' loaded as the default.')
@@ -274,12 +258,12 @@ def MobileNet(input_shape=None,
   # Ensure that the model takes into account
   # any potential predecessors of `input_tensor`.
   if input_tensor is not None:
-    inputs = layer_utils.get_source_inputs(input_tensor)
+    inputs = input_tensor
   else:
     inputs = img_input
 
   # Create model.
-  model = training.Model(inputs, x, name='mobilenet_%0.2f_%s' % (alpha, rows))
+  model = keras.models.Model(inputs, x, name='mobilenet_%0.2f_%s' % (alpha, rows))
 
   # Load weights.
   if weights == 'imagenet':
@@ -428,12 +412,10 @@ def _depthwise_conv_block(inputs,
   return layers.ReLU(6., name='conv_pw_%d_relu' % block_id)(x)
 
 
-@keras_export('keras.applications.mobilenet.preprocess_input')
 def preprocess_input(x, data_format=None):
   return imagenet_utils.preprocess_input(x, data_format=data_format, mode='tf')
 
 
-@keras_export('keras.applications.mobilenet.decode_predictions')
 def decode_predictions(preds, top=5):
   return imagenet_utils.decode_predictions(preds, top=top)
 

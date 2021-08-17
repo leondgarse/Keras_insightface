@@ -65,11 +65,11 @@
     # $ ipython
     Python 3.8.5 (default, Sep  4 2020, 07:30:14)
     In [1]: tf.__version__
-    Out[1]: '2.5.0'
+    Out[1]: '2.6.0'
 
     In [2]: import tensorflow_addons as tfa
     In [3]: tfa.__version__
-    Out[3]: '0.13.0'
+    Out[3]: '0.14.0-dev'
     ```
     Or `tf-nightly`
     ```sh
@@ -82,7 +82,7 @@
     ```
     ```py
     In [1]: tf.__version__
-    Out[1]: '2.6.0-dev20210525'
+    Out[1]: '2.7.0-dev202108115'
     ```
   - **Default import for ipython**
     ```py
@@ -140,7 +140,7 @@
     ```
 ## Training scripts
   - **Basic Scripts**
-    - [backbones](backbones) basic model implementation of `mobilefacenet` / `mobilenetv3` / `resnest` / `efficientnet` / `botnet` / `ghostnet`. Most of them are copied from `keras.applications` source code and modified. Other backbones like `ResNet101V2` is loaded from `keras.applications` in `train.buildin_models`.
+    - [backbones](backbones) basic model implementation of `mobilefacenet` / `mobilenetv3` / `efficientnet` / `botnet` / `ghostnet`. Most of them are copied from `keras.applications` source code and modified. Other backbones like `ResNet101V2` is loaded from `keras.applications` in `train.buildin_models`.
     - [data.py](data.py) loads image data as `tf.dataset` for training. `Triplet` dataset is different from others.
     - [evals.py](evals.py) contains evaluating callback using `bin` files.
     - [losses.py](losses.py) contains `softmax` / `arcface` / `centerloss` / `triplet` loss functions.

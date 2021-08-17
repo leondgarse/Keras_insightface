@@ -26,15 +26,11 @@ Reference:
 import copy
 import math
 
-from tensorflow.python.keras import backend
+from tensorflow.keras import backend
+from tensorflow import keras
 from tensorflow.python.keras.applications import imagenet_utils
-from tensorflow.python.keras.engine import training
-from tensorflow.python.keras.layers import VersionAwareLayers
-from tensorflow.python.keras.utils import data_utils
-from tensorflow.python.keras.utils import layer_utils
-from tensorflow.python.lib.io import file_io
-from tensorflow.python.util.tf_export import keras_export
-
+from tensorflow.keras.models import Model
+from tensorflow.keras import layers
 
 BASE_WEIGHTS_PATH = 'https://storage.googleapis.com/keras-applications/'
 
@@ -140,7 +136,7 @@ DENSE_KERNEL_INITIALIZER = {
     }
 }
 
-layers = VersionAwareLayers()
+# layers = VersionAwareLayers()
 
 BASE_DOCSTRING = """Instantiates the {name} architecture.
 
@@ -268,7 +264,7 @@ def EfficientNet(
   if blocks_args == 'default':
     blocks_args = DEFAULT_BLOCKS_ARGS
 
-  if not (weights in {'imagenet', None} or file_io.file_exists_v2(weights)):
+  if not weights in {'imagenet', None}:
     raise ValueError('The `weights` argument should be either '
                      '`None` (random initialization), `imagenet` '
                      '(pre-training on ImageNet), '
@@ -382,12 +378,12 @@ def EfficientNet(
   # Ensure that the model takes into account
   # any potential predecessors of `input_tensor`.
   if input_tensor is not None:
-    inputs = layer_utils.get_source_inputs(input_tensor)
+    inputs = input_tensor
   else:
     inputs = img_input
 
   # Create model.
-  model = training.Model(inputs, x, name=model_name)
+  model = Model(inputs, x, name=model_name)
 
   # Load weights.
   if weights == 'imagenet':
@@ -398,7 +394,7 @@ def EfficientNet(
       file_suffix = '_notop.h5'
       file_hash = WEIGHTS_HASHES[model_name[-2:]][1]
     file_name = model_name + file_suffix
-    weights_path = data_utils.get_file(
+    weights_path = keras.utils.get_file(
         file_name,
         BASE_WEIGHTS_PATH + file_name,
         cache_subdir='models',
@@ -513,8 +509,6 @@ def block(inputs,
   return x
 
 
-@keras_export('keras.applications.efficientnet.EfficientNetB0',
-              'keras.applications.EfficientNetB0')
 def EfficientNetB0(include_top=True,
                    weights='imagenet',
                    input_tensor=None,
@@ -539,8 +533,6 @@ def EfficientNetB0(include_top=True,
       **kwargs)
 
 
-@keras_export('keras.applications.efficientnet.EfficientNetB1',
-              'keras.applications.EfficientNetB1')
 def EfficientNetB1(include_top=True,
                    weights='imagenet',
                    input_tensor=None,
@@ -565,8 +557,6 @@ def EfficientNetB1(include_top=True,
       **kwargs)
 
 
-@keras_export('keras.applications.efficientnet.EfficientNetB2',
-              'keras.applications.EfficientNetB2')
 def EfficientNetB2(include_top=True,
                    weights='imagenet',
                    input_tensor=None,
@@ -591,8 +581,6 @@ def EfficientNetB2(include_top=True,
       **kwargs)
 
 
-@keras_export('keras.applications.efficientnet.EfficientNetB3',
-              'keras.applications.EfficientNetB3')
 def EfficientNetB3(include_top=True,
                    weights='imagenet',
                    input_tensor=None,
@@ -617,8 +605,6 @@ def EfficientNetB3(include_top=True,
       **kwargs)
 
 
-@keras_export('keras.applications.efficientnet.EfficientNetB4',
-              'keras.applications.EfficientNetB4')
 def EfficientNetB4(include_top=True,
                    weights='imagenet',
                    input_tensor=None,
@@ -643,8 +629,6 @@ def EfficientNetB4(include_top=True,
       **kwargs)
 
 
-@keras_export('keras.applications.efficientnet.EfficientNetB5',
-              'keras.applications.EfficientNetB5')
 def EfficientNetB5(include_top=True,
                    weights='imagenet',
                    input_tensor=None,
@@ -669,8 +653,6 @@ def EfficientNetB5(include_top=True,
       **kwargs)
 
 
-@keras_export('keras.applications.efficientnet.EfficientNetB6',
-              'keras.applications.EfficientNetB6')
 def EfficientNetB6(include_top=True,
                    weights='imagenet',
                    input_tensor=None,
@@ -695,8 +677,6 @@ def EfficientNetB6(include_top=True,
       **kwargs)
 
 
-@keras_export('keras.applications.efficientnet.EfficientNetB7',
-              'keras.applications.EfficientNetB7')
 def EfficientNetB7(include_top=True,
                    weights='imagenet',
                    input_tensor=None,
@@ -721,8 +701,6 @@ def EfficientNetB7(include_top=True,
       **kwargs)
 
 
-@keras_export('keras.applications.efficientnet.EfficientNetL2',
-              'keras.applications.EfficientNetL2')
 def EfficientNetL2(include_top=True,
                    weights='imagenet',
                    input_tensor=None,
