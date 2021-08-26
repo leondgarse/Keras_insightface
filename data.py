@@ -133,6 +133,32 @@ def pick_by_image_per_class(image_classes, image_per_class):
     return np.array([ii in class_pick for ii in image_classes]), class_pick
 
 
+def read_mxnet_record(data_path):
+    import mxnet as mx
+    idx_path = os.path.join(data_path, "train.idx")
+    bin_path = os.path.join(data_path, "train.rec")
+
+    print("idx_path = %s, bin_path = %s" % (idx_path, bin_path))
+    imgrec = mx.recordio.MXIndexedRecordIO(idx_path, bin_path, "r")
+    rec_header, _ = mx.recordio.unpack(imgrec.read_idx(0))
+    total_images = int(rec_header.label[0]) - 1
+    classes = int(rec_header.label[1] - rec_header.label[0])
+    return imgrec, rec_header, classes, total_images
+
+
+def mxnet_record_gen(imgrec, rec_header, classes):
+    import mxnet as mx
+    for ii in range(1, int(rec_header.label[0])):
+        img_info = imgrec.read_idx(ii)
+        header, img = mx.recordio.unpack(img_info)
+        img_class = int(np.sum(header.label))
+
+        label = tf.one_hot(img_class, depth=classes, dtype=tf.int32)
+        img = tf.image.decode_jpeg(img, channels=3)
+        img = tf.image.convert_image_dtype(img, tf.float32)
+        yield img, label
+
+
 def prepare_dataset(
     data_path,
     image_names_reg=None,
@@ -148,29 +174,40 @@ def prepare_dataset(
     is_train=True,
     teacher_model_interf=None,
 ):
-    image_names, image_classes, embeddings, classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)
-    if len(image_names) == 0:
-        return None
-    print(">>>> Image length: %d, Image class length: %d, classes: %d" % (len(image_names), len(image_classes), classes))
-    if image_per_class != 0:
-        pick, class_pick = pick_by_image_per_class(image_classes, image_per_class)
-        image_names, image_classes = image_names[pick], image_classes[pick]
-        if len(embeddings) != 0:
-            embeddings = embeddings[pick]
-        print(">>>> After pick[%d], images: %d, valid classes: %d" % (image_per_class, len(image_names), class_pick.shape[0]))
-
-    if len(embeddings) != 0 and teacher_model_interf is None:
-        # dataset with embedding values
-        print(">>>> embeddings: %s. This takes some time..." % (np.shape(embeddings),))
-        ds = tf.data.Dataset.from_tensor_slices((image_names, embeddings, image_classes))
-        process_func = lambda imm, emb, label: (tf_imread(imm), (emb, tf.one_hot(label, depth=classes, dtype=tf.int32)))
-    else:
-        ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes))
-        process_func = lambda imm, label: (tf_imread(imm), tf.one_hot(label, depth=classes, dtype=tf.int32))
-
     AUTOTUNE = tf.data.experimental.AUTOTUNE
-    ds = ds.shuffle(buffer_size=len(image_names))
-    ds = ds.map(process_func, num_parallel_calls=AUTOTUNE)
+    if os.path.exists(os.path.join(data_path, "train.idx")) and os.path.exists(os.path.join(data_path, "train.rec")):
+        print(">>>> Use MXNet record directly")
+        imgrec, rec_header, classes, total_images = read_mxnet_record(data_path)
+        ds = tf.data.Dataset.from_generator(
+            lambda: mxnet_record_gen(imgrec, rec_header, classes),
+            output_types=(tf.float32, tf.int32),
+            output_shapes=((*img_shape, 3), (classes,)),
+        )
+        ds = ds.shuffle(buffer_size=batch_size * 10)
+    else:
+        image_names, image_classes, embeddings, classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)
+        total_images = len(image_names)
+        if total_images == 0:
+            return None
+        print(">>>> Image length: %d, Image class length: %d, classes: %d" % (len(image_names), len(image_classes), classes))
+        if image_per_class != 0:
+            pick, class_pick = pick_by_image_per_class(image_classes, image_per_class)
+            image_names, image_classes = image_names[pick], image_classes[pick]
+            if len(embeddings) != 0:
+                embeddings = embeddings[pick]
+            print(">>>> After pick[%d], images: %d, valid classes: %d" % (image_per_class, len(image_names), class_pick.shape[0]))
+
+        if len(embeddings) != 0 and teacher_model_interf is None:
+            # dataset with embedding values
+            print(">>>> embeddings: %s. This takes some time..." % (np.shape(embeddings),))
+            ds = tf.data.Dataset.from_tensor_slices((image_names, embeddings, image_classes))
+            process_func = lambda imm, emb, label: (tf_imread(imm), (emb, tf.one_hot(label, depth=classes, dtype=tf.int32)))
+        else:
+            ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes))
+            process_func = lambda imm, label: (tf_imread(imm), tf.one_hot(label, depth=classes, dtype=tf.int32))
+
+        ds = ds.shuffle(buffer_size=total_images)
+        ds = ds.map(process_func, num_parallel_calls=AUTOTUNE)
 
     if is_train and random_status >= 0:
         random_process_image = RandomProcessImage(img_shape, random_status, random_crop)
@@ -190,7 +227,7 @@ def prepare_dataset(
     else:
         ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
     ds = ds.prefetch(buffer_size=AUTOTUNE)
-    steps_per_epoch = int(np.floor(len(image_names) / float(batch_size)))
+    steps_per_epoch = int(np.floor(total_images / float(batch_size)))
     return ds, steps_per_epoch
 
 
