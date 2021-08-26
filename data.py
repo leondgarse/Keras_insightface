@@ -133,30 +133,31 @@ def pick_by_image_per_class(image_classes, image_per_class):
     return np.array([ii in class_pick for ii in image_classes]), class_pick
 
 
-def read_mxnet_record(data_path):
-    import mxnet as mx
-    idx_path = os.path.join(data_path, "train.idx")
-    bin_path = os.path.join(data_path, "train.rec")
+class MXNetRecordGen():
+    def __init__(self, data_path):
+        import mxnet as mx
+        self.mx = mx
+        idx_path = os.path.join(data_path, "train.idx")
+        bin_path = os.path.join(data_path, "train.rec")
 
-    print("idx_path = %s, bin_path = %s" % (idx_path, bin_path))
-    imgrec = mx.recordio.MXIndexedRecordIO(idx_path, bin_path, "r")
-    rec_header, _ = mx.recordio.unpack(imgrec.read_idx(0))
-    total_images = int(rec_header.label[0]) - 1
-    classes = int(rec_header.label[1] - rec_header.label[0])
-    return imgrec, rec_header, classes, total_images
+        print(">>>> idx_path = %s, bin_path = %s" % (idx_path, bin_path))
+        imgrec = mx.recordio.MXIndexedRecordIO(idx_path, bin_path, "r")
+        rec_header, _ = mx.recordio.unpack(imgrec.read_idx(0))
+        total_images = int(rec_header.label[0]) - 1
+        classes = int(rec_header.label[1] - rec_header.label[0])
+        self.imgrec, self.rec_header, self.classes, self.total_images = imgrec, rec_header, classes, total_images
 
+    def __call__(self):
+        while True:
+            for ii in range(1, int(self.rec_header.label[0])):
+                img_info = self.imgrec.read_idx(ii)
+                header, img = self.mx.recordio.unpack(img_info)
+                img_class = int(np.sum(header.label))
 
-def mxnet_record_gen(imgrec, rec_header, classes):
-    import mxnet as mx
-    for ii in range(1, int(rec_header.label[0])):
-        img_info = imgrec.read_idx(ii)
-        header, img = mx.recordio.unpack(img_info)
-        img_class = int(np.sum(header.label))
-
-        label = tf.one_hot(img_class, depth=classes, dtype=tf.int32)
-        img = tf.image.decode_jpeg(img, channels=3)
-        img = tf.image.convert_image_dtype(img, tf.float32)
-        yield img, label
+                label = tf.one_hot(img_class, depth=self.classes, dtype=tf.int32)
+                img = tf.image.decode_jpeg(img, channels=3)
+                img = tf.image.convert_image_dtype(img, tf.float32)
+                yield img, label
 
 
 def prepare_dataset(
@@ -177,12 +178,9 @@ def prepare_dataset(
     AUTOTUNE = tf.data.experimental.AUTOTUNE
     if os.path.exists(os.path.join(data_path, "train.idx")) and os.path.exists(os.path.join(data_path, "train.rec")):
         print(">>>> Use MXNet record directly")
-        imgrec, rec_header, classes, total_images = read_mxnet_record(data_path)
-        ds = tf.data.Dataset.from_generator(
-            lambda: mxnet_record_gen(imgrec, rec_header, classes),
-            output_types=(tf.float32, tf.int32),
-            output_shapes=((*img_shape, 3), (classes,)),
-        )
+        data_gen = MXNetRecordGen(data_path)
+        total_images, classes = data_gen.total_images, data_gen.classes
+        ds = tf.data.Dataset.from_generator(data_gen, output_types=(tf.float32, tf.int32), output_shapes=((*img_shape, 3), (classes,)))
         ds = ds.shuffle(buffer_size=batch_size * 10)
     else:
         image_names, image_classes, embeddings, classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)
