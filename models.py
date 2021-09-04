@@ -9,7 +9,7 @@ def print_buildin_models():
     >>>> buildin_models
     MXNet version resnet: mobilenet_m1, r18, r34, r50, r100, r101, se_r34, se_r50, se_r100
     Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
-    EfficientNet: efficientnetb[0-7], efficientnetl2,
+    EfficientNet: efficientnetb[0-7], efficientnetl2, efficientnetv2b[1-3], efficientnetv2[t, s, m, l, xl]
     Custom 1: ghostnet, mobilefacenet, mobilenetv3_small, mobilenetv3_large, se_mobilefacenet, se_resnext
     Or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
     """,
@@ -43,13 +43,18 @@ def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet"
             model_name = "ResNet" + name_lower[len("resnet") :]
         model_class = getattr(keras.applications, model_name)
         xx = model_class(weights=weights, include_top=False, input_shape=input_shape, **kwargs)
-    elif name_lower.startswith("efficientnet"):
-        # import tensorflow.keras.applications.efficientnet as efficientnet
-        from backbones import efficientnet
+    elif name_lower.startswith("efficientnetv2"):
+        import keras_efficientnet_v2
 
-        model_name = "EfficientNet" + name_lower[-2:].upper()
-        model_class = getattr(efficientnet, model_name)
-        xx = model_class(weights=weights, include_top=False, input_shape=input_shape, **kwargs)  # or weights='imagenet'
+        model_name = "EfficientNetV2" + name_lower[len("EfficientNetV2"):].upper()
+        model_class = getattr(keras_efficientnet_v2, model_name)
+        xx = model_class(pretrained=weights, num_classes=0, input_shape=input_shape, **kwargs)
+    elif name_lower.startswith("efficientnet"):
+        import keras_efficientnet_v2
+
+        model_name = "EfficientNetV1" + name_lower[-2:].upper()
+        model_class = getattr(keras_efficientnet_v2, model_name)
+        xx = model_class(pretrained=weights, num_classes=0, input_shape=input_shape, **kwargs)
     elif name_lower.startswith("se_resnext"):
         from keras_squeeze_excite_network import se_resnext
 

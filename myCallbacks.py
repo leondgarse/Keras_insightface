@@ -119,6 +119,7 @@ class CosineLrSchedulerEpoch(keras.callbacks.Callback):
         print("\nLearning rate for iter {} is {}".format(epoch + 1, lr))
         return lr
 
+
 class CosineLrScheduler(keras.callbacks.Callback):
     def __init__(
         self, lr_base, first_restart_step, m_mul=0.5, t_mul=2.0, lr_min=1e-5, warmup=0, steps_per_epoch=-1, keep_as_min=1,
@@ -222,6 +223,7 @@ def exp_scheduler(epoch, lr_base, decay_rate=0.05, lr_min=0, warmup=10):
     lr = lr_min if lr < lr_min else lr
     print("\nLearning rate for iter {} is {}".format(epoch + 1, lr))
     return lr
+
 
 def constant_scheduler(epoch, lr_base, lr_decay_steps, decay_rate=0.1):
     lr = lr_base * decay_rate ** np.sum(epoch >= np.array(lr_decay_steps))

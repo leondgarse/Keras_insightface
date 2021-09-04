@@ -62,6 +62,21 @@ class Torch_model_interf:
         return output.cpu().detach().numpy()
 
 
+class ONNX_model_interf:
+    def __init__(self, model_file, image_size=(112, 112)):
+        import onnxruntime as ort
+        ort.set_default_logger_severity(3)
+        self.ort_session = ort.InferenceSession(model_file)
+        self.output_names = [self.ort_session.get_outputs()[0].name]
+        self.input_name = self.ort_session.get_inputs()[0].name
+
+    def __call__(self, imgs):
+        imgs = imgs.transpose(0, 3, 1, 2).astype("float32")
+        imgs = (imgs - 127.5) * 0.0078125
+        outputs = self.ort_session.run(self.output_names, {self.input_name: imgs})
+        return outputs[0]
+
+
 def keras_model_interf(model_file):
     import tensorflow as tf
     from tensorflow_addons.layers import StochasticDepth
@@ -234,7 +249,7 @@ def get_embeddings(model_interf, img_names, landmarks, batch_size=64, flip=True)
 
 
 def process_embeddings(embs, embs_f=[], use_flip_test=True, use_norm_score=False, use_detector_score=True, face_scores=None):
-    print(">>>> process_embeddings:", use_flip_test, use_norm_score, use_detector_score)
+    print(">>>> process_embeddings: Norm {}, Detect_score {}, Flip {}".format(use_norm_score, use_detector_score, use_flip_test))
     if use_flip_test and len(embs_f) != 0:
         embs = embs + embs_f
     if use_norm_score:
@@ -344,6 +359,8 @@ class IJB_test:
                 interf_func = keras_model_interf(model_file)
             elif model_file.endswith(".pth") or model_file.endswith(".pt"):
                 interf_func = Torch_model_interf(model_file)
+            elif model_file.endswith(".onnx") or model_file.endswith(".ONNX"):
+                interf_func = ONNX_model_interf(model_file)
             else:
                 interf_func = Mxnet_model_interf(model_file)
             self.embs, self.embs_f = get_embeddings(interf_func, img_names, landmarks, batch_size=batch_size)
@@ -549,10 +566,10 @@ def parse_arguments(argv):
 
     default_save_result_name = "IJB_result/{model_name}_{subset}_{type}.npz"
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-m", "--model_file", type=str, default=None, help="Saved model, keras h5 / pytorch jit pth / mxnet")
-    parser.add_argument("-d", "--data_path", type=str, default="./", help="Dataset path")
+    parser.add_argument("-m", "--model_file", type=str, default=None, help="Saved model, keras h5 / pytorch jit pth / onnx / mxnet")
+    parser.add_argument("-d", "--data_path", type=str, default="./", help="Dataset path containing IJBB and IJBC sub folder")
     parser.add_argument("-s", "--subset", type=str, default="IJBB", help="Subset test target, could be IJBB / IJBC")
-    parser.add_argument("-b", "--batch_size", type=int, default=64, help="Batch size for get_embeddings")
+    parser.add_argument("-b", "--batch_size", type=int, default=128, help="Batch size for get_embeddings")
     parser.add_argument(
         "-R", "--save_result", type=str, default=default_save_result_name, help="Filename for saving / restore result"
     )
@@ -576,8 +593,8 @@ def parse_arguments(argv):
         print("Please provide -m MODEL_FILE, see `--help` for usage.")
         exit(1)
     elif args.model_file != None:
-        if args.model_file.endswith(".h5") or args.model_file.endswith(".pth") or args.model_file.endswith(".pt"):
-            # Keras model file "model.h5", pytorch model ends with `.pth` or `.pt`
+        if args.model_file.endswith(".h5") or args.model_file.endswith(".pth") or args.model_file.endswith(".pt") or args.model_file.endswith(".onnx"):
+            # Keras model file "model.h5", pytorch model ends with `.pth` or `.pt`, onnx model ends with `.onnx`
             model_name = os.path.splitext(os.path.basename(args.model_file))[0]
         else:
             # MXNet model file "models/r50-arcface-emore/model,1"

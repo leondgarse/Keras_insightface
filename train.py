@@ -405,6 +405,9 @@ class Train:
 
         print(">>>> loss_weights:", self.loss_weights)
         self.metrics = {ii: None if "embedding" in ii else "accuracy" for ii in self.model.output_names}
+        self.callbacks.append(keras.callbacks.TerminateOnNaN())
+        # self.callbacks.append(keras.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs=None: keras.backend.clear_session()))
+        # self.callbacks.append(keras.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs=None: self.basic_model.save("aa_epoch{}.h5".format(epoch))))
 
         if bottleneckOnly:
             print(">>>> Train bottleneckOnly...")
