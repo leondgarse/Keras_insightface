@@ -156,6 +156,8 @@ class Train:
             else:
                 self.train_ds, self.steps_per_epoch = data.prepare_dataset(**dataset_params)
             self.is_triplet_dataset = False
+        if self.train_ds is None:
+            return
 
         if tf.distribute.has_strategy():
             self.train_ds = self.train_ds.with_options(self.data_options)
@@ -366,12 +368,14 @@ class Train:
         print(">>>> Train %s..." % type)
         self.__init_dataset__(type, emb_loss_names)
         if self.train_ds is None:
-            print(">>>> Error: train_ds is None.")
-            self.model.stop_training = True
+            print(">>>> [Error]: train_ds is None.")
+            if self.model is not None:
+                self.model.stop_training = True
             return
         if self.is_distill_ds == False and type == self.distill:
-            print(">>>> Error: Dataset doesn't contain embedding data.")
-            self.model.stop_training = True
+            print(">>>> [Error]: Dataset doesn't contain embedding data.")
+            if self.model is not None:
+                self.model.stop_training = True
             return
 
         self.is_lr_on_batch = isinstance(self.lr_scheduler, myCallbacks.CosineLrScheduler)
@@ -440,6 +444,6 @@ class Train:
             self.train_single_scheduler(**sch, initial_epoch=initial_epoch)
             initial_epoch += 0 if sch.get("bottleneckOnly", False) else sch["epoch"]
 
-            if self.model.stop_training == True:
+            if self.model is None or self.model.stop_training == True:
                 print(">>>> But it's an early stop, break...")
                 break
