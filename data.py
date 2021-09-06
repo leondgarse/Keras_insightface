@@ -51,7 +51,7 @@ def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None)
         image_classes = [image_classes_rule(ii) for ii in image_names]
         embeddings = np.array([])
         np.savez_compressed(dest_pickle, image_names=image_names, image_classes=image_classes)
-    classes = np.max(image_classes) + 1
+    classes = np.max(image_classes) + 1 if len(image_classes) > 0 else 0
     return image_names, image_classes, embeddings, classes, dest_pickle
 
 
