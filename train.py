@@ -365,6 +365,10 @@ class Train:
             type = self.__init_type_by_loss__(loss)
         print(">>>> Train %s..." % type)
         self.__init_dataset__(type, emb_loss_names)
+        if self.train_ds is None:
+            print(">>>> Error: train_ds is None.")
+            self.model.stop_training = True
+            return
         if self.is_distill_ds == False and type == self.distill:
             print(">>>> Error: Dataset doesn't contain embedding data.")
             self.model.stop_training = True

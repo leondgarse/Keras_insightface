@@ -40,6 +40,7 @@ def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None)
         print(">>>> reloaded from dataset backup:", dest_pickle)
     else:
         if not os.path.exists(data_path):
+            print(">>>> [Error] data_path not exists, data_path:", data_path)
             return [], [], [], 0, None
         if image_names_reg is None:
             image_names_reg = default_image_names_reg
@@ -186,7 +187,8 @@ def prepare_dataset(
         image_names, image_classes, embeddings, classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)
         total_images = len(image_names)
         if total_images == 0:
-            return None
+            print(">>>> [Error] total_images is 0, image_names:", image_names, "image_classes:", image_classes)
+            return None, None
         print(">>>> Image length: %d, Image class length: %d, classes: %d" % (len(image_names), len(image_classes), classes))
         if image_per_class != 0:
             pick, class_pick = pick_by_image_per_class(image_classes, image_per_class)
