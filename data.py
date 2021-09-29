@@ -45,7 +45,8 @@ def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None)
         if image_names_reg is None:
             image_names_reg = default_image_names_reg
         if image_classes_rule is None:
-            image_classes_rule = default_image_classes_rule
+            # image_classes_rule = default_image_classes_rule
+            image_classes_rule = ImageClassesRule_map(data_path)
         image_names = glob2.glob(os.path.join(data_path, image_names_reg))
         image_names = np.random.permutation(image_names).tolist()
         image_classes = [image_classes_rule(ii) for ii in image_names]
@@ -216,16 +217,23 @@ def prepare_dataset(
 
     ds = ds.batch(batch_size, drop_remainder=True)  # Use batch --> map has slightly effect on dataset reading time, but harm the randomness
     # ds = ds.map(lambda xx, yy: (random_rotate(xx), yy), num_parallel_calls=AUTOTUNE)
-    if teacher_model_interf is not None:
-        print(">>>> Teacher model interface provided.")
-        emb_func = lambda imm, label: (imm, (teacher_model_interf(imm), label))
-        ds = ds.map(emb_func, num_parallel_calls=AUTOTUNE)
 
     if mixup_alpha > 0 and mixup_alpha <= 1:
         print(">>>> mixup_alpha provided:", mixup_alpha)
         ds = ds.map(lambda xx, yy: mixup((xx - 127.5) * 0.0078125, yy, alpha=mixup_alpha))
     else:
         ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
+
+    if teacher_model_interf is not None:
+        if teacher_model_interf.output_shape[-1] == classes:
+            print(">>>> KLDivergence teacher model interface provided.")
+            emb_func = lambda imm, label: (imm, teacher_model_interf(imm))
+            ds = ds.map(emb_func, num_parallel_calls=AUTOTUNE)
+        else:
+            print(">>>> Teacher model interface provided.")
+            emb_func = lambda imm, label: (imm, (teacher_model_interf(imm), label))
+            ds = ds.map(emb_func, num_parallel_calls=AUTOTUNE)
+
     ds = ds.prefetch(buffer_size=AUTOTUNE)
     steps_per_epoch = int(np.floor(total_images / float(batch_size)))
     return ds, steps_per_epoch

@@ -120,7 +120,8 @@ def buildin_models(
     if add_pointwise_conv:  # Model using `pointwise_conv + GDC` / `pointwise_conv + E` is smaller than `E`
         nn = keras.layers.Conv2D(512, 1, use_bias=False, padding="same")(nn)
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
-        nn = keras.layers.PReLU(shared_axes=[1, 2])(nn)
+        nn = keras.layers.Activation('relu', name='pw_relu')(nn)
+        # nn = keras.layers.ReLU(shared_axes=[1, 2])(nn)
 
     if output_layer == "E":
         """ Fully Connected """

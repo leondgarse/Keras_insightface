@@ -300,6 +300,8 @@ class Train:
                 return self.arcface
             if isinstance(loss, losses.ArcfaceLossSimple) or isinstance(loss, losses.AdaCosLoss):
                 return self.arcface
+            if isinstance(loss, losses.DistillKLDivergenceLoss):
+                return self.arcface # Use NormDense layer
             if self.softmax in ss:
                 return self.softmax
         return self.softmax
@@ -397,7 +399,7 @@ class Train:
             emb_shape = self.basic_model.output_shape[-1]
             initial_file = os.path.splitext(self.save_path)[0] + "_centers.npy"
             center_loss = loss_class(self.classes, emb_shape=emb_shape, initial_file=initial_file)
-            self.callbacks = self.my_evals + self.custom_callbacks + [center_loss.save_centers_callback] + basic_callbacks
+            self.callbacks.insert(-1, center_loss.save_centers_callback)
             self.__add_emb_output_to_model__(self.center, center_loss, emb_loss_weights[self.center])
 
         if self.triplet in emb_loss_names and type != self.triplet:
