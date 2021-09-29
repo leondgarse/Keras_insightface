@@ -5,10 +5,6 @@ import pandas as pd
 import tensorflow as tf
 from skimage.io import imread
 
-# /datasets/faces_emore_112x112_folders/*/*.jpg'
-default_image_names_reg = os.path.join("*", "*.jpg")
-default_image_classes_rule = lambda path: int(os.path.basename(os.path.dirname(path)))
-
 
 class ImageClassesRule_map:
     def __init__(self, dir, dir_rule="*", excludes=[]):
@@ -42,12 +38,14 @@ def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None)
         if not os.path.exists(data_path):
             print(">>>> [Error] data_path not exists, data_path:", data_path)
             return [], [], [], 0, None
-        if image_names_reg is None:
-            image_names_reg = default_image_names_reg
         if image_classes_rule is None:
             # image_classes_rule = default_image_classes_rule
             image_classes_rule = ImageClassesRule_map(data_path)
-        image_names = glob2.glob(os.path.join(data_path, image_names_reg))
+        if image_names_reg is None:
+            image_names = glob2.glob(os.path.join(data_path, "*", "*.jpg"))
+            image_names += glob2.glob(os.path.join(data_path, "*", "*.png"))
+        else:
+            image_names = glob2.glob(os.path.join(data_path, image_names_reg))
         image_names = np.random.permutation(image_names).tolist()
         image_classes = [image_classes_rule(ii) for ii in image_names]
         embeddings = np.array([])
@@ -60,6 +58,7 @@ def tf_imread(file_path):
     # tf.print('Reading file:', file_path)
     img = tf.io.read_file(file_path)
     img = tf.image.decode_jpeg(img, channels=3)  # [0, 255]
+    # img = tf.image.decode_image(img, channels=3)  # [0, 255]
     img = tf.cast(img, "float32")  # [0, 255]
     return img
 
