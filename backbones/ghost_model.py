@@ -22,8 +22,9 @@ from tensorflow.keras.layers import (
 )
 import math
 
-CONV_KERNEL_INITIALIZER = keras.initializers.VarianceScaling(scale=2., mode='fan_out', distribution='truncated_normal')
+CONV_KERNEL_INITIALIZER = keras.initializers.VarianceScaling(scale=2.0, mode="fan_out", distribution="truncated_normal")
 # CONV_KERNEL_INITIALIZER = 'glorot_uniform'
+
 
 def _make_divisible(v, divisor=4, min_value=None):
     """
@@ -42,7 +43,7 @@ def _make_divisible(v, divisor=4, min_value=None):
 
 
 def activation(inputs):
-    return Activation('relu')(inputs)
+    return Activation("relu")(inputs)
     # return PReLU(shared_axes=[1, 2], alpha_initializer=tf.initializers.Constant(0.25))(inputs)
 
 
@@ -54,9 +55,9 @@ def se_module(inputs, se_ratio=0.25):
     se = Reshape((1, 1, filters))(se)
     se = Conv2D(reduction, kernel_size=1, use_bias=True, kernel_initializer=CONV_KERNEL_INITIALIZER)(se)
     # se = PReLU(shared_axes=[1, 2])(se)
-    se = Activation('relu')(se)
+    se = Activation("relu")(se)
     se = Conv2D(filters, kernel_size=1, use_bias=True, kernel_initializer=CONV_KERNEL_INITIALIZER)(se)
-    se = Activation('hard_sigmoid')(se)
+    se = Activation("hard_sigmoid")(se)
     return Multiply()([inputs, se])
 
 
@@ -64,13 +65,15 @@ def ghost_module(inputs, out, convkernel=1, dwkernel=3, add_activation=True):
     # conv_out_channel = math.ceil(out * 1.0 / 2)
     conv_out_channel = out // 2
     # tf.print("[ghost_module] out:", out, "conv_out_channel:", conv_out_channel)
-    cc = Conv2D(conv_out_channel, convkernel, use_bias=False, strides=(1, 1), padding='same', kernel_initializer=CONV_KERNEL_INITIALIZER)(inputs)   # padding=kernel_size//2
+    cc = Conv2D(conv_out_channel, convkernel, use_bias=False, strides=(1, 1), padding="same", kernel_initializer=CONV_KERNEL_INITIALIZER)(
+        inputs
+    )  # padding=kernel_size//2
     cc = BatchNormalization(axis=-1)(cc)
     if add_activation:
         cc = activation(cc)
 
     channel = int(out - conv_out_channel)
-    nn = DepthwiseConv2D(dwkernel, 1, padding='same', use_bias=False, depthwise_initializer=CONV_KERNEL_INITIALIZER)(cc)   # padding=dw_size//2
+    nn = DepthwiseConv2D(dwkernel, 1, padding="same", use_bias=False, depthwise_initializer=CONV_KERNEL_INITIALIZER)(cc)  # padding=dw_size//2
     nn = BatchNormalization(axis=-1)(nn)
     if add_activation:
         nn = activation(nn)
@@ -81,27 +84,29 @@ def ghost_module(inputs, out, convkernel=1, dwkernel=3, add_activation=True):
 
 
 def ghost_bottleneck(inputs, dwkernel, strides, exp, out, se_ratio=0, shortcut=True):
-    nn = ghost_module(inputs, exp, add_activation=True) # ghost1 = GhostModule(in_chs, exp, relu=True)
+    nn = ghost_module(inputs, exp, add_activation=True)  # ghost1 = GhostModule(in_chs, exp, relu=True)
     # nn = BatchNormalization(axis=-1)(nn)
     # nn = Activation('relu')(nn)
     if strides > 1:
         # Extra depth conv if strides higher than 1
-        nn = DepthwiseConv2D(dwkernel, strides, padding='same', use_bias=False, depthwise_initializer=CONV_KERNEL_INITIALIZER)(nn)
+        nn = DepthwiseConv2D(dwkernel, strides, padding="same", use_bias=False, depthwise_initializer=CONV_KERNEL_INITIALIZER)(nn)
         nn = BatchNormalization(axis=-1)(nn)
         # nn = Activation('relu')(nn)
 
     if se_ratio > 0:
         # Squeeze and excite
-        nn = se_module(nn, se_ratio)   # se = SqueezeExcite(exp, se_ratio=se_ratio)
+        nn = se_module(nn, se_ratio)  # se = SqueezeExcite(exp, se_ratio=se_ratio)
 
     # Point-wise linear projection
-    nn = ghost_module(nn, out, add_activation=False) # ghost2 = GhostModule(exp, out, relu=False)
+    nn = ghost_module(nn, out, add_activation=False)  # ghost2 = GhostModule(exp, out, relu=False)
     # nn = BatchNormalization(axis=-1)(nn)
 
     if shortcut:
-        xx = DepthwiseConv2D(dwkernel, strides, padding='same', use_bias=False, depthwise_initializer=CONV_KERNEL_INITIALIZER)(inputs) # padding=(dw_kernel_size-1)//2
+        xx = DepthwiseConv2D(dwkernel, strides, padding="same", use_bias=False, depthwise_initializer=CONV_KERNEL_INITIALIZER)(
+            inputs
+        )  # padding=(dw_kernel_size-1)//2
         xx = BatchNormalization(axis=-1)(xx)
-        xx = Conv2D(out, (1, 1), strides=(1, 1), padding='valid', use_bias=False, kernel_initializer=CONV_KERNEL_INITIALIZER)(xx)    # padding=0
+        xx = Conv2D(out, (1, 1), strides=(1, 1), padding="valid", use_bias=False, kernel_initializer=CONV_KERNEL_INITIALIZER)(xx)  # padding=0
         xx = BatchNormalization(axis=-1)(xx)
     else:
         xx = inputs
@@ -111,7 +116,7 @@ def ghost_bottleneck(inputs, dwkernel, strides, exp, out, se_ratio=0, shortcut=T
 def GhostNet(input_shape=(224, 224, 3), include_top=True, classes=0, width=1.3, strides=2, name="GhostNet"):
     inputs = Input(shape=input_shape)
     out_channel = _make_divisible(16 * width, 4)
-    nn = Conv2D(out_channel, (3, 3), strides=strides, padding='same', use_bias=False, kernel_initializer=CONV_KERNEL_INITIALIZER)(inputs)  # padding=1
+    nn = Conv2D(out_channel, (3, 3), strides=strides, padding="same", use_bias=False, kernel_initializer=CONV_KERNEL_INITIALIZER)(inputs)  # padding=1
     nn = BatchNormalization(axis=-1)(nn)
     nn = activation(nn)
     # nn = Conv2D(960, (1, 1), strides=(1, 1), padding='same', use_bias=False)(nn)
@@ -131,18 +136,18 @@ def GhostNet(input_shape=(224, 224, 3), include_top=True, classes=0, width=1.3, 
         pre_out = out
 
     out = _make_divisible(exps[-1] * width, 4)
-    nn = Conv2D(out, (1, 1), strides=(1, 1), padding='valid', use_bias=False, kernel_initializer=CONV_KERNEL_INITIALIZER)(nn)  # padding=0
+    nn = Conv2D(out, (1, 1), strides=(1, 1), padding="valid", use_bias=False, kernel_initializer=CONV_KERNEL_INITIALIZER)(nn)  # padding=0
     nn = BatchNormalization(axis=-1)(nn)
     nn = activation(nn)
 
     if include_top:
         nn = GlobalAveragePooling2D()(nn)
         nn = Reshape((1, 1, int(nn.shape[1])))(nn)
-        nn = Conv2D(1280, (1, 1), strides=(1, 1), padding='same', use_bias=False, kernel_initializer=CONV_KERNEL_INITIALIZER)(nn)
+        nn = Conv2D(1280, (1, 1), strides=(1, 1), padding="same", use_bias=False, kernel_initializer=CONV_KERNEL_INITIALIZER)(nn)
         nn = BatchNormalization(axis=-1)(nn)
         nn = activation(nn)
 
-        nn = Conv2D(classes, (1, 1), strides=(1, 1), padding='same', use_bias=False, kernel_initializer=CONV_KERNEL_INITIALIZER)(nn)
+        nn = Conv2D(classes, (1, 1), strides=(1, 1), padding="same", use_bias=False, kernel_initializer=CONV_KERNEL_INITIALIZER)(nn)
         nn = K.squeeze(nn, 1)
-        nn = Activation('softmax')(nn)
+        nn = Activation("softmax")(nn)
     return Model(inputs=inputs, outputs=nn, name=name)

@@ -90,9 +90,7 @@ def linear_GD_conv_block(inputs, kernel_size, strides):
     return Z
 
 
-def mobile_facenet(
-    emb_shape=128, input_shape=(112, 112, 3), dropout=1, name="mobile_facenet", weight_file=None, use_se=False, include_top=True
-):
+def mobile_facenet(emb_shape=128, input_shape=(112, 112, 3), dropout=1, name="mobile_facenet", weight_file=None, use_se=False, include_top=True):
     channel_axis = 1 if K.image_data_format() == "channels_first" else -1
     if K.image_data_format() == "channels_first":
         X = Input(shape=(input_shape[-1], input_shape[0], input_shape[1]))
