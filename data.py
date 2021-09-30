@@ -57,8 +57,8 @@ def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None)
 def tf_imread(file_path):
     # tf.print('Reading file:', file_path)
     img = tf.io.read_file(file_path)
-    img = tf.image.decode_jpeg(img, channels=3)  # [0, 255]
-    # img = tf.image.decode_image(img, channels=3)  # [0, 255]
+    # img = tf.image.decode_jpeg(img, channels=3)  # [0, 255]
+    img = tf.image.decode_image(img, channels=3, expand_animations=False)  # [0, 255]
     img = tf.cast(img, "float32")  # [0, 255]
     return img
 
@@ -112,7 +112,7 @@ def mixup(image, label, alpha=0.4):
     # mix_weight = tfp.distributions.Beta(alpha, alpha).sample([batch_size, 1])
     batch_size = tf.shape(image)[0]
     mix_weight = sample_beta_distribution(batch_size, alpha, alpha)
-    mix_weight = tf.maximum(mix_weight, 1. - mix_weight)
+    mix_weight = tf.maximum(mix_weight, 1.0 - mix_weight)
 
     # Regard values with `> 0.9` as no mixup, this probability is near `1 - alpha`
     # alpha: no_mixup --> {0.2: 0.6714, 0.4: 0.47885, 0.6: 0.35132, 0.8: 0.26354, 1.0: 0.19931}
@@ -122,7 +122,7 @@ def mixup(image, label, alpha=0.4):
     img_mix_weight = tf.cast(tf.reshape(mix_weight, [batch_size, 1, 1, 1]), image.dtype)
 
     shuffle_index = tf.random.shuffle(tf.range(batch_size))
-    image = image * img_mix_weight + tf.gather(image, shuffle_index) * (1. - img_mix_weight)
+    image = image * img_mix_weight + tf.gather(image, shuffle_index) * (1.0 - img_mix_weight)
     label = tf.cast(label, "float32")
     label = label * label_mix_weight + tf.gather(label, shuffle_index) * (1 - label_mix_weight)
     return image, label
@@ -134,9 +134,10 @@ def pick_by_image_per_class(image_classes, image_per_class):
     return np.array([ii in class_pick for ii in image_classes]), class_pick
 
 
-class MXNetRecordGen():
+class MXNetRecordGen:
     def __init__(self, data_path):
         import mxnet as mx
+
         self.mx = mx
         idx_path = os.path.join(data_path, "train.idx")
         bin_path = os.path.join(data_path, "train.rec")
@@ -238,9 +239,7 @@ def prepare_dataset(
     return ds, steps_per_epoch
 
 
-def prepare_distill_dataset_tfrecord(
-    data_path, batch_size=128, img_shape=(112, 112), random_status=2, random_crop=(100, 100, 3), **kw
-):
+def prepare_distill_dataset_tfrecord(data_path, batch_size=128, img_shape=(112, 112), random_status=2, random_crop=(100, 100, 3), **kw):
     AUTOTUNE = tf.data.experimental.AUTOTUNE
     decode_base_info = {
         "classes": tf.io.FixedLenFeature([], dtype=tf.int64),
@@ -307,9 +306,7 @@ class Triplet_dataset:
 
         image_dataframe = pd.DataFrame({"image_names": image_names, "image_classes": image_classes})
         self.image_dataframe = image_dataframe.groupby("image_classes").apply(lambda xx: xx.image_names.values)
-        self.split_func = lambda xx: np.array(
-            np.split(np.random.permutation(xx)[: len(xx) // image_per_class * image_per_class], len(xx) // image_per_class)
-        )
+        self.split_func = lambda xx: np.array(np.split(np.random.permutation(xx)[: len(xx) // image_per_class * image_per_class], len(xx) // image_per_class))
         self.image_per_class = image_per_class
         self.batch_size = batch_size // image_per_class * image_per_class
         self.img_shape = img_shape[:2]

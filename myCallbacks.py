@@ -42,7 +42,7 @@ class My_history(keras.callbacks.Callback):
         logs = logs or {}
         logs.pop("lr", None)
         lr = self.model.optimizer.lr
-        if hasattr(lr, 'value'):
+        if hasattr(lr, "value"):
             lr = lr.value()
 
         self.history.setdefault("lr", []).append(float(lr))
@@ -101,9 +101,7 @@ class CosineLrSchedulerEpoch(keras.callbacks.Callback):
         if lr_min == lr_base * m_mul:
             self.schedule = keras.experimental.CosineDecay(lr_base, first_restart_step, alpha=lr_min / lr_base)
         else:
-            self.schedule = keras.experimental.CosineDecayRestarts(
-                lr_base, first_restart_step, t_mul=t_mul, m_mul=m_mul, alpha=lr_min / lr_base
-            )
+            self.schedule = keras.experimental.CosineDecayRestarts(lr_base, first_restart_step, t_mul=t_mul, m_mul=m_mul, alpha=lr_min / lr_base)
 
         if warmup != 0:
             self.warmup_lr_func = lambda ii: lr_min + (lr_base - lr_min) * ii / warmup
@@ -121,9 +119,7 @@ class CosineLrSchedulerEpoch(keras.callbacks.Callback):
 
 
 class CosineLrScheduler(keras.callbacks.Callback):
-    def __init__(
-        self, lr_base, first_restart_step, m_mul=0.5, t_mul=2.0, lr_min=1e-5, warmup=0, steps_per_epoch=-1, keep_as_min=1,
-    ):
+    def __init__(self, lr_base, first_restart_step, m_mul=0.5, t_mul=2.0, lr_min=1e-5, warmup=0, steps_per_epoch=-1, keep_as_min=1):
         super(CosineLrScheduler, self).__init__()
         self.lr_base, self.m_mul, self.t_mul, self.lr_min = lr_base, m_mul, t_mul, lr_min
         self.first_restart_step = first_restart_step
@@ -153,9 +149,7 @@ class CosineLrScheduler(keras.callbacks.Callback):
             # with `first_restart_step, t_mul, warmup = 10, 2, 1` restart epochs will be:
             # ee = lambda ss: warmup + first_restart_step * np.sum([t_mul ** jj for jj in range(ss)])
             # [ee(ii) for ii in range(1, 5)] == [11, 31, 71, 151]
-            self.schedule = keras.experimental.CosineDecayRestarts(
-                self.lr_base, self.first_restart_step, t_mul=self.t_mul, m_mul=self.m_mul, alpha=alpha
-            )
+            self.schedule = keras.experimental.CosineDecayRestarts(self.lr_base, self.first_restart_step, t_mul=self.t_mul, m_mul=self.m_mul, alpha=alpha)
             if self.keep_as_min != 0 and self.lr_min != 0:
                 restart_mul = [np.sum([self.t_mul ** jj for jj in range(ii)]) for ii in range(1, 5)]
                 restart_batch_nums = [self.warmup + self.first_restart_step * ii for ii in restart_mul]

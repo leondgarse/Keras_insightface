@@ -32,9 +32,7 @@ def data_drop_top_k(model, data_path, dest_file=None, deg_thresh=75, limit=0):
     class_num = output_layer.output_shape[-1]
     top_k = centers.shape[-1] // class_num
 
-    print(
-        ">>>> [Before] emb_num = %d, class_num = %d, top_k = %d, images = %d" % (emb_num, class_num, top_k, len(image_classes))
-    )
+    print(">>>> [Before] emb_num = %d, class_num = %d, top_k = %d, images = %d" % (emb_num, class_num, top_k, len(image_classes)))
     # >>>> [Before] emb_num = 256, class_num = 10572, top_k = 3, images = 490623
 
     cur_idx = 0  # The new index to save.

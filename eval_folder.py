@@ -68,7 +68,7 @@ class Face_detection:
                 save_dir = os.path.join(dest_path, class_name)
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
-                imsave(os.path.join(save_dir, file_name), nimages[0])   # Use only the first one
+                imsave(os.path.join(save_dir, file_name), nimages[0])  # Use only the first one
             else:
                 print(">>>> None face detected in image:", imm)
         print(">>>> Saved aligned face images in:", dest_path)
@@ -82,14 +82,14 @@ class Face_detection:
         for id, bb in enumerate(bbs):
             plt.plot([bb[0], bb[2], bb[2], bb[0], bb[0]], [bb[1], bb[1], bb[3], bb[3], bb[1]])
             if len(ccs) != 0:
-                plt.text(bb[0], bb[1], '{:.4f}'.format(ccs[id]))
+                plt.text(bb[0], bb[1], "{:.4f}".format(ccs[id]))
             if len(pps) != 0:
                 pp = pps[id]
                 if len(pp.shape) == 2:
                     plt.scatter(pp[:, 0], pp[:, 1], s=8)
                 else:
                     plt.scatter(pp[::2], pp[1::2], s=8)
-        plt.axis('off')
+        plt.axis("off")
         plt.tight_layout()
 
     def download_and_prepare_det(self):
@@ -98,11 +98,12 @@ class Face_detection:
         cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
         ctx = 0 if len(cvd) > 0 and int(cvd) != -1 else -1
 
-        model_file = os.path.expanduser('~/.insightface/models/antelope/scrfd_10g_bnkps.onnx')
+        model_file = os.path.expanduser("~/.insightface/models/antelope/scrfd_10g_bnkps.onnx")
         if not os.path.exists(model_file):
             import zipfile
-            model_url = 'http://storage.insightface.ai/files/models/antelope.zip'
-            zip_file = os.path.expanduser('~/.insightface/models/antelope.zip')
+
+            model_url = "http://storage.insightface.ai/files/models/antelope.zip"
+            zip_file = os.path.expanduser("~/.insightface/models/antelope.zip")
             zip_extract_path = os.path.splitext(zip_file)[0]
             if not os.path.exists(os.path.dirname(zip_file)):
                 os.makedirs(os.path.dirname(zip_file))
@@ -136,9 +137,7 @@ class Eval_folder:
         else:
             img_shape = (112, 112)
 
-            img_gen = ImageDataGenerator().flow_from_directory(
-                data_path, class_mode="binary", target_size=img_shape, batch_size=batch_size, shuffle=False
-            )
+            img_gen = ImageDataGenerator().flow_from_directory(data_path, class_mode="binary", target_size=img_shape, batch_size=batch_size, shuffle=False)
             steps = int(np.ceil(img_gen.classes.shape[0] / img_gen.batch_size))
             filenames = np.array(img_gen.filenames)
 
@@ -252,8 +251,8 @@ class Eval_folder:
         """ nfold """
         pos_fold, neg_fold = pos_num // nfold, neg_num // nfold
         issame_list = ([True] * pos_fold + [False] * neg_fold) * nfold
-        pos_bin_fold = lambda ii: bins[ii * pos_fold * 2: (ii + 1) * pos_fold * 2]
-        neg_bin_fold = lambda ii: bins[pos_num * 2 :][ii * neg_fold * 2: (ii + 1) * neg_fold * 2]
+        pos_bin_fold = lambda ii: bins[ii * pos_fold * 2 : (ii + 1) * pos_fold * 2]
+        neg_bin_fold = lambda ii: bins[pos_num * 2 :][ii * neg_fold * 2 : (ii + 1) * neg_fold * 2]
         bins = [pos_bin_fold(ii) + neg_bin_fold(ii) for ii in range(nfold)]
         bins = np.ravel(bins).tolist()
 

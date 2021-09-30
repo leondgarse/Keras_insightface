@@ -20,9 +20,7 @@ class MarginSoftmax(tf.keras.losses.Loss):
     def call(self, y_true, y_pred):
         # margin_soft = tf.where(tf.cast(y_true, dtype=tf.bool), (y_pred ** self.power + y_pred * self.scale) / 2, y_pred)
         margin_soft = tf.where(tf.cast(y_true, dtype=tf.bool), self.logits_reduction_func(y_pred), y_pred) * self.scale_all
-        return tf.keras.losses.categorical_crossentropy(
-            y_true, margin_soft, from_logits=self.from_logits, label_smoothing=self.label_smoothing
-        )
+        return tf.keras.losses.categorical_crossentropy(y_true, margin_soft, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
 
     def get_config(self):
         config = super(MarginSoftmax, self).get_config()
@@ -88,9 +86,7 @@ class ArcfaceLoss(tf.keras.losses.Loss):
         # arcface_logits = tf.where(pick_cond, theta_one_hot, norm_logits) * self.scale
         arcface_logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, theta_valid) * self.scale
         # tf.assert_equal(tf.math.is_nan(tf.reduce_mean(arcface_logits)), False)
-        return tf.keras.losses.categorical_crossentropy(
-            y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
-        )
+        return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
         # return self.reduction_func(y_true, arcface_logits)
 
     def get_config(self):
@@ -128,9 +124,7 @@ class ArcfaceLossSimple(tf.keras.losses.Loss):
         theta = y_pred_vals * self.margin_cos - tf.sqrt(1 - tf.pow(y_pred_vals, 2)) * self.margin_sin
         theta_valid = tf.where(y_pred_vals > self.threshold, theta, y_pred_vals - self.low_pred_punish)
         arcface_logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, theta_valid) * self.scale
-        return tf.keras.losses.categorical_crossentropy(
-            y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
-        )
+        return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
 
     def get_config(self):
         config = super(ArcfaceLossSimple, self).get_config()
@@ -163,14 +157,10 @@ class CurricularFaceLoss(ArcfaceLossSimple):
 
         self.hard_scale.assign(tf.reduce_mean(y_pred_vals) * 0.01 + (1 - 0.01) * self.hard_scale)
         tf.print(", hard_scale =", self.hard_scale, end="")
-        hard_norm_logits = tf.where(
-            norm_logits > tf.expand_dims(theta, 1), norm_logits * (self.hard_scale + norm_logits), norm_logits
-        )
+        hard_norm_logits = tf.where(norm_logits > tf.expand_dims(theta, 1), norm_logits * (self.hard_scale + norm_logits), norm_logits)
 
         arcface_logits = tf.tensor_scatter_nd_update(hard_norm_logits, pick_cond, theta_valid) * self.scale
-        return tf.keras.losses.categorical_crossentropy(
-            y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
-        )
+        return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
 
     def get_config(self):
         config = super(CurricularFaceLoss, self).get_config()
@@ -186,9 +176,7 @@ class CosFaceLoss(ArcfaceLossSimple):
     def call(self, y_true, norm_logits):
         pick_cond = tf.cast(y_true, dtype=tf.bool)
         logits = tf.where(pick_cond, norm_logits - self.margin, norm_logits) * self.scale
-        return tf.keras.losses.categorical_crossentropy(
-            y_true, logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
-        )
+        return tf.keras.losses.categorical_crossentropy(y_true, logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
 
 
 # [AdaCos: Adaptively Scaling Cosine Logits for Effectively Learning Deep Face Representations](https://arxiv.org/pdf/1905.00292.pdf)
@@ -216,9 +204,7 @@ class AdaCosLoss(tf.keras.losses.Loss):
         tf.print(", scale =", self.scale, ", theta_med =", theta_med, end="")
 
         arcface_logits = norm_logits * self.scale
-        return tf.keras.losses.categorical_crossentropy(
-            y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing
-        )
+        return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
         # return self.reduction_func(y_true, arcface_logits)
 
     def get_config(self):
@@ -237,6 +223,41 @@ class AdaCosLoss(tf.keras.losses.Loss):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
+
+# Combination of Arcface loss and Triplet loss
+class AcrTripLoss(ArcfaceLossSimple):
+    def __init__(self, margin=0.5, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
+        super(AcrTripLoss, self).__init__(margin, scale, from_logits, label_smoothing, **kwargs)
+
+    def call(self, y_true, outputs):
+        # tf.print(">>>> ", outputs.shape)
+        embeddings = outputs[:, :512]
+        norm_logits = outputs[:, 512:]
+        """ Triplet part """
+        labels = tf.argmax(y_true, axis=1)
+        pos_mask = tf.equal(tf.expand_dims(labels, 0), tf.expand_dims(labels, 1))
+        norm_emb = tf.nn.l2_normalize(embeddings, 1)
+        dists = tf.matmul(norm_emb, tf.transpose(norm_emb))
+        pos_dists = tf.where(pos_mask, dists, tf.ones_like(dists))
+        pos_hardest_dists = tf.reduce_min(pos_dists, -1)
+
+        pos_hd_margin = tf.cos(tf.acos(pos_hardest_dists) + self.margin)
+        pos_hd_margin_valid = tf.where(pos_hardest_dists > self.threshold, pos_hd_margin, self.theta_min - pos_hd_margin)
+
+        neg_dists = tf.where(pos_mask, tf.ones_like(dists) * -1, dists)
+        neg_hardest_dists = tf.reduce_max(neg_dists, -1)
+        triplet_loss = tf.maximum(neg_hardest_dists - pos_hardest_dists, 0.0)
+
+        """ Arcface part """
+        pick_cond = tf.where(y_true != 0)
+        y_pred_vals = tf.gather_nd(norm_logits, pick_cond)
+        theta = tf.cos(tf.acos(y_pred_vals) + self.margin)
+
+        """ Combine """
+        theta_valid = tf.where(y_pred_vals > self.threshold, theta, y_pred_vals - self.low_pred_punish) - triplet_loss
+        arcface_logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, theta_valid) * self.scale
+        return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
 
 
 # Callback to save center values on each epoch end
@@ -368,6 +389,47 @@ class BatchHardTripletLoss(TripletLossWapper):
         return tf.maximum(basic_loss, 0.0)
 
 
+# Triplet loss using arcface margin
+class ArcBatchHardTripletLoss(TripletLossWapper):
+    def __init__(self, alpha=0.35, **kwargs):
+        super(ArcBatchHardTripletLoss, self).__init__(alpha=alpha, **kwargs)
+        # self.margin = alpha
+        self.threshold = tf.cos(np.pi - alpha)
+        self.theta_min = -2
+
+    def __calculate_triplet_loss__(self, labels, embeddings, alpha):
+        labels = tf.argmax(labels, axis=1)
+        # labels = tf.squeeze(labels)
+        # labels.set_shape([None])
+        pos_mask = tf.equal(tf.expand_dims(labels, 0), tf.expand_dims(labels, 1))
+        norm_emb = tf.nn.l2_normalize(embeddings, 1)
+        dists = tf.matmul(norm_emb, tf.transpose(norm_emb))
+        # pos_dists = tf.ragged.boolean_mask(dists, pos_mask)
+        pos_dists = tf.where(pos_mask, dists, tf.ones_like(dists))
+        pos_hardest_dists = tf.reduce_min(pos_dists, -1)
+
+        pos_hd_margin = tf.cos(tf.acos(pos_hardest_dists) + self.alpha)
+        pos_hd_margin_valid = tf.where(pos_hardest_dists > self.threshold, pos_hd_margin, self.theta_min - pos_hd_margin)
+
+        # neg_dists = tf.ragged.boolean_mask(dists, tf.logical_not(pos_mask))
+        neg_dists = tf.where(pos_mask, tf.ones_like(dists) * -1, dists)
+        neg_hardest_dists = tf.reduce_max(neg_dists, -1)
+        tf.print(
+            " - triplet_dists_mean:",
+            tf.reduce_mean(dists),
+            "pos:",
+            tf.reduce_mean(pos_hardest_dists),
+            "pos_hd_valid:",
+            tf.reduce_mean(pos_hd_margin_valid),
+            "neg:",
+            tf.reduce_mean(neg_hardest_dists),
+            end="",
+        )
+        # basic_loss = neg_hardest_dists - pos_hd_margin_valid + alpha
+        basic_loss = neg_hardest_dists - pos_hd_margin_valid
+        return tf.maximum(basic_loss, 0.0)
+
+
 class BatchHardTripletLossEuclidean(TripletLossWapper):
     def __calculate_triplet_loss__(self, labels, embeddings, alpha):
         labels = tf.argmax(labels, axis=1)
@@ -475,6 +537,7 @@ def distiller_loss_cosine(true_emb, pred_emb):
     return loss
 
 
+# [PDF 2106.05237 Knowledge distillation: A good teacher is patient and consistent](https://arxiv.org/pdf/2106.05237.pdf)
 class DistillKLDivergenceLoss(tf.keras.losses.Loss):
     def __init__(self, scale=10, **kwargs):
         super(DistillKLDivergenceLoss, self).__init__(**kwargs)

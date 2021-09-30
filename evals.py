@@ -75,11 +75,7 @@ class eval_callback(tf.keras.callbacks.Callback):
             # Evaluting on_batch_end
             if cur_step == 0:
                 return
-            cur_epoch = (
-                self.model.history.epoch[-1]
-                if self.model is not None and len(self.model.history.__dict__.get("epoch", [])) != 0
-                else 0
-            )
+            cur_epoch = self.model.history.epoch[-1] if self.model is not None and len(self.model.history.__dict__.get("epoch", [])) != 0 else 0
             cur_step = "%d_batch_%d" % (cur_epoch + 1, cur_step)
         else:
             cur_step = str(cur_step + 1)
@@ -119,8 +115,7 @@ class eval_callback(tf.keras.callbacks.Callback):
             )
         else:
             tf.print(
-                "\n>>>> %s evaluation max accuracy: %f, thresh: %f, previous max accuracy: %f"
-                % (self.test_names, acc_max, self.acc_thresh, self.max_accuracy)
+                "\n>>>> %s evaluation max accuracy: %f, thresh: %f, previous max accuracy: %f" % (self.test_names, acc_max, self.acc_thresh, self.max_accuracy)
             )
 
         if acc_max >= self.max_accuracy:
@@ -178,9 +173,7 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, nrof_fold
             _, _, acc_train[threshold_idx] = calculate_accuracy(threshold, dist[train_set], actual_issame[train_set])
         best_threshold_index = np.argmax(acc_train)
         for threshold_idx, threshold in enumerate(thresholds):
-            tprs[fold_idx, threshold_idx], fprs[fold_idx, threshold_idx], _ = calculate_accuracy(
-                threshold, dist[test_set], actual_issame[test_set]
-            )
+            tprs[fold_idx, threshold_idx], fprs[fold_idx, threshold_idx], _ = calculate_accuracy(threshold, dist[test_set], actual_issame[test_set])
         _, _, accuracy[fold_idx] = calculate_accuracy(thresholds[best_threshold_index], dist[test_set], actual_issame[test_set])
 
     tpr = np.mean(tprs, 0)
@@ -251,13 +244,9 @@ def evaluate(embeddings, actual_issame, nrof_folds=10, pca=0):
     thresholds = np.arange(0, 4, 0.01)
     embeddings1 = embeddings[0::2]
     embeddings2 = embeddings[1::2]
-    tpr, fpr, accuracy = calculate_roc(
-        thresholds, embeddings1, embeddings2, np.asarray(actual_issame), nrof_folds=nrof_folds, pca=pca
-    )
+    tpr, fpr, accuracy = calculate_roc(thresholds, embeddings1, embeddings2, np.asarray(actual_issame), nrof_folds=nrof_folds, pca=pca)
     thresholds = np.arange(0, 4, 0.001)
-    val, val_std, far = calculate_val(
-        thresholds, embeddings1, embeddings2, np.asarray(actual_issame), 1e-3, nrof_folds=nrof_folds
-    )
+    val, val_std, far = calculate_val(thresholds, embeddings1, embeddings2, np.asarray(actual_issame), 1e-3, nrof_folds=nrof_folds)
     return tpr, fpr, accuracy, val, val_std, far
 
 

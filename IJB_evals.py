@@ -65,6 +65,7 @@ class Torch_model_interf:
 class ONNX_model_interf:
     def __init__(self, model_file, image_size=(112, 112)):
         import onnxruntime as ort
+
         ort.set_default_logger_severity(3)
         self.ort_session = ort.InferenceSession(model_file)
         self.output_names = [self.ort_session.get_outputs()[0].name]
@@ -90,9 +91,7 @@ def keras_model_interf(model_file):
 
 def face_align_landmark(img, landmark, image_size=(112, 112), method="similar"):
     tform = transform.AffineTransform() if method == "affine" else transform.SimilarityTransform()
-    src = np.array(
-        [[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.729904, 92.2041]], dtype=np.float32
-    )
+    src = np.array([[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.729904, 92.2041]], dtype=np.float32)
     tform.estimate(landmark, src)
     # ndimage = transform.warp(img, tform.inverse, output_shape=image_size)
     # ndimage = (ndimage * 255).astype(np.uint8)
@@ -215,9 +214,7 @@ def extract_gallery_prob_data(data_path, subset, save_path=None, force_reload=Fa
     print("s2 gallery: %s, ids: %s, unique: %s" % (s2_templates.shape, s2_subject_ids.shape, np.unique(s2_templates).shape))
 
     print(">>>> Loading prope feature...")
-    probe_mixed_templates, probe_mixed_subject_ids = read_IJB_meta_columns_to_int(
-        probe_mixed_record, columns=[0, 1], skiprows=1, sep=","
-    )
+    probe_mixed_templates, probe_mixed_subject_ids = read_IJB_meta_columns_to_int(probe_mixed_record, columns=[0, 1], skiprows=1, sep=",")
     print("probe_mixed_templates: %s, unique: %s" % (probe_mixed_templates.shape, np.unique(probe_mixed_templates).shape))
     print("probe_mixed_subject_ids: %s, unique: %s" % (probe_mixed_subject_ids.shape, np.unique(probe_mixed_subject_ids).shape))
 
@@ -351,9 +348,7 @@ def evaluation_1N(query_feats, gallery_feats, query_ids, reg_ids, fars=[0.01, 0.
 
 class IJB_test:
     def __init__(self, model_file, data_path, subset, batch_size=64, force_reload=False, restore_embs=None):
-        templates, medias, p1, p2, label, img_names, landmarks, face_scores = extract_IJB_data_11(
-            data_path, subset, force_reload=force_reload
-        )
+        templates, medias, p1, p2, label, img_names, landmarks, face_scores = extract_IJB_data_11(data_path, subset, force_reload=force_reload)
         if model_file != None:
             if model_file.endswith(".h5"):
                 interf_func = keras_model_interf(model_file)
@@ -416,12 +411,8 @@ class IJB_test:
             use_detector_score=True,
             face_scores=self.face_scores,
         )
-        g1_templates_feature, g1_unique_templates, g1_unique_ids = image2template_feature(
-            img_input_feats, self.templates, self.medias, g1_templates, g1_ids
-        )
-        g2_templates_feature, g2_unique_templates, g2_unique_ids = image2template_feature(
-            img_input_feats, self.templates, self.medias, g2_templates, g2_ids
-        )
+        g1_templates_feature, g1_unique_templates, g1_unique_ids = image2template_feature(img_input_feats, self.templates, self.medias, g1_templates, g1_ids)
+        g2_templates_feature, g2_unique_templates, g2_unique_ids = image2template_feature(img_input_feats, self.templates, self.medias, g2_templates, g2_ids)
         probe_mixed_templates_feature, probe_mixed_unique_templates, probe_mixed_unique_subject_ids = image2template_feature(
             img_input_feats, self.templates, self.medias, probe_mixed_templates, probe_mixed_ids
         )
@@ -494,7 +485,7 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
         tpr_result[name] = [tpr[np.argmin(abs(fpr - ii))] for ii in x_labels]
         fpr_dict[name], tpr_dict[name], roc_auc_dict[name] = fpr, tpr, roc_auc
     tpr_result_df = pd.DataFrame(tpr_result, index=x_labels).T
-    tpr_result_df['AUC'] = pd.Series(roc_auc_dict)
+    tpr_result_df["AUC"] = pd.Series(roc_auc_dict)
     tpr_result_df.columns.name = "Methods"
     print(tpr_result_df.to_markdown())
     # print(tpr_result_df)
@@ -517,7 +508,7 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
 
         plt.grid(linestyle="--", linewidth=1)
         plt.title(title)
-        plt.legend(loc="lower right", fontsize='x-small')
+        plt.legend(loc="lower right", fontsize="x-small")
         plt.tight_layout()
         plt.show()
     except:
@@ -551,7 +542,7 @@ def plot_dir_far_cmc_scores(scores, names=None):
         plt.ylim([0, 1])
 
         plt.grid(linestyle="--", linewidth=1)
-        plt.legend(fontsize='x-small')
+        plt.legend(fontsize="x-small")
         plt.tight_layout()
         plt.show()
     except:
@@ -570,9 +561,7 @@ def parse_arguments(argv):
     parser.add_argument("-d", "--data_path", type=str, default="./", help="Dataset path containing IJBB and IJBC sub folder")
     parser.add_argument("-s", "--subset", type=str, default="IJBB", help="Subset test target, could be IJBB / IJBC")
     parser.add_argument("-b", "--batch_size", type=int, default=128, help="Batch size for get_embeddings")
-    parser.add_argument(
-        "-R", "--save_result", type=str, default=default_save_result_name, help="Filename for saving / restore result"
-    )
+    parser.add_argument("-R", "--save_result", type=str, default=default_save_result_name, help="Filename for saving / restore result")
     parser.add_argument("-L", "--save_label", action="store_true", help="Save label data, useful for plot only")
     parser.add_argument("-E", "--save_embeddings", action="store_true", help="Save embeddings data")
     parser.add_argument("-B", "--is_bunch", action="store_true", help="Run all 8 tests N{0,1}D{0,1}F{0,1}")

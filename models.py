@@ -46,7 +46,7 @@ def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet"
     elif name_lower.startswith("efficientnetv2"):
         import keras_efficientnet_v2
 
-        model_name = "EfficientNetV2" + name_lower[len("EfficientNetV2"):].upper()
+        model_name = "EfficientNetV2" + name_lower[len("EfficientNetV2") :].upper()
         model_class = getattr(keras_efficientnet_v2, model_name)
         xx = model_class(pretrained=weights, num_classes=0, input_shape=input_shape, **kwargs)
     elif name_lower.startswith("efficientnet"):
@@ -120,7 +120,7 @@ def buildin_models(
     if add_pointwise_conv:  # Model using `pointwise_conv + GDC` / `pointwise_conv + E` is smaller than `E`
         nn = keras.layers.Conv2D(512, 1, use_bias=False, padding="same")(nn)
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
-        nn = keras.layers.Activation('relu', name='pw_relu')(nn)
+        nn = keras.layers.Activation("relu", name="pw_relu")(nn)
         # nn = keras.layers.ReLU(shared_axes=[1, 2])(nn)
 
     if output_layer == "E":

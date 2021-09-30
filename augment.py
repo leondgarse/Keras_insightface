@@ -36,25 +36,32 @@ _MAX_LEVEL = 10.0
 def to_4d(image: tf.Tensor) -> tf.Tensor:
     """Converts an input Tensor to 4 dimensions.
 
-  4D image => [N, H, W, C] or [N, C, H, W]
-  3D image => [1, H, W, C] or [1, C, H, W]
-  2D image => [1, H, W, 1]
+    4D image => [N, H, W, C] or [N, C, H, W]
+    3D image => [1, H, W, C] or [1, C, H, W]
+    2D image => [1, H, W, 1]
 
-  Args:
-    image: The 2/3/4D input tensor.
+    Args:
+      image: The 2/3/4D input tensor.
 
-  Returns:
-    A 4D image tensor.
+    Returns:
+      A 4D image tensor.
 
-  Raises:
-    `TypeError` if `image` is not a 2/3/4D tensor.
+    Raises:
+      `TypeError` if `image` is not a 2/3/4D tensor.
 
-  """
+    """
     shape = tf.shape(image)
     original_rank = tf.rank(image)
     left_pad = tf.cast(tf.less_equal(original_rank, 3), dtype=tf.int32)
     right_pad = tf.cast(tf.equal(original_rank, 2), dtype=tf.int32)
-    new_shape = tf.concat([tf.ones(shape=left_pad, dtype=tf.int32), shape, tf.ones(shape=right_pad, dtype=tf.int32),], axis=0,)
+    new_shape = tf.concat(
+        [
+            tf.ones(shape=left_pad, dtype=tf.int32),
+            shape,
+            tf.ones(shape=right_pad, dtype=tf.int32),
+        ],
+        axis=0,
+    )
     return tf.reshape(image, new_shape)
 
 
@@ -70,25 +77,25 @@ def from_4d(image: tf.Tensor, ndims: tf.Tensor) -> tf.Tensor:
 def _convert_translation_to_transform(translations: tf.Tensor) -> tf.Tensor:
     """Converts translations to a projective transform.
 
-  The translation matrix looks like this:
-    [[1 0 -dx]
-     [0 1 -dy]
-     [0 0 1]]
+    The translation matrix looks like this:
+      [[1 0 -dx]
+       [0 1 -dy]
+       [0 0 1]]
 
-  Args:
-    translations: The 2-element list representing [dx, dy], or a matrix of
-      2-element lists representing [dx dy] to translate for each image. The
-      shape must be static.
+    Args:
+      translations: The 2-element list representing [dx, dy], or a matrix of
+        2-element lists representing [dx dy] to translate for each image. The
+        shape must be static.
 
-  Returns:
-    The transformation matrix of shape (num_images, 8).
+    Returns:
+      The transformation matrix of shape (num_images, 8).
 
-  Raises:
-    `TypeError` if
-      - the shape of `translations` is not known or
-      - the shape of `translations` is not rank 1 or 2.
+    Raises:
+      `TypeError` if
+        - the shape of `translations` is not known or
+        - the shape of `translations` is not rank 1 or 2.
 
-  """
+    """
     translations = tf.convert_to_tensor(translations, dtype=tf.float32)
     if translations.get_shape().ndims is None:
         raise TypeError("translations rank must be statically known")
@@ -115,19 +122,19 @@ def _convert_translation_to_transform(translations: tf.Tensor) -> tf.Tensor:
 def _convert_angles_to_transform(angles: tf.Tensor, image_width: tf.Tensor, image_height: tf.Tensor) -> tf.Tensor:
     """Converts an angle or angles to a projective transform.
 
-  Args:
-    angles: A scalar to rotate all images, or a vector to rotate a batch of
-      images. This must be a scalar.
-    image_width: The width of the image(s) to be transformed.
-    image_height: The height of the image(s) to be transformed.
+    Args:
+      angles: A scalar to rotate all images, or a vector to rotate a batch of
+        images. This must be a scalar.
+      image_width: The width of the image(s) to be transformed.
+      image_height: The height of the image(s) to be transformed.
 
-  Returns:
-    A tensor of shape (num_images, 8).
+    Returns:
+      A tensor of shape (num_images, 8).
 
-  Raises:
-    `TypeError` if `angles` is not rank 0 or 1.
+    Raises:
+      `TypeError` if `angles` is not rank 0 or 1.
 
-  """
+    """
     angles = tf.convert_to_tensor(angles, dtype=tf.float32)
     if len(angles.get_shape()) == 0:  # pylint:disable=g-explicit-length-test
         angles = angles[None]
@@ -164,14 +171,14 @@ def transform(image: tf.Tensor, transforms) -> tf.Tensor:
 def translate(image: tf.Tensor, translations) -> tf.Tensor:
     """Translates image(s) by provided vectors.
 
-  Args:
-    image: An image Tensor of type uint8.
-    translations: A vector or matrix representing [dx dy].
+    Args:
+      image: An image Tensor of type uint8.
+      translations: A vector or matrix representing [dx dy].
 
-  Returns:
-    The translated version of the image.
+    Returns:
+      The translated version of the image.
 
-  """
+    """
     transforms = _convert_translation_to_transform(translations)
     return transform(image, transforms=transforms)
 
@@ -179,16 +186,16 @@ def translate(image: tf.Tensor, translations) -> tf.Tensor:
 def rotate(image: tf.Tensor, degrees: float) -> tf.Tensor:
     """Rotates the image by degrees either clockwise or counterclockwise.
 
-  Args:
-    image: An image Tensor of type uint8.
-    degrees: Float, a scalar angle in degrees to rotate all images by. If
-      degrees is positive the image will be rotated clockwise otherwise it will
-      be rotated counterclockwise.
+    Args:
+      image: An image Tensor of type uint8.
+      degrees: Float, a scalar angle in degrees to rotate all images by. If
+        degrees is positive the image will be rotated clockwise otherwise it will
+        be rotated counterclockwise.
 
-  Returns:
-    The rotated version of image.
+    Returns:
+      The rotated version of image.
 
-  """
+    """
     # Convert from degrees to radians.
     degrees_to_radians = math.pi / 180.0
     radians = tf.cast(degrees * degrees_to_radians, tf.float32)
@@ -209,21 +216,21 @@ def rotate(image: tf.Tensor, degrees: float) -> tf.Tensor:
 def blend(image1: tf.Tensor, image2: tf.Tensor, factor: float) -> tf.Tensor:
     """Blend image1 and image2 using 'factor'.
 
-  Factor can be above 0.0.  A value of 0.0 means only image1 is used.
-  A value of 1.0 means only image2 is used.  A value between 0.0 and
-  1.0 means we linearly interpolate the pixel values between the two
-  images.  A value greater than 1.0 "extrapolates" the difference
-  between the two pixel values, and we clip the results to values
-  between 0 and 255.
+    Factor can be above 0.0.  A value of 0.0 means only image1 is used.
+    A value of 1.0 means only image2 is used.  A value between 0.0 and
+    1.0 means we linearly interpolate the pixel values between the two
+    images.  A value greater than 1.0 "extrapolates" the difference
+    between the two pixel values, and we clip the results to values
+    between 0 and 255.
 
-  Args:
-    image1: An image Tensor of type uint8.
-    image2: An image Tensor of type uint8.
-    factor: A floating point value above 0.0.
+    Args:
+      image1: An image Tensor of type uint8.
+      image2: An image Tensor of type uint8.
+      factor: A floating point value above 0.0.
 
-  Returns:
-    A blended image Tensor of type uint8.
-  """
+    Returns:
+      A blended image Tensor of type uint8.
+    """
     if factor == 0.0:
         return tf.convert_to_tensor(image1)
     if factor == 1.0:
@@ -252,21 +259,21 @@ def blend(image1: tf.Tensor, image2: tf.Tensor, factor: float) -> tf.Tensor:
 def cutout(image: tf.Tensor, pad_size: int, replace: int = 0) -> tf.Tensor:
     """Apply cutout (https://arxiv.org/abs/1708.04552) to image.
 
-  This operation applies a (2*pad_size x 2*pad_size) mask of zeros to
-  a random location within `img`. The pixel values filled in will be of the
-  value `replace`. The located where the mask will be applied is randomly
-  chosen uniformly over the whole image.
+    This operation applies a (2*pad_size x 2*pad_size) mask of zeros to
+    a random location within `img`. The pixel values filled in will be of the
+    value `replace`. The located where the mask will be applied is randomly
+    chosen uniformly over the whole image.
 
-  Args:
-    image: An image Tensor of type uint8.
-    pad_size: Specifies how big the zero mask that will be generated is that is
-      applied to the image. The mask will be of size (2*pad_size x 2*pad_size).
-    replace: What pixel value to fill in the image in the area that has the
-      cutout mask applied to it.
+    Args:
+      image: An image Tensor of type uint8.
+      pad_size: Specifies how big the zero mask that will be generated is that is
+        applied to the image. The mask will be of size (2*pad_size x 2*pad_size).
+      replace: What pixel value to fill in the image in the area that has the
+        cutout mask applied to it.
 
-  Returns:
-    An image Tensor that is of type uint8.
-  """
+    Returns:
+      An image Tensor that is of type uint8.
+    """
     image_height = tf.shape(image)[0]
     image_width = tf.shape(image)[1]
 
@@ -382,13 +389,13 @@ def shear_y(image: tf.Tensor, level: float, replace: int) -> tf.Tensor:
 def autocontrast(image: tf.Tensor) -> tf.Tensor:
     """Implements Autocontrast function from PIL using TF ops.
 
-  Args:
-    image: A 3D uint8 tensor.
+    Args:
+      image: A 3D uint8 tensor.
 
-  Returns:
-    The image after it has had autocontrast applied to it and will be of type
-    uint8.
-  """
+    Returns:
+      The image after it has had autocontrast applied to it and will be of type
+      uint8.
+    """
 
     def scale_channel(image: tf.Tensor) -> tf.Tensor:
         """Scale the 2D image using the autocontrast rule."""
@@ -500,21 +507,21 @@ def wrap(image: tf.Tensor) -> tf.Tensor:
 def unwrap(image: tf.Tensor, replace: int) -> tf.Tensor:
     """Unwraps an image produced by wrap.
 
-  Where there is a 0 in the last channel for every spatial position,
-  the rest of the three channels in that spatial dimension are grayed
-  (set to 128).  Operations like translate and shear on a wrapped
-  Tensor will leave 0s in empty locations.  Some transformations look
-  at the intensity of values to do preprocessing, and we want these
-  empty pixels to assume the 'average' value, rather than pure black.
+    Where there is a 0 in the last channel for every spatial position,
+    the rest of the three channels in that spatial dimension are grayed
+    (set to 128).  Operations like translate and shear on a wrapped
+    Tensor will leave 0s in empty locations.  Some transformations look
+    at the intensity of values to do preprocessing, and we want these
+    empty pixels to assume the 'average' value, rather than pure black.
 
 
-  Args:
-    image: A 3D Image Tensor with 4 channels.
-    replace: A one or three value 1D tensor to fill empty pixels.
+    Args:
+      image: A 3D Image Tensor with 4 channels.
+      replace: A one or three value 1D tensor to fill empty pixels.
 
-  Returns:
-    image: A 3D image Tensor with 3 channels.
-  """
+    Returns:
+      image: A 3D image Tensor with 3 channels.
+    """
     image_shape = tf.shape(image)
     # Flatten the spatial dimensions.
     flattened_image = tf.reshape(image, [-1, image_shape[2]])
@@ -525,9 +532,7 @@ def unwrap(image: tf.Tensor, replace: int) -> tf.Tensor:
     replace = tf.concat([replace, tf.ones([1], image.dtype)], 0)
 
     # Where they are zero, fill them in with 'replace'.
-    flattened_image = tf.where(
-        tf.equal(alpha_channel, 0), tf.ones_like(flattened_image, dtype=image.dtype) * replace, flattened_image
-    )
+    flattened_image = tf.where(tf.equal(alpha_channel, 0), tf.ones_like(flattened_image, dtype=image.dtype) * replace, flattened_image)
 
     image = tf.reshape(flattened_image, image_shape)
     image = tf.slice(image, [0, 0, 0], [image_shape[0], image_shape[1], 3])
@@ -618,7 +623,16 @@ NAME_TO_FUNC = {
 }
 
 # Functions that have a 'replace' parameter
-REPLACE_FUNCS = frozenset({"Rotate", "TranslateX", "ShearX", "ShearY", "TranslateY", "Cutout",})
+REPLACE_FUNCS = frozenset(
+    {
+        "Rotate",
+        "TranslateX",
+        "ShearX",
+        "ShearY",
+        "TranslateY",
+        "Cutout",
+    }
+)
 
 
 def level_to_arg(cutout_const: float, translate_const: float):
@@ -652,9 +666,7 @@ def level_to_arg(cutout_const: float, translate_const: float):
     return args
 
 
-def _parse_policy_info(
-    name: Text, prob: float, level: float, replace_value: List[int], cutout_const: float, translate_const: float
-) -> Tuple[Any, float, Any]:
+def _parse_policy_info(name: Text, prob: float, level: float, replace_value: List[int], cutout_const: float, translate_const: float) -> Tuple[Any, float, Any]:
     """Return the function that corresponds to `name` and update `level` param."""
     func = NAME_TO_FUNC[name]
     args = level_to_arg(cutout_const, translate_const)[name](level)
@@ -672,12 +684,12 @@ class ImageAugment(object):
     def distort(self, image: tf.Tensor) -> tf.Tensor:
         """Given an image tensor, returns a distorted image with the same shape.
 
-    Args:
-      image: `Tensor` of shape [height, width, 3] representing an image.
+        Args:
+          image: `Tensor` of shape [height, width, 3] representing an image.
 
-    Returns:
-      The augmented version of `image`.
-    """
+        Returns:
+          The augmented version of `image`.
+        """
         raise NotImplementedError()
 
 
@@ -685,7 +697,7 @@ class AutoAugment(ImageAugment):
     """Applies the AutoAugment policy to images.
 
     AutoAugment is from the paper: https://arxiv.org/abs/1805.09501.
-  """
+    """
 
     def __init__(
         self,
@@ -696,21 +708,21 @@ class AutoAugment(ImageAugment):
     ):
         """Applies the AutoAugment policy to images.
 
-    Args:
-      augmentation_name: The name of the AutoAugment policy to use. The
-        available options are `v0` and `test`. `v0` is the policy used for all
-        of the results in the paper and was found to achieve the best results on
-        the COCO dataset. `v1`, `v2` and `v3` are additional good policies found
-        on the COCO dataset that have slight variation in what operations were
-        used during the search procedure along with how many operations are
-        applied in parallel to a single image (2 vs 3).
-      policies: list of lists of tuples in the form `(func, prob, level)`,
-        `func` is a string name of the augmentation function, `prob` is the
-        probability of applying the `func` operation, `level` is the input
-        argument for `func`.
-      cutout_const: multiplier for applying cutout.
-      translate_const: multiplier for applying translation.
-    """
+        Args:
+          augmentation_name: The name of the AutoAugment policy to use. The
+            available options are `v0` and `test`. `v0` is the policy used for all
+            of the results in the paper and was found to achieve the best results on
+            the COCO dataset. `v1`, `v2` and `v3` are additional good policies found
+            on the COCO dataset that have slight variation in what operations were
+            used during the search procedure along with how many operations are
+            applied in parallel to a single image (2 vs 3).
+          policies: list of lists of tuples in the form `(func, prob, level)`,
+            `func` is a string name of the augmentation function, `prob` is the
+            probability of applying the `func` operation, `level` is the input
+            argument for `func`.
+          cutout_const: multiplier for applying cutout.
+          translate_const: multiplier for applying translation.
+        """
         super(AutoAugment, self).__init__()
 
         if policies is None:
@@ -731,15 +743,15 @@ class AutoAugment(ImageAugment):
     def distort(self, image: tf.Tensor) -> tf.Tensor:
         """Applies the AutoAugment policy to `image`.
 
-    AutoAugment is from the paper: https://arxiv.org/abs/1805.09501.
+        AutoAugment is from the paper: https://arxiv.org/abs/1805.09501.
 
-    Args:
-      image: `Tensor` of shape [height, width, 3] representing an image.
+        Args:
+          image: `Tensor` of shape [height, width, 3] representing an image.
 
-    Returns:
-      A version of image that now has data augmentation applied to it based on
-      the `policies` pass into the function.
-    """
+        Returns:
+          A version of image that now has data augmentation applied to it based on
+          the `policies` pass into the function.
+        """
         input_image_type = image.dtype
 
         if input_image_type != tf.uint8:
@@ -782,13 +794,13 @@ class AutoAugment(ImageAugment):
     def policy_v0():
         """Autoaugment policy that was used in AutoAugment Paper.
 
-    Each tuple is an augmentation operation of the form
-    (operation, probability, magnitude). Each element in policy is a
-    sub-policy that will be applied sequentially on the image.
+        Each tuple is an augmentation operation of the form
+        (operation, probability, magnitude). Each element in policy is a
+        sub-policy that will be applied sequentially on the image.
 
-    Returns:
-      the policy.
-    """
+        Returns:
+          the policy.
+        """
 
         # TODO(dankondratyuk): tensorflow_addons defines custom ops, which
         # for some reason are not included when building/linking
@@ -856,24 +868,22 @@ class AutoAugment(ImageAugment):
 class RandAugment(ImageAugment):
     """Applies the RandAugment policy to images.
 
-  RandAugment is from the paper https://arxiv.org/abs/1909.13719,
-  """
+    RandAugment is from the paper https://arxiv.org/abs/1909.13719,
+    """
 
-    def __init__(
-        self, num_layers: int = 2, magnitude: float = 10.0, cutout_const: float = 40.0, translate_const: float = 100.0
-    ):
+    def __init__(self, num_layers: int = 2, magnitude: float = 10.0, cutout_const: float = 40.0, translate_const: float = 100.0):
         """Applies the RandAugment policy to images.
 
-    Args:
-      num_layers: Integer, the number of augmentation transformations to apply
-        sequentially to an image. Represented as (N) in the paper. Usually best
-        values will be in the range [1, 3].
-      magnitude: Integer, shared magnitude across all augmentation operations.
-        Represented as (M) in the paper. Usually best values are in the range
-        [5, 10].
-      cutout_const: multiplier for applying cutout.
-      translate_const: multiplier for applying translation.
-    """
+        Args:
+          num_layers: Integer, the number of augmentation transformations to apply
+            sequentially to an image. Represented as (N) in the paper. Usually best
+            values will be in the range [1, 3].
+          magnitude: Integer, shared magnitude across all augmentation operations.
+            Represented as (M) in the paper. Usually best values are in the range
+            [5, 10].
+          cutout_const: multiplier for applying cutout.
+          translate_const: multiplier for applying translation.
+        """
         super(RandAugment, self).__init__()
 
         self.num_layers = num_layers
@@ -902,12 +912,12 @@ class RandAugment(ImageAugment):
     def distort(self, image: tf.Tensor) -> tf.Tensor:
         """Applies the RandAugment policy to `image`.
 
-    Args:
-      image: `Tensor` of shape [height, width, 3] representing an image.
+        Args:
+          image: `Tensor` of shape [height, width, 3] representing an image.
 
-    Returns:
-      The augmented version of `image`.
-    """
+        Returns:
+          The augmented version of `image`.
+        """
         input_image_type = image.dtype
 
         if input_image_type != tf.uint8:
@@ -923,9 +933,7 @@ class RandAugment(ImageAugment):
             branch_fns = []
             for (i, op_name) in enumerate(self.available_ops):
                 prob = tf.random.uniform([], minval=min_prob, maxval=max_prob, dtype=tf.float32)
-                func, _, args = _parse_policy_info(
-                    op_name, prob, self.magnitude, replace_value, self.cutout_const, self.translate_const
-                )
+                func, _, args = _parse_policy_info(op_name, prob, self.magnitude, replace_value, self.cutout_const, self.translate_const)
                 branch_fns.append(
                     (
                         i,

@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 def init_det_and_emb_model(model_file):
     # det = insightface.model_zoo.face_detection.retinaface_mnet025_v1()
-    det = insightface.model_zoo.SCRFD(model_file=os.path.expanduser('~/.insightface/models/antelope/scrfd_10g_bnkps.onnx'))
+    det = insightface.model_zoo.SCRFD(model_file=os.path.expanduser("~/.insightface/models/antelope/scrfd_10g_bnkps.onnx"))
     det.prepare(-1)
     if model_file is not None:
         face_model = tf.keras.models.load_model(model_file, compile=False)
@@ -28,9 +28,7 @@ def init_det_and_emb_model(model_file):
 
 def face_align_landmarks_sk(img, landmarks, image_size=(112, 112), method="similar"):
     tform = transform.AffineTransform() if method == "affine" else transform.SimilarityTransform()
-    src = np.array(
-        [[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.729904, 92.2041]], dtype=np.float32
-    )
+    src = np.array([[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.729904, 92.2041]], dtype=np.float32)
     ret = []
     for landmark in landmarks:
         # landmark = np.array(landmark).reshape(2, 5)[::-1].T
@@ -156,16 +154,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-m", "--model_file", type=str, required=True, help="Saved basic_model file path, NOT model")
     parser.add_argument("-k", "--known_user", type=str, default=None, help="Folder containing user images data")
-    parser.add_argument(
-        "-K", "--known_user_force", type=str, default=None, help="Folder containing user images data, force reload"
-    )
-    parser.add_argument(
-        "-b", "--embedding_batch_size", type=int, default=4, help="Batch size for extracting known user embedding data"
-    )
+    parser.add_argument("-K", "--known_user_force", type=str, default=None, help="Folder containing user images data, force reload")
+    parser.add_argument("-b", "--embedding_batch_size", type=int, default=4, help="Batch size for extracting known user embedding data")
     parser.add_argument("-s", "--video_source", type=str, default="0", help="Video source")
-    parser.add_argument(
-        "-t", "--dist_thresh", type=float, default=0.6, help="Cosine dist thresh, dist lower than this will be Unknown"
-    )
+    parser.add_argument("-t", "--dist_thresh", type=float, default=0.6, help="Cosine dist thresh, dist lower than this will be Unknown")
     parser.add_argument("-p", "--frames_per_detect", type=int, default=5, help="Do detect every [NUM] frame")
     args = parser.parse_known_args(sys.argv[1:])[0]
 

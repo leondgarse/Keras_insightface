@@ -6,6 +6,7 @@ import models
 import myCallbacks
 import tensorflow as tf
 from tensorflow import keras
+
 # import multiprocessing as mp
 
 # if mp.get_start_method() != "forkserver":
@@ -238,7 +239,7 @@ class Train:
         elif type == self.arcface and (self.model == None or self.model.output_names[-1] != self.arcface):
             print(">>>> Add arcface layer, loss_top_k=%d..." % (loss_top_k))
             arcface_logits = models.NormDense(
-                self.classes, name=self.arcface, loss_top_k=loss_top_k, kernel_regularizer=output_kernel_regularizer, dtype="float32",
+                self.classes, name=self.arcface, loss_top_k=loss_top_k, kernel_regularizer=output_kernel_regularizer, dtype="float32"
             )
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
                 arcface_logits.build(embedding.shape)
@@ -301,7 +302,7 @@ class Train:
             if isinstance(loss, losses.ArcfaceLossSimple) or isinstance(loss, losses.AdaCosLoss):
                 return self.arcface
             if isinstance(loss, losses.DistillKLDivergenceLoss):
-                return self.arcface # Use NormDense layer
+                return self.arcface  # Use NormDense layer
             if self.softmax in ss:
                 return self.softmax
         return self.softmax

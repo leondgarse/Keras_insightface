@@ -211,9 +211,7 @@ def hist_plot(
             linestyle = EVALS_LINE_STYLE[other_custom_id + 0 if eval_split else 1]
             other_custom_id += 1
         label = kk + " - " + fig_label if fig_label else kk
-        arrays_plot(
-            ax, vv, color=cur_color, label=label, init_epoch=init_epoch, pre_value=pre_item.get(kk, 0), linestyle=linestyle
-        )
+        arrays_plot(ax, vv, color=cur_color, label=label, init_epoch=init_epoch, pre_value=pre_item.get(kk, 0), linestyle=linestyle)
         peak_scatter(ax, vv, np.argmax, init_epoch=init_epoch)
 
     # eval_ax = eval_ax if eval_split else eval_ax + 1
@@ -326,6 +324,7 @@ def hist_plot_split(
         limit_loss_max=limit_loss_max,
     )
 
+
 def choose_accuracy(aa, skip_name_len=0, sort_agedb=False, evals=EVALS_NAME):
     import json
     import pandas as pd
@@ -333,10 +332,10 @@ def choose_accuracy(aa, skip_name_len=0, sort_agedb=False, evals=EVALS_NAME):
     # evals = ['lfw', 'cfp_fp', 'agedb_30']
     dd_agedb_max, dd_all_max, dd_sum_max = {}, {}, {}
     for pp in aa:
-        with open(pp, 'r') as ff:
+        with open(pp, "r") as ff:
             hh = json.load(ff)
         nn = os.path.splitext(os.path.basename(pp))[0][skip_name_len:]
-        agedb_arg_max = np.argmax(hh['agedb_30'])
+        agedb_arg_max = np.argmax(hh["agedb_30"])
         dd_agedb_max[nn] = {kk: hh[kk][agedb_arg_max] for kk in evals if kk in hh}
         dd_agedb_max[nn]["epoch"] = int(agedb_arg_max)
 
@@ -354,6 +353,6 @@ def choose_accuracy(aa, skip_name_len=0, sort_agedb=False, evals=EVALS_NAME):
         print(">>>>", nn, ":")
         # print(pd.DataFrame(dd).T.to_markdown())
         rr = pd.DataFrame(dd).T
-        rr = rr.sort_values('agedb_30') if sort_agedb else rr
+        rr = rr.sort_values("agedb_30") if sort_agedb else rr
         print(rr.to_markdown())
     return dd_agedb_max, dd_all_max, dd_sum_max
