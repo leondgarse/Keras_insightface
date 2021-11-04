@@ -69,14 +69,14 @@ def peak_scatter(ax, array, peak_method, color="r", init_epoch=0, limit_max=1e9,
         pp = len(ii) - peak_method(ii[::-1]) - 1
         # Skip scatter if it's 0
         if ii[pp] != 0:
-            y_pos = ii[pp]
+            y_pos = ii[pp - 1] if np.isnan(ii[pp]) and pp != 0 else ii[pp]
             y_pos = y_pos if y_pos < limit_max else limit_max
             y_pos = y_pos if y_pos > limit_min else limit_min
             ax.scatter(pp + start, y_pos, color=color, marker="v")
             ax.text(
                 pp + start,
                 y_pos,
-                "{:.4f}".format(ii[pp]),
+                "Nan" if np.isnan(ii[pp]) else "{:.4f}".format(ii[pp]),
                 va="bottom",
                 ha="right",
                 fontsize=Default_text_font_size,
@@ -99,7 +99,7 @@ def arrays_plot(ax, arrays, color=None, label=None, init_epoch=0, pre_value=0, l
         xx = list(range(init_epoch + 1, init_epoch + len(tt) + 1))
     # Replace 0 values with their previous element
     for id, ii in enumerate(tt):
-        if ii == 0 and id != 0:
+        if (ii == 0 or np.isnan(ii)) and id != 0:
             tt[id] = tt[id - 1]
         if ii > limit_max:
             tt[id] = limit_max
@@ -257,9 +257,9 @@ def hist_plot(
 
 def hist_plot_split(
     history,
-    epochs,
+    epochs=[100],
     names=None,
-    customs=[],
+    customs=EVALS_NAME[:3] + ["lr"],
     save=None,
     axes=None,
     init_epoch=0,

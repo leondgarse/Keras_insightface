@@ -184,18 +184,22 @@ class Train:
         if optimizer == None:
             if self.model != None and self.model.optimizer != None:
                 # Model loaded from .h5 file already compiled
-                # self.optimizer = self.model.optimizer
-                # Have to build a new optimizer, or will meet Error: OSError: Unable to create link (name already exists)
-                if isinstance(self.model.optimizer, keras.mixed_precision.LossScaleOptimizer):
-                    inner_optimizer_pre = self.model.optimizer.inner_optimizer
-                    inner_optimizer = inner_optimizer_pre.__class__(**inner_optimizer_pre.get_config())
-                    # self.optimizer = keras.mixed_precision.LossScaleOptimizer(inner_optimizer)
-                    self.optimizer = inner_optimizer
-                else:
-                    self.optimizer = self.model.optimizer.__class__(**self.model.optimizer.get_config())
+                # Saving may meet Error: OSError: Unable to create link (name already exists)
+                self.optimizer = self.model.optimizer
+                compiled_opt = self.optimizer.inner_optimizer if isinstance(self.optimizer, keras.mixed_precision.LossScaleOptimizer) else self.optimizer
+                print(">>>> Reuse optimizer from previoue model:", compiled_opt.__class__.__name__)
+                # if isinstance(self.model.optimizer, keras.mixed_precision.LossScaleOptimizer):
+                #     inner_optimizer_pre = self.model.optimizer.inner_optimizer
+                #     inner_optimizer = inner_optimizer_pre.__class__(**inner_optimizer_pre.get_config())
+                #     # self.optimizer = keras.mixed_precision.LossScaleOptimizer(inner_optimizer)
+                #     self.optimizer = inner_optimizer
+                # else:
+                #     self.optimizer = self.model.optimizer.__class__(**self.model.optimizer.get_config())
             else:
+                print(">>>> Use default optimizer:", self.default_optimizer)
                 self.optimizer = self.default_optimizer
         else:
+            print(">>>> Use specified optimizer:", optimizer)
             self.optimizer = optimizer
 
         try:
@@ -203,7 +207,8 @@ class Train:
         except:
             pass
         else:
-            if isinstance(self.optimizer, tfa.optimizers.weight_decay_optimizers.DecoupledWeightDecayExtension):
+            compiled_opt = self.optimizer.inner_optimizer if isinstance(self.optimizer, keras.mixed_precision.LossScaleOptimizer) else self.optimizer
+            if isinstance(compiled_opt, tfa.optimizers.weight_decay_optimizers.DecoupledWeightDecayExtension):
                 print(">>>> Insert weight decay callback...")
                 lr_base, wd_base = self.optimizer.lr.numpy(), self.optimizer.weight_decay.numpy()
                 wd_callback = myCallbacks.OptimizerWeightDecay(lr_base, wd_base, is_lr_on_batch=self.is_lr_on_batch)

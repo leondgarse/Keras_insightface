@@ -46,8 +46,8 @@
   | [EfficientNetV2 B0](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/TT_efv2_b0_swish_GDC_arc_emb512_dr0_sgd_l2_5e4_bs512_ms1m_randaug_cutout_bnm09_bne1e4_cos16_batch_float16_E50_arc_sgd_LA_basic_agedb_30_epoch_17_0.977333.h5) | [MS1MV3,E67](https://github.com/leondgarse/Keras_insightface/discussions/42) | 0.997833 | 0.976571 | 0.977333 | **0.940701** | **0.955259** |
   | [Botnet50 relu GDC](https://drive.google.com/file/d/12zD6Lba55WEHAcVAuCinJbaptrxH1pIW/view?usp=sharing) | [MS1MV3,E52](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-583259) | 0.9985 | 0.980286 | 0.979667 | 0.940019 | 0.95577 |
   | [r50 swish](https://drive.google.com/file/d/1Mb2ZjBHFSQha8y2UOXO6-vxNWdzw815P/view?usp=sharing) | [MS1MV3,E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-824090) | 0.998333 | 0.989571 | 0.984333 | 0.950828 | 0.964463 |
-  | [se_r50 swish SD](https://drive.google.com/file/d/16R9weVSlXBgXPq7tduZGI6mDuB1nQ5MC/view?usp=sharing) | [MS1MV3,E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-903227) | 0.9985 | 0.989429 | 0.9845 | 0.954333 | 0.966252 |
-  | [Renet101V2 swish](https://drive.google.com/file/d/1joXsSpu22aa-kvnG1lQGNdVGfdPArUXM/view?usp=sharing) | [MS1MV3,E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790754) | 0.9985 | 0.989143 | 0.9845 | 0.952483 | 0.966406 |
+  | [se_r50 swish SD](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/TT_se_r50_SD_swish_E_arc_emb512_dr04_sgd_l2_5e4_bs1024_ms1m_randaug_cutout_bnm09_bne1e4_cos16_float16_E50_arc_sgd_LA_basic_agedb_30_epoch_16_0.984000.h5) | [MS1MV3,E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-903227) | 0.9985 | 0.989429 | 0.9840 | 0.956378 | 0.968144 |
+  | [Resnet101V2 swish](https://drive.google.com/file/d/1joXsSpu22aa-kvnG1lQGNdVGfdPArUXM/view?usp=sharing) | [MS1MV3,E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790754) | 0.9985 | 0.989143 | 0.9845 | 0.952483 | 0.966406 |
   | [r18 converted](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/glint360k_cosface_r18_fp16_0.1.h5) | [Glint360k](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.997500 | 0.977143 | 0.976500 |0.936806 | 0.9533   |
   | [r34 converted](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/glint360k_cosface_r34_fp16_0.1.h5) | [Glint360k](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.998167 | 0.987000 | 0.982833 |0.951801 | 0.9656   |
   | [r50 converted](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/glint360k_cosface_r50_fp16_0.1.h5) | [Glint360k](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.998333 | 0.991 | 0.9835 | 0.957157 | 0.970292 |
@@ -57,19 +57,19 @@
 
 # Usage
 ## Environment
-  - **Nvidia CUDA and cudnn** `Tensorflow 2.5.0` now using `cuda==11.2` `cudnn==8.1`
+  - **Nvidia CUDA and cudnn** `Tensorflow 2.6.1` now using `cuda==11.2` `cudnn==8.1`
     - [Install cuda-toolkit](https://developer.nvidia.com/cuda-toolkit)
     - [Install cudnn](https://developer.nvidia.com/rdp/cudnn-download)
   - **python and tensorflow version**
     ```py
     # $ ipython
-    Python 3.8.5 (default, Sep  4 2020, 07:30:14)
-    In [1]: tf.__version__
-    Out[1]: '2.6.0'
+    # Python 3.8.5 (default, Sep  4 2020, 07:30:14)
+    >>> tf.__version__
+    # '2.6.1'
 
-    In [2]: import tensorflow_addons as tfa
-    In [3]: tfa.__version__
-    Out[3]: '0.14.0-dev'
+    >>> import tensorflow_addons as tfa
+    >>> tfa.__version__
+    Out[3]: '0.15.0-dev'
     ```
     Or `tf-nightly`
     ```sh

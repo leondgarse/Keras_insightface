@@ -95,6 +95,7 @@ def buildin_models(
     bn_momentum=0.99,
     bn_epsilon=0.001,
     add_pointwise_conv=False,
+    pointwise_conv_act="relu",
     use_bias=False,
     scale=True,
     weights="imagenet",
@@ -118,9 +119,9 @@ def buildin_models(
     nn = xx.outputs[0]
 
     if add_pointwise_conv:  # Model using `pointwise_conv + GDC` / `pointwise_conv + E` is smaller than `E`
-        nn = keras.layers.Conv2D(512, 1, use_bias=False, padding="same")(nn)
+        nn = keras.layers.Conv2D(512, 1, use_bias=False, padding="valid")(nn)
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
-        nn = keras.layers.Activation("relu", name="pw_relu")(nn)
+        nn = keras.layers.Activation(pointwise_conv_act, name="pw_" + pointwise_conv_act)(nn)
         # nn = keras.layers.ReLU(shared_axes=[1, 2])(nn)
 
     if output_layer == "E":
@@ -151,8 +152,8 @@ def buildin_models(
         """ F, E without first BatchNormalization """
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
-        nn = keras.layers.Flatten(name="E_flatten")(nn)
-        nn = keras.layers.Dense(emb_shape, use_bias=use_bias, kernel_initializer="glorot_normal", name="E_dense")(nn)
+        nn = keras.layers.Flatten(name="F_flatten")(nn)
+        nn = keras.layers.Dense(emb_shape, use_bias=use_bias, kernel_initializer="glorot_normal", name="F_dense")(nn)
 
     # `fix_gamma=True` in MXNet means `scale=False` in Keras
     embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, scale=scale, name="pre_embedding")(nn)
@@ -437,22 +438,34 @@ def convert_to_mixed_float16(model, convert_batch_norm=False):
     policy = keras.mixed_precision.Policy("mixed_float16")
     policy_config = keras.utils.serialize_keras_object(policy)
     from tensorflow.keras.layers import InputLayer, Activation
-    from tensorflow.keras.activations import linear
+    from tensorflow.keras.activations import linear, softmax
 
     def do_convert_to_mixed_float16(layer):
         if not convert_batch_norm and isinstance(layer, keras.layers.BatchNormalization):
             return layer
-        if not isinstance(layer, InputLayer) and not (isinstance(layer, Activation) and layer.activation == linear):
-            aa = layer.get_config()
-            aa.update({"dtype": policy_config})
-            bb = layer.__class__.from_config(aa)
-            bb.build(layer.input_shape)
-            bb.set_weights(layer.get_weights())
-            return bb
-        return layer
+        if isinstance(layer, InputLayer):
+            return layer
+        if isinstance(layer, NormDense):
+            return layer
+        if isinstance(layer, Activation) and layer.activation == softmax:
+            return layer
+        if isinstance(layer, Activation) and layer.activation == linear:
+            return layer
+
+        aa = layer.get_config()
+        aa.update({"dtype": policy_config})
+        bb = layer.__class__.from_config(aa)
+        bb.build(layer.input_shape)
+        bb.set_weights(layer.get_weights())
+        return bb
 
     input_tensors = keras.layers.Input(model.input_shape[1:])
-    return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=do_convert_to_mixed_float16)
+    mm = keras.models.clone_model(model, input_tensors=input_tensors, clone_function=do_convert_to_mixed_float16)
+    if model.built:
+        mm.compile(optimizer=model.optimizer, loss=model.compiled_loss, metrics=model.compiled_metrics)
+        # mm.optimizer, mm.compiled_loss, mm.compiled_metrics = model.optimizer, model.compiled_loss, model.compiled_metrics
+        # mm.built = True
+    return mm
 
 
 def convert_mixed_float16_to_float32(model):
