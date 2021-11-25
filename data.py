@@ -67,11 +67,17 @@ class RandomProcessImage:
     def __init__(self, img_shape=(112, 112), random_status=2, random_crop=None):
         self.img_shape, self.random_status, self.random_crop = img_shape[:2], random_status, random_crop
         if random_status >= 100:
-            import augment
-
             magnitude = 5 * random_status / 100
             print(">>>> RandAugment: magnitude =", magnitude)
-            aa = augment.RandAugment(magnitude=magnitude)
+
+            # from keras_cv_attention_models.imagenet import augment
+            # translate_const, cutout_const = min(img_shape) * 0.45, 30
+            # aa = augment.RandAugment(magnitude=magnitude, translate_const=translate_const, cutout_const=cutout_const)
+            # aa.available_ops = ["AutoContrast", "Equalize", "ColorIncreasing", "ContrastIncreasing", "BrightnessIncreasing", "SharpnessIncreasing", "Cutout"]
+            # self.process = lambda img: aa(tf.image.random_flip_left_right(img))
+            import augment
+
+            aa = augment.RandAugment(magnitude=magnitude, cutout_const=30)
             aa.available_ops = ["AutoContrast", "Equalize", "Color", "Contrast", "Brightness", "Sharpness", "Cutout"]
             self.process = lambda img: aa.distort(tf.image.random_flip_left_right(img))
         else:
@@ -162,6 +168,18 @@ class MXNetRecordGen:
                 yield img, label
 
 
+def show_batch_sample(ds, rows=8, basic_size=1):
+    import matplotlib.pyplot as plt
+
+    aa, bb = ds.as_numpy_iterator().next()
+    aa = aa / 2 + 0.5
+    columns = aa.shape[0] // 8
+    fig = plt.figure(figsize=(columns * basic_size, rows * basic_size))
+    plt.imshow(np.vstack([np.hstack(aa[ii * columns: (ii + 1) * columns]) for ii in range(rows)]))
+    plt.tight_layout()
+    return fig
+
+
 def prepare_dataset(
     data_path,
     image_names_reg=None,
@@ -194,6 +212,7 @@ def prepare_dataset(
         if image_per_class != 0:
             pick, class_pick = pick_by_image_per_class(image_classes, image_per_class)
             image_names, image_classes = image_names[pick], image_classes[pick]
+            total_images = len(image_names)
             if len(embeddings) != 0:
                 embeddings = embeddings[pick]
             print(">>>> After pick[%d], images: %d, valid classes: %d" % (image_per_class, len(image_names), class_pick.shape[0]))
@@ -235,7 +254,8 @@ def prepare_dataset(
             ds = ds.map(emb_func, num_parallel_calls=AUTOTUNE)
 
     ds = ds.prefetch(buffer_size=AUTOTUNE)
-    steps_per_epoch = int(np.floor(total_images / float(batch_size)))
+    # steps_per_epoch = int(np.floor(total_images / float(batch_size)))
+    steps_per_epoch = len(ds)
     return ds, steps_per_epoch
 
 

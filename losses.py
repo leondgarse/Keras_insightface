@@ -86,6 +86,10 @@ class ArcfaceLoss(tf.keras.losses.Loss):
         # arcface_logits = tf.where(pick_cond, theta_one_hot, norm_logits) * self.scale
         arcface_logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, theta_valid) * self.scale
         # tf.assert_equal(tf.math.is_nan(tf.reduce_mean(arcface_logits)), False)
+        # arcface_logits = tf.cond(tf.math.is_finite(tf.reduce_mean(arcface_logits)), lambda: arcface_logits, lambda: tf.cast(y_true, "float32"))
+        # arcface_logits = tf.where(tf.math.is_finite(arcface_logits), arcface_logits, tf.zeros_like(arcface_logits))
+        # cond = tf.repeat(tf.math.is_finite(tf.reduce_sum(arcface_logits, axis=-1, keepdims=True)), arcface_logits.shape[-1], axis=-1)
+        # arcface_logits = tf.where(cond, arcface_logits, tf.zeros_like(arcface_logits))
         return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
         # return self.reduction_func(y_true, arcface_logits)
 

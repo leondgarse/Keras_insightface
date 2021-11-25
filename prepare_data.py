@@ -7,7 +7,6 @@ import os
 def MXnet_record_to_folder(dataset_dir, save_dir=None):
     import os
     import numpy as np
-    import mxnet as mx
     from tqdm import tqdm
 
     if save_dir == None:
@@ -20,6 +19,7 @@ def MXnet_record_to_folder(dataset_dir, save_dir=None):
         print("%s already exists." % save_dir)
         return
 
+    import mxnet as mx
     imgrec = mx.recordio.MXIndexedRecordIO(idx_path, bin_path, "r")
     rec_header, _ = mx.recordio.unpack(imgrec.read_idx(0))
 
