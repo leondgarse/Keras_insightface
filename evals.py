@@ -25,7 +25,7 @@ class eval_callback(tf.keras.callbacks.Callback):
         _imread = lambda xx: (tf.cast(tf.image.decode_image(xx, channels=3), "float32") - 127.5) * 0.0078125
         ds = ds.map(_imread)
         self.ds = ds.batch(batch_size)
-        self.test_issame = np.array(issame_list)
+        self.test_issame = np.array(issame_list).astype('bool')
         self.test_names = os.path.splitext(os.path.basename(test_bin_file))[0]
         self.steps = int(np.ceil(len(bins) / batch_size))
         self.basic_model = basic_model
