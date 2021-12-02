@@ -122,7 +122,7 @@ def buildin_models(
         nn = keras.layers.Conv2D(512, 1, use_bias=False, padding="valid")(nn)
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
         if pointwise_conv_act.lower() == "prelu":
-            nn = keras.layers.PReLU(shared_axes=[1, 2])(nn)
+            nn = keras.layers.PReLU(shared_axes=[1, 2], name="pw_" + pointwise_conv_act)(nn)
         else:
             nn = keras.layers.Activation(pointwise_conv_act, name="pw_" + pointwise_conv_act)(nn)
 

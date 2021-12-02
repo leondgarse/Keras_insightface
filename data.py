@@ -77,7 +77,7 @@ class RandomProcessImage:
             # self.process = lambda img: aa(tf.image.random_flip_left_right(img))
             import augment
 
-            aa = augment.RandAugment(magnitude=magnitude, cutout_const=30)
+            aa = augment.RandAugment(magnitude=magnitude, cutout_const=40)
             aa.available_ops = ["AutoContrast", "Equalize", "Color", "Contrast", "Brightness", "Sharpness", "Cutout"]
             self.process = lambda img: aa.distort(tf.image.random_flip_left_right(img))
         else:
