@@ -172,6 +172,26 @@ class CurricularFaceLoss(ArcfaceLossSimple):
         return config
 
 
+# [AirFace:Lightweight and Efficient Model for Face Recognition](https://arxiv.org/pdf/1907.12256.pdf)
+class AirFaceLoss(ArcfaceLossSimple):
+    def __init__(self, margin=0.4, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
+        super(AirFaceLoss, self).__init__(margin, scale, from_logits, label_smoothing, **kwargs)
+        # theta = (np.pi - 2 * (tf.acos(y_pred_vals).numpy() + margin)) / np.pi
+        #   ==> theta = 1 - tf.acos(y_pred_vals).numpy() * 2 / np.pi - 2 * margin / np.pi
+        #   ==> theta = 1 - 2 * margin / np.pi - tf.acos(y_pred_vals).numpy() * 2 / np.pi
+        self.margin_head = 1 - 2 * margin / np.pi
+        self.margin_scale = 2 / np.pi
+
+    def call(self, y_true, norm_logits):
+        # norm_logits = tf.acos(norm_logits) * self.margin_scale
+        # logits = tf.where(tf.cast(y_true, dtype=tf.bool), self.margin_head - norm_logits, 1 - norm_logits) * self.scale
+        pick_cond = tf.where(y_true != 0)
+        y_pred_vals = tf.gather_nd(norm_logits, pick_cond)
+        theta = self.margin_head - tf.acos(y_pred_vals) * self.margin_scale
+        logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, theta) * self.scale
+        return tf.keras.losses.categorical_crossentropy(y_true, logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
+
+
 # [CosFace: Large Margin Cosine Loss for Deep Face Recognition](https://arxiv.org/pdf/1801.09414.pdf)
 class CosFaceLoss(ArcfaceLossSimple):
     def __init__(self, margin=0.35, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
