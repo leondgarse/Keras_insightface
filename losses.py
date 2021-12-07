@@ -119,14 +119,14 @@ class ArcfaceLossSimple(tf.keras.losses.Loss):
         self.margin, self.scale, self.from_logits, self.label_smoothing = margin, scale, from_logits, label_smoothing
         self.margin_cos, self.margin_sin = tf.cos(margin), tf.sin(margin)
         self.threshold = tf.cos(np.pi - margin)
-        self.low_pred_punish = tf.sin(np.pi - margin) * margin
+        # self.low_pred_punish = tf.sin(np.pi - margin) * margin
         self.theta_min = -2
 
     def call(self, y_true, norm_logits):
         pick_cond = tf.where(y_true != 0)
         y_pred_vals = tf.gather_nd(norm_logits, pick_cond)
         theta = y_pred_vals * self.margin_cos - tf.sqrt(1 - tf.pow(y_pred_vals, 2)) * self.margin_sin
-        theta_valid = tf.where(y_pred_vals > self.threshold, theta, y_pred_vals - self.low_pred_punish)
+        theta_valid = tf.where(y_pred_vals > self.threshold, theta, self.theta_min - theta)
         arcface_logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, theta_valid) * self.scale
         return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
 
@@ -157,7 +157,7 @@ class CurricularFaceLoss(ArcfaceLossSimple):
         pick_cond = tf.where(y_true != 0)
         y_pred_vals = tf.gather_nd(norm_logits, pick_cond)
         theta = y_pred_vals * self.margin_cos - tf.sqrt(1 - tf.pow(y_pred_vals, 2)) * self.margin_sin
-        theta_valid = tf.where(y_pred_vals > self.threshold, theta, y_pred_vals - self.low_pred_punish)
+        theta_valid = tf.where(y_pred_vals > self.threshold, theta, self.theta_min - theta)
 
         self.hard_scale.assign(tf.reduce_mean(y_pred_vals) * 0.01 + (1 - 0.01) * self.hard_scale)
         tf.print(", hard_scale =", self.hard_scale, end="")
@@ -279,7 +279,7 @@ class AcrTripLoss(ArcfaceLossSimple):
         theta = tf.cos(tf.acos(y_pred_vals) + self.margin)
 
         """ Combine """
-        theta_valid = tf.where(y_pred_vals > self.threshold, theta, y_pred_vals - self.low_pred_punish) - triplet_loss
+        theta_valid = tf.where(y_pred_vals > self.threshold, theta, self.theta_min - theta) - triplet_loss
         arcface_logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, theta_valid) * self.scale
         return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
 
