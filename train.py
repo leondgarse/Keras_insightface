@@ -214,7 +214,7 @@ class Train:
                 wd_callback = myCallbacks.OptimizerWeightDecay(lr_base, wd_base, is_lr_on_batch=self.is_lr_on_batch)
                 self.callbacks.insert(-1, wd_callback)  # should be after lr_scheduler
 
-    def __init_model__(self, type, loss_top_k=1):
+    def __init_model__(self, type, loss_top_k=1, is_magface_loss=False):
         inputs = self.basic_model.inputs[0]
         embedding = self.basic_model.outputs[0]
         is_multi_output = lambda mm: len(mm.outputs) != 1 or isinstance(mm.layers[-1], keras.layers.Concatenate)
@@ -242,9 +242,9 @@ class Train:
             output_fp32 = keras.layers.Activation("softmax", dtype="float32", name=self.softmax)(logits)
             self.model = keras.models.Model(inputs, output_fp32)
         elif type == self.arcface and (self.model == None or self.model.output_names[-1] != self.arcface):
-            print(">>>> Add arcface layer, loss_top_k=%d..." % (loss_top_k))
+            print(">>>> Add arcface layer, loss_top_k={}, is_magface_loss={}...".format(loss_top_k, is_magface_loss))
             arcface_logits = models.NormDense(
-                self.classes, name=self.arcface, loss_top_k=loss_top_k, kernel_regularizer=output_kernel_regularizer, dtype="float32"
+                self.classes, output_kernel_regularizer, loss_top_k, append_norm=is_magface_loss, name=self.arcface, dtype="float32"
             )
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
                 arcface_logits.build(embedding.shape)
@@ -395,7 +395,7 @@ class Train:
         # self.basic_model.trainable = True
         self.__init_optimizer__(optimizer)
         if not self.inited_from_model:
-            self.__init_model__(type, lossTopK)
+            self.__init_model__(type, lossTopK, is_magface_loss=isinstance(loss, losses.MagFaceLoss))
 
         # loss_weights
         self.cur_loss, self.loss_weights = [loss], {ii: lossWeight for ii in self.model.output_names}

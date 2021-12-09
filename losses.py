@@ -203,6 +203,72 @@ class CosFaceLoss(ArcfaceLossSimple):
         return tf.keras.losses.categorical_crossentropy(y_true, logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
 
 
+# [MagFace: A Universal Representation for Face Recognition and Quality Assessment](https://arxiv.org/pdf/2103.06627.pdf)
+class MagFaceLoss(ArcfaceLossSimple):
+    def __init__(
+        self,
+        min_feature_norm=10.0,
+        max_feature_norm=110.0,
+        min_margin=0.45,
+        max_margin=0.8,
+        scale=64.0,
+        regularizer_loss_lambda=35.0,
+        from_logits=True,
+        label_smoothing=0,
+        **kwargs
+    ):
+        super(MagFaceLoss, self).__init__(scale=scale, from_logits=from_logits, label_smoothing=label_smoothing, **kwargs)
+        # l_a, u_a, lambda_g
+        self.min_feature_norm, self.max_feature_norm, self.regularizer_loss_lambda = min_feature_norm, max_feature_norm, regularizer_loss_lambda
+        # l_margin, u_margin
+        self.min_margin, self.max_margin = min_margin, max_margin
+        self.margin_scale = (max_margin - min_margin) / (max_feature_norm - min_feature_norm)
+        self.regularizer_loss_scale = 1.0 / (self.max_feature_norm ** 2)
+
+    def call(self, y_true, norm_logits_with_norm):
+        # feature_norm is multiplied with -1 in NormDense layer, keeping low for not affecting accuracy metrics.
+        norm_logits, feature_norm = norm_logits_with_norm[:, :-1], norm_logits_with_norm[:, -1] * -1
+        feature_norm = tf.clip_by_value(feature_norm, self.min_feature_norm, self.max_feature_norm)
+        # margin = (self.u_margin-self.l_margin) / (self.u_a-self.l_a)*(x-self.l_a) + self.l_margin
+        margin = self.margin_scale * (feature_norm - self.min_feature_norm) + self.min_margin
+        margin_cos, margin_sin = tf.cos(margin), tf.sin(margin)
+        threshold = tf.cos(np.pi - margin)
+
+        # Arcface process
+        pick_cond = tf.where(y_true != 0)
+        y_pred_vals = tf.gather_nd(norm_logits, pick_cond)
+        theta = y_pred_vals * margin_cos - tf.sqrt(1 - tf.pow(y_pred_vals, 2)) * margin_sin
+        theta_valid = tf.where(y_pred_vals > threshold, theta, self.theta_min - theta)
+        arcface_logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, theta_valid) * self.scale
+        arcface_loss = tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
+
+        # MegFace loss_G, g = 1/(self.u_a**2) * x_norm + 1/(x_norm)
+        regularizer_loss = self.regularizer_loss_scale * feature_norm + 1.0 / feature_norm
+        tf.print(
+            ", regularizer_loss =",
+            tf.reduce_mean(regularizer_loss),
+            ", arcface_loss =",
+            tf.reduce_mean(arcface_loss),
+            ", margin =",
+            tf.reduce_mean(margin),
+            end="",
+        )
+        return arcface_loss + regularizer_loss * self.regularizer_loss_lambda
+
+    def get_config(self):
+        config = super(MagFaceLoss, self).get_config()
+        config.update(
+            {
+                "min_feature_norm": self.min_feature_norm,
+                "max_feature_norm": self.max_feature_norm,
+                "min_margin": self.min_margin,
+                "max_margin": self.max_margin,
+                "regularizer_loss_lambda": self.regularizer_loss_lambda,
+            }
+        )
+        return config
+
+
 # [AdaCos: Adaptively Scaling Cosine Logits for Effectively Learning Deep Face Representations](https://arxiv.org/pdf/1905.00292.pdf)
 class AdaCosLoss(tf.keras.losses.Loss):
     def __init__(self, num_classes=1000, scale=0, max_median=np.pi / 4, from_logits=True, label_smoothing=0, **kwargs):

@@ -166,10 +166,10 @@ def buildin_models(
 
 
 class NormDense(keras.layers.Layer):
-    def __init__(self, units=1000, kernel_regularizer=None, loss_top_k=1, **kwargs):
+    def __init__(self, units=1000, kernel_regularizer=None, loss_top_k=1, append_norm=False, **kwargs):
         super(NormDense, self).__init__(**kwargs)
         self.init = keras.initializers.glorot_normal()
-        self.units, self.loss_top_k = units, loss_top_k
+        self.units, self.loss_top_k, self.append_norm = units, loss_top_k, append_norm
         self.kernel_regularizer = keras.regularizers.get(kernel_regularizer)
         self.supports_masking = False
 
@@ -190,6 +190,9 @@ class NormDense(keras.layers.Layer):
         if self.loss_top_k > 1:
             output = K.reshape(output, (-1, self.units, self.loss_top_k))
             output = K.max(output, axis=2)
+        if self.append_norm:
+            # Keep norm value low by * -1, so will not affect accuracy metrics.
+            output = tf.concat([output, tf.norm(output, axis=1, keepdims=True) * -1], axis=-1)
         return output
 
     def compute_output_shape(self, input_shape):
@@ -201,6 +204,7 @@ class NormDense(keras.layers.Layer):
             {
                 "units": self.units,
                 "loss_top_k": self.loss_top_k,
+                "append_norm": self.append_norm,
                 "kernel_regularizer": keras.regularizers.serialize(self.kernel_regularizer),
             }
         )
