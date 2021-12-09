@@ -185,14 +185,14 @@ class NormDense(keras.layers.Layer):
 
     def call(self, inputs, **kwargs):
         norm_w = K.l2_normalize(self.w, axis=0)
-        inputs = K.l2_normalize(inputs, axis=1)
-        output = K.dot(inputs, norm_w)
+        norm_inputs = K.l2_normalize(inputs, axis=1)
+        output = K.dot(norm_inputs, norm_w)
         if self.loss_top_k > 1:
             output = K.reshape(output, (-1, self.units, self.loss_top_k))
             output = K.max(output, axis=2)
         if self.append_norm:
             # Keep norm value low by * -1, so will not affect accuracy metrics.
-            output = tf.concat([output, tf.norm(output, axis=1, keepdims=True) * -1], axis=-1)
+            output = tf.concat([output, tf.norm(inputs, axis=1, keepdims=True) * -1], axis=-1)
         return output
 
     def compute_output_shape(self, input_shape):
