@@ -90,6 +90,7 @@ class eval_callback(tf.keras.callbacks.Callback):
         if np.isnan(embs).sum() != 0:
             tf.print("NAN in embs, not a good one")
             return
+        self.embs = embs
         embs = normalize(embs)
         embs_a = embs[::2]
         embs_b = embs[1::2]
@@ -97,7 +98,7 @@ class eval_callback(tf.keras.callbacks.Callback):
 
         tt = np.sort(dists[self.test_issame[: dists.shape[0]]])
         ff = np.sort(dists[np.logical_not(self.test_issame[: dists.shape[0]])])
-        self.tt, self.ff, self.embs = tt, ff, embs
+        self.tt, self.ff = tt, ff
 
         t_steps = int(0.1 * ff.shape[0])
         acc_count = np.array([(tt > vv).sum() + (ff <= vv).sum() for vv in ff[-t_steps:]])
