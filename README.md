@@ -35,6 +35,7 @@
   - `IJBB` and `IJBC` are scored at `TAR@FAR=1e-4`
   - Links in `Model backbone` are `h5` models in Google drive. Links in `Training` are training details.
   - The `r18` / `r34` / `r50` / `r100` on `glint360k` are models loaded weights from official publication.
+  - `r50 magface` and `r100 magface` are ported from [Github IrvingMeng/MagFace](https://github.com/IrvingMeng/MagFace).
 
   | Model backbone | Training | lfw      | cfp_fp   | agedb_30 | IJBB     | IJBC     |
   | -------------- | ----- | -------- | -------- | -------- | -------- | -------- |
@@ -53,6 +54,8 @@
   | [r34 converted](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/glint360k_cosface_r34_fp16_0.1.h5) | [Glint360k](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.998167 | 0.987000 | 0.982833 |0.951801 | 0.9656   |
   | [r50 converted](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/glint360k_cosface_r50_fp16_0.1.h5) | [Glint360k](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.998333 | 0.991 | 0.9835 | 0.957157 | 0.970292 |
   | [r100 converted](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/glint360k_cosface_r100_fp16_0.1.h5) | [Glint360k](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.9985 | 0.992286 | 0.985167 | **0.962512** | **0.974689** |
+  | [r50 magface](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/r50_magface_MS1MV2.h5) | [MS1MV2,E25](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-1812029) | 0.998167 | 0.981143 | 0.980500 | 0.943622 ||
+  | [r100 magface](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/r100_magface_MS1MV2.h5) | [MS1MV2,E25](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-1812029) | 0.998333 | 0.987429 | 0.983333 | 0.949562 ||
 
 ***
 
