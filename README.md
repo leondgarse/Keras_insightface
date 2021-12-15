@@ -658,4 +658,5 @@
   - [Github qubvel/EfficientNet](https://github.com/qubvel/efficientnet)
   - [Github QiaoranC/tf_ResNeSt_RegNet_model](https://github.com/QiaoranC/tf_ResNeSt_RegNet_model)
   - [Partial FC: Training 10 Million Identities on a Single Machine](https://arxiv.org/pdf/2010.05222.pdf)
+  - [Github IrvingMeng/MagFace](https://github.com/IrvingMeng/MagFace)
 ***
