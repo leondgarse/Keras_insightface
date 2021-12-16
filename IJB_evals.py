@@ -350,7 +350,9 @@ class IJB_test:
     def __init__(self, model_file, data_path, subset, batch_size=64, force_reload=False, restore_embs=None):
         templates, medias, p1, p2, label, img_names, landmarks, face_scores = extract_IJB_data_11(data_path, subset, force_reload=force_reload)
         if model_file != None:
-            if model_file.endswith(".h5"):
+            if not isinstance(model_file, str):
+                interf_func = model_file
+            elif model_file.endswith(".h5"):
                 interf_func = keras_model_interf(model_file)
             elif model_file.endswith(".pth") or model_file.endswith(".pt"):
                 interf_func = Torch_model_interf(model_file)

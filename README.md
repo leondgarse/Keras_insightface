@@ -50,18 +50,19 @@
   | [se_r50 swish SD](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/TT_se_r50_SD_swish_E_arc_emb512_dr04_sgd_l2_5e4_bs1024_ms1m_randaug_cutout_bnm09_bne1e4_cos16_float16_E50_arc_sgd_LA_basic_agedb_30_epoch_16_0.984000.h5) | [MS1MV3,E67](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-903227) | 0.9985 | 0.989429 | 0.9840 | **0.956378** | **0.968144** |
   | [Resnet101V2 swish](https://drive.google.com/file/d/1joXsSpu22aa-kvnG1lQGNdVGfdPArUXM/view?usp=sharing) | [MS1MV3,E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790754) | 0.9985 | 0.989143 | 0.9845 | 0.952483 | 0.966406 |
   | [EfficientNetV2S](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/TT_effv2_s_strides1_pw512_F_dr02_drc02_lr_01_wd5e4_arc_emb512_sgd_bs512_ms1m_randaug_bnm09_bne1e5_cos16_float16_E50_arc_sgd_LA_basic_agedb_30_epoch_14_batch_8000_0.986167.h5) | [MS1MV3,E67](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-1735839) | 0.9985 | 0.991143 | 0.986167 | **0.956475** | **0.968605** |
+  | [EffV2S,AdamW](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/TT_effv2_s_strides1_pw512_F_dr02_drc02_lr_01_wd5e2lr_arc_emb512_adamw_exclude_bn_bs512_ms1m_float16_basic_agedb_30_epoch_53_0.985833.h5) | [MS1MV3,E53](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-1821049) | 0.998500 | 0.991429 | 0.985833 | **0.957449** | **0.97065** |
   | [r18 converted](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/glint360k_cosface_r18_fp16_0.1.h5) | [Glint360k](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.997500 | 0.977143 | 0.976500 |0.936806 | 0.9533   |
   | [r34 converted](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/glint360k_cosface_r34_fp16_0.1.h5) | [Glint360k](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.998167 | 0.987000 | 0.982833 |0.951801 | 0.9656   |
   | [r50 converted](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/glint360k_cosface_r50_fp16_0.1.h5) | [Glint360k](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.998333 | 0.991 | 0.9835 | 0.957157 | 0.970292 |
   | [r100 converted](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/glint360k_cosface_r100_fp16_0.1.h5) | [Glint360k](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.9985 | 0.992286 | 0.985167 | **0.962512** | **0.974689** |
-  | [r50 magface](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/r50_magface_MS1MV2.h5) | [MS1MV2,E25](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-1812029) | 0.998167 | 0.981143 | 0.980500 | 0.943622 ||
-  | [r100 magface](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/r100_magface_MS1MV2.h5) | [MS1MV2,E25](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-1812029) | 0.998333 | 0.987429 | 0.983333 | 0.949562 ||
+  | [r50 magface](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/r50_magface_MS1MV2.h5) | [MS1MV2,E25](https://github.com/leondgarse/Keras_insightface/discussions/57) | 0.998167 | 0.981143 | 0.980500 | 0.943622 ||
+  | [r100 magface](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/r100_magface_MS1MV2.h5) | [MS1MV2,E25](https://github.com/leondgarse/Keras_insightface/discussions/57) | 0.998333 | 0.987429 | 0.983333 | 0.949562 ||
 
 ***
 
 # Usage
 ## Environment
-  - **Nvidia CUDA and cudnn** `Tensorflow 2.6.1` now using `cuda==11.2` `cudnn==8.1`
+  - **Nvidia CUDA and cudnn** `Tensorflow 2.6.2` now using `cuda==11.2` `cudnn==8.1`
     - [Install cuda-toolkit](https://developer.nvidia.com/cuda-toolkit)
     - [Install cudnn](https://developer.nvidia.com/rdp/cudnn-download)
   - **python and tensorflow version**
@@ -69,11 +70,11 @@
     # $ ipython
     # Python 3.8.5 (default, Sep  4 2020, 07:30:14)
     >>> tf.__version__
-    # '2.6.1'
+    # '2.6.2'
 
     >>> import tensorflow_addons as tfa
     >>> tfa.__version__
-    Out[3]: '0.15.0-dev'
+    Out[3]: '0.15.0'
     ```
     Or `tf-nightly`
     ```sh
