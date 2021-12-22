@@ -114,6 +114,7 @@ class Train:
         self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop = myCallbacks.basic_callbacks(
             checkpoint=save_path, evals=my_evals, lr=lr_base, lr_decay=lr_decay, lr_min=lr_min, lr_decay_steps=lr_decay_steps
         )
+        self.gently_stop = None # may not working for windows
         self.my_evals, self.custom_callbacks = my_evals, []
         self.metrics = ["accuracy"]
         self.default_optimizer = "adam"
