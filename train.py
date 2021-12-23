@@ -210,10 +210,10 @@ class Train:
         else:
             compiled_opt = self.optimizer.inner_optimizer if isinstance(self.optimizer, keras.mixed_precision.LossScaleOptimizer) else self.optimizer
             if isinstance(compiled_opt, tfa.optimizers.weight_decay_optimizers.DecoupledWeightDecayExtension):
-                print(">>>> Insert weight decay callback...")
+                print(">>>> Append weight decay callback...")
                 lr_base, wd_base = self.optimizer.lr.numpy(), self.optimizer.weight_decay.numpy()
                 wd_callback = myCallbacks.OptimizerWeightDecay(lr_base, wd_base, is_lr_on_batch=self.is_lr_on_batch)
-                self.callbacks.insert(-1, wd_callback)  # should be after lr_scheduler
+                self.callbacks.append(wd_callback)  # should be after lr_scheduler
 
     def __init_model__(self, type, loss_top_k=1, is_magface_loss=False):
         inputs = self.basic_model.inputs[0]
@@ -391,7 +391,7 @@ class Train:
         if self.is_lr_on_batch:
             self.lr_scheduler.steps_per_epoch = self.steps_per_epoch
 
-        basic_callbacks = [ii for ii in [self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop] if ii is not None]
+        basic_callbacks = [ii for ii in [self.my_history, self.model_checkpoint, self.lr_scheduler] if ii is not None]
         self.callbacks = self.my_evals + self.custom_callbacks + basic_callbacks
         # self.basic_model.trainable = True
         self.__init_optimizer__(optimizer)
@@ -406,7 +406,7 @@ class Train:
             emb_shape = self.basic_model.output_shape[-1]
             initial_file = os.path.splitext(self.save_path)[0] + "_centers.npy"
             center_loss = loss_class(self.classes, emb_shape=emb_shape, initial_file=initial_file)
-            self.callbacks.insert(-1, center_loss.save_centers_callback)
+            self.callbacks.append(center_loss.save_centers_callback)
             self.__add_emb_output_to_model__(self.center, center_loss, emb_loss_weights[self.center])
 
         if self.triplet in emb_loss_names and type != self.triplet:
@@ -425,6 +425,9 @@ class Train:
         self.callbacks.append(keras.callbacks.TerminateOnNaN())
         # self.callbacks.append(keras.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs=None: keras.backend.clear_session()))
         # self.callbacks.append(keras.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs=None: self.basic_model.save("aa_epoch{}.h5".format(epoch))))
+
+        if self.gently_stop:
+            self.callbacks.append(self.gently_stop)
 
         if bottleneckOnly:
             print(">>>> Train bottleneckOnly...")
