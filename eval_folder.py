@@ -18,105 +18,6 @@ for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
 
 
-class Face_detection:
-    def __init__(self, det_shape=640):
-        self.det = self.download_and_prepare_det()
-        self.det_shape = (det_shape, det_shape)
-
-    def face_align_landmarks(self, img, landmarks, image_size=(112, 112), method="similar"):
-        tform = transform.AffineTransform() if method == "affine" else transform.SimilarityTransform()
-        src = np.array(
-            [[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.729904, 92.2041]],
-            dtype=np.float32,
-        )
-        ret = []
-        for landmark in landmarks:
-            # landmark = np.array(landmark).reshape(2, 5)[::-1].T
-            tform.estimate(landmark, src)
-            M = tform.params[0:2, :]
-            ndimage = cv2.warpAffine(img, M, image_size, borderValue=0.0)
-            if len(ndimage.shape) == 2:
-                ndimage = np.stack([ndimage, ndimage, ndimage], -1)
-            ret.append(ndimage)
-        return np.array(ret)
-
-    def detect_in_image(self, image, image_format="RGB"):
-        if isinstance(image, str):
-            imm_BGR = cv2.imread(image)
-        else:
-            imm_BGR = image if image_format == "BGR" else image[:, :, ::-1]
-        bboxes, pps = self.det.detect(imm_BGR, self.det_shape)
-        if len(bboxes) != 0:
-            bbs, ccs = bboxes[:, :4], bboxes[:, -1]
-            image_RGB = imm_BGR[:, :, ::-1]
-
-            return bbs, ccs, pps, self.face_align_landmarks(image_RGB, pps)
-        else:
-            return np.array([]), np.array([]), np.array([]), np.array([])
-
-    def detect_in_folder(self, data_path):
-        while data_path.endswith(os.sep):
-            data_path = data_path[:-1]
-        imms = glob(os.path.join(data_path, "*", "*"))
-        dest_path = data_path + "_aligned_112_112"
-
-        for imm in tqdm(imms, "Detecting"):
-            _, _, _, nimages = self.detect_in_image(imm)
-            if nimages.shape[0] != 0:
-                file_name = os.path.basename(imm)
-                class_name = os.path.basename(os.path.dirname(imm))
-                save_dir = os.path.join(dest_path, class_name)
-                if not os.path.exists(save_dir):
-                    os.makedirs(save_dir)
-                imsave(os.path.join(save_dir, file_name), nimages[0])  # Use only the first one
-            else:
-                print(">>>> None face detected in image:", imm)
-        print(">>>> Saved aligned face images in:", dest_path)
-        return dest_path
-
-    def show_result(self, image, bbs, ccs=[], pps=[]):
-        import matplotlib.pyplot as plt
-
-        plt.figure()
-        plt.imshow(image)
-        for id, bb in enumerate(bbs):
-            plt.plot([bb[0], bb[2], bb[2], bb[0], bb[0]], [bb[1], bb[1], bb[3], bb[3], bb[1]])
-            if len(ccs) != 0:
-                plt.text(bb[0], bb[1], "{:.4f}".format(ccs[id]))
-            if len(pps) != 0:
-                pp = pps[id]
-                if len(pp.shape) == 2:
-                    plt.scatter(pp[:, 0], pp[:, 1], s=8)
-                else:
-                    plt.scatter(pp[::2], pp[1::2], s=8)
-        plt.axis("off")
-        plt.tight_layout()
-
-    def download_and_prepare_det(self):
-        import insightface
-
-        cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
-        ctx = 0 if len(cvd) > 0 and int(cvd) != -1 else -1
-
-        model_file = os.path.expanduser("~/.insightface/models/antelope/scrfd_10g_bnkps.onnx")
-        if not os.path.exists(model_file):
-            import zipfile
-
-            model_url = "http://storage.insightface.ai/files/models/antelope.zip"
-            zip_file = os.path.expanduser("~/.insightface/models/antelope.zip")
-            zip_extract_path = os.path.splitext(zip_file)[0]
-            if not os.path.exists(os.path.dirname(zip_file)):
-                os.makedirs(os.path.dirname(zip_file))
-            insightface.utils.storage.download_file(model_url, path=zip_file, overwrite=True)
-            with zipfile.ZipFile(zip_file) as zf:
-                zf.extractall(zip_extract_path)
-            os.remove(zip_file)
-
-        det = insightface.model_zoo.SCRFD(model_file=model_file)
-        det.prepare(ctx)
-        return det
-
-
 class Eval_folder:
     def __init__(self, model_interf, data_path, batch_size=128, save_embeddings=None):
         if isinstance(model_interf, str) and model_interf.endswith("h5"):
@@ -315,7 +216,9 @@ if __name__ == "__main__":
 
     data_path = args.data_path
     if args.detection:
-        data_path = Face_detection().detect_in_folder(args.data_path)
+        from face_detector import YoloV5FaceDetector
+
+        data_path = YoloV5FaceDetector().detect_in_folder(args.data_path)
         print()
     ee = Eval_folder(args.model_file, data_path, args.batch_size, args.save_embeddings)
     accuracy, score, label = ee.do_evaluation()

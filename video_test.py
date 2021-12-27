@@ -3,7 +3,7 @@
 import os
 import cv2
 import glob2
-import insightface
+# import insightface
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -13,12 +13,14 @@ from sklearn.preprocessing import normalize
 from skimage.io import imread
 from skimage import transform
 from tqdm import tqdm
+from face_detector import YoloV5FaceDetector
 
 
 def init_det_and_emb_model(model_file):
     # det = insightface.model_zoo.face_detection.retinaface_mnet025_v1()
-    det = insightface.model_zoo.SCRFD(model_file=os.path.expanduser("~/.insightface/models/antelope/scrfd_10g_bnkps.onnx"))
-    det.prepare(-1)
+    # det = insightface.model_zoo.SCRFD(model_file=os.path.expanduser("~/.insightface/models/antelope/scrfd_10g_bnkps.onnx"))
+    # det.prepare(-1)
+    det = YoloV5FaceDetector()
     if model_file is not None:
         face_model = tf.keras.models.load_model(model_file, compile=False)
     else:
