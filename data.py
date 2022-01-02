@@ -176,6 +176,7 @@ def show_batch_sample(ds, rows=8, basic_size=1):
     columns = aa.shape[0] // 8
     fig = plt.figure(figsize=(columns * basic_size, rows * basic_size))
     plt.imshow(np.vstack([np.hstack(aa[ii * columns : (ii + 1) * columns]) for ii in range(rows)]))
+    plt.axis("off")
     plt.tight_layout()
     return fig
 
@@ -188,6 +189,7 @@ def prepare_dataset(
     img_shape=(112, 112),
     random_status=0,
     random_crop=(100, 100, 3),
+    random_cutout_mask_area=0.0,
     mixup_alpha=0,
     image_per_class=0,
     cache=False,
@@ -235,7 +237,18 @@ def prepare_dataset(
         ds = ds.map(random_process_func, num_parallel_calls=AUTOTUNE)
 
     ds = ds.batch(batch_size, drop_remainder=True)  # Use batch --> map has slightly effect on dataset reading time, but harm the randomness
-    # ds = ds.map(lambda xx, yy: (random_rotate(xx), yy), num_parallel_calls=AUTOTUNE)
+    if random_cutout_mask_area > 0:
+        print(">>>> random_cutout_mask_area provided:", random_cutout_mask_area)
+        mask_height = img_shape[0] * 2 // 5
+        mask_func = lambda images, labels: (
+            tf.cond(
+                tf.random.uniform(()) < random_cutout_mask_area,
+                lambda: tf.concat([images[:, :-mask_height], tf.zeros_like(images[:, -mask_height:]) + 128], axis=1),
+                lambda: images,
+            ),
+            labels,
+        )
+        ds = ds.map(mask_func, num_parallel_calls=AUTOTUNE)
 
     if mixup_alpha > 0 and mixup_alpha <= 1:
         print(">>>> mixup_alpha provided:", mixup_alpha)
