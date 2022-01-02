@@ -1,7 +1,8 @@
-import tensorflow as tf
-import numpy as np
 import os
+import numpy as np
+import tensorflow as tf
 import tensorflow.keras.backend as K
+from tensorflow import keras
 
 
 # margin_softmax class wrapper
@@ -375,7 +376,6 @@ class AcrTripLoss(ArcfaceLossSimple):
 
 
 # Callback to save center values on each epoch end
-@keras.utils.register_keras_serializable(package="keras_insightface")
 class Save_Numpy_Callback(tf.keras.callbacks.Callback):
     def __init__(self, save_file, save_tensor):
         super(Save_Numpy_Callback, self).__init__()
