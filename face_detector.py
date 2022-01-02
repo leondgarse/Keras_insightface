@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 import numpy as np
 import tensorflow as tf
@@ -61,14 +63,21 @@ class BaseDetector:
         while data_path.endswith(os.sep):
             data_path = data_path[:-1]
         imms = glob(os.path.join(data_path, "*", "*"))
+        use_class = True
+        if len(imms) == 0:
+            imms = glob(os.path.join(data_path, "*"))
+            use_class = False
         dest_path = data_path + "_aligned_112_112"
 
         for imm in tqdm(imms, "Detecting"):
             _, _, _, nimages = self.detect_in_image(imm, max_output_size, iou_threshold, score_threshold, image_format="RGB")
             if nimages.shape[0] != 0:
                 file_name = os.path.basename(imm)
-                class_name = os.path.basename(os.path.dirname(imm))
-                save_dir = os.path.join(dest_path, class_name)
+                if use_class:
+                    class_name = os.path.basename(os.path.dirname(imm))
+                    save_dir = os.path.join(dest_path, class_name)
+                else:
+                    save_dir = dest_path
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
                 imsave(os.path.join(save_dir, file_name), nimages[0])  # Use only the first one
@@ -94,6 +103,7 @@ class BaseDetector:
                     plt.scatter(pp[::2], pp[1::2], s=8)
         plt.axis("off")
         plt.tight_layout()
+        plt.show()
 
 
 class YoloV5FaceDetector(BaseDetector):
@@ -198,3 +208,23 @@ class SCRFD(BaseDetector):
         model = insightface.model_zoo.SCRFD(model_file=model_file)
         model.prepare(ctx)
         return model
+
+
+if __name__ == "__main__":
+    import sys
+    import argparse
+
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("input_path", type=str, default=None, help="Could be: 1. Data path, containing images in class folders; 2. image folder path, containing multiple images; 3. jpg / png image path")
+    parser.add_argument("--use_scrfd", action="store_true", help="Use SCRFD instead of YoloV5FaceDetector")
+    args = parser.parse_known_args(sys.argv[1:])[0]
+
+    det = SCRFD() if args.use_scrfd else YoloV5FaceDetector()
+    if args.input_path.endswith(".jpg") or args.input_path.endswith(".png"):
+        print(">>>> Detection in image:", args.input_path)
+        imm = imread(args.input_path)
+        bbs, pps, ccs, nimgs = det.detect_in_image(imm)
+        det.show_result(imm, bbs, pps, ccs)
+    else:
+        print(">>>> Detection in folder:", args.input_path)
+        det.detect_in_folder(args.input_path)
