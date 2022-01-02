@@ -242,11 +242,12 @@ def get_embeddings(model_interf, img_names, landmarks, batch_size=64, flip=True)
         embs.extend(model_interf(ndimages))
         if flip:
             embs_f.extend(model_interf(ndimages[:, :, ::-1, :]))
+    print(">>>> Converting embeddings to np.array...")
     return np.array(embs), np.array(embs_f)
 
 
 def process_embeddings(embs, embs_f=[], use_flip_test=True, use_norm_score=False, use_detector_score=True, face_scores=None):
-    print(">>>> process_embeddings: Norm {}, Detect_score {}, Flip {}".format(use_norm_score, use_detector_score, use_flip_test))
+    print(">>>> process_embeddings: Norm {}, Detect_score {}, Flip {}...".format(use_norm_score, use_detector_score, use_flip_test))
     if use_flip_test and len(embs_f) != 0:
         embs = embs + embs_f
     if use_norm_score:

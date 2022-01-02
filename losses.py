@@ -5,6 +5,7 @@ import tensorflow.keras.backend as K
 
 
 # margin_softmax class wrapper
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class MarginSoftmax(tf.keras.losses.Loss):
     def __init__(self, power=2, scale=0.4, scale_all=1.0, from_logits=False, label_smoothing=0, **kwargs):
         super(MarginSoftmax, self).__init__(**kwargs)
@@ -41,6 +42,7 @@ class MarginSoftmax(tf.keras.losses.Loss):
 
 
 # ArcfaceLoss class
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class ArcfaceLoss(tf.keras.losses.Loss):
     def __init__(self, margin1=1.0, margin2=0.5, margin3=0.0, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
         # reduction = tf.keras.losses.Reduction.NONE if tf.distribute.has_strategy() else tf.keras.losses.Reduction.AUTO
@@ -113,6 +115,7 @@ class ArcfaceLoss(tf.keras.losses.Loss):
 
 
 # ArcfaceLoss simple
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class ArcfaceLossSimple(tf.keras.losses.Loss):
     def __init__(self, margin=0.5, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
         super(ArcfaceLossSimple, self).__init__(**kwargs)
@@ -148,6 +151,7 @@ class ArcfaceLossSimple(tf.keras.losses.Loss):
 
 
 # [CurricularFace: Adaptive Curriculum Learning Loss for Deep Face Recognition](https://arxiv.org/pdf/2004.00288.pdf)
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class CurricularFaceLoss(ArcfaceLossSimple):
     def __init__(self, margin=0.5, scale=64.0, from_logits=True, label_smoothing=0, hard_scale=0, **kwargs):
         super(CurricularFaceLoss, self).__init__(margin, scale, from_logits, label_smoothing, **kwargs)
@@ -173,6 +177,7 @@ class CurricularFaceLoss(ArcfaceLossSimple):
 
 
 # [AirFace:Lightweight and Efficient Model for Face Recognition](https://arxiv.org/pdf/1907.12256.pdf)
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class AirFaceLoss(ArcfaceLossSimple):
     def __init__(self, margin=0.4, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
         super(AirFaceLoss, self).__init__(margin, scale, from_logits, label_smoothing, **kwargs)
@@ -193,6 +198,7 @@ class AirFaceLoss(ArcfaceLossSimple):
 
 
 # [CosFace: Large Margin Cosine Loss for Deep Face Recognition](https://arxiv.org/pdf/1801.09414.pdf)
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class CosFaceLoss(ArcfaceLossSimple):
     def __init__(self, margin=0.35, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
         super(CosFaceLoss, self).__init__(margin, scale, from_logits, label_smoothing, **kwargs)
@@ -204,6 +210,7 @@ class CosFaceLoss(ArcfaceLossSimple):
 
 
 # [MagFace: A Universal Representation for Face Recognition and Quality Assessment](https://arxiv.org/pdf/2103.06627.pdf)
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class MagFaceLoss(ArcfaceLossSimple):
     def __init__(
         self,
@@ -251,20 +258,20 @@ class MagFaceLoss(ArcfaceLossSimple):
         # MegFace loss_G, g = 1/(self.u_a**2) * x_norm + 1/(x_norm)
         regularizer_loss = self.regularizer_loss_scale * feature_norm + 1.0 / feature_norm
         tf.print(
-            ", regularizer_loss =",
-            tf.reduce_mean(regularizer_loss),
+            # ", regularizer_loss =",
+            # tf.reduce_mean(regularizer_loss),
             ", arcface_loss =",
             tf.reduce_mean(arcface_loss),
-            # ", margin mean =",
-            # tf.reduce_mean(margin),
-            ", margin min =",
-            tf.reduce_min(margin),
-            ", margin max =",
-            tf.reduce_max(margin),
-            ", feature_norm min =",
-            tf.reduce_min(feature_norm),
-            ", feature_norm max =",
-            tf.reduce_max(feature_norm),
+            ", margin mean =",
+            tf.reduce_mean(margin),
+            # ", margin min =",
+            # tf.reduce_min(margin),
+            # ", margin max =",
+            # tf.reduce_max(margin),
+            # ", feature_norm min =",
+            # tf.reduce_min(feature_norm),
+            # ", feature_norm max =",
+            # tf.reduce_max(feature_norm),
             end="",
         )
         return arcface_loss + regularizer_loss * self.regularizer_loss_lambda
@@ -285,6 +292,7 @@ class MagFaceLoss(ArcfaceLossSimple):
 
 
 # [AdaCos: Adaptively Scaling Cosine Logits for Effectively Learning Deep Face Representations](https://arxiv.org/pdf/1905.00292.pdf)
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class AdaCosLoss(tf.keras.losses.Loss):
     def __init__(self, num_classes=1000, scale=0, max_median=np.pi / 4, from_logits=True, label_smoothing=0, **kwargs):
         super(AdaCosLoss, self).__init__(**kwargs)
@@ -331,6 +339,7 @@ class AdaCosLoss(tf.keras.losses.Loss):
 
 
 # Combination of Arcface loss and Triplet loss
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class AcrTripLoss(ArcfaceLossSimple):
     def __init__(self, margin=0.5, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
         super(AcrTripLoss, self).__init__(margin, scale, from_logits, label_smoothing, **kwargs)
@@ -366,6 +375,7 @@ class AcrTripLoss(ArcfaceLossSimple):
 
 
 # Callback to save center values on each epoch end
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class Save_Numpy_Callback(tf.keras.callbacks.Callback):
     def __init__(self, save_file, save_tensor):
         super(Save_Numpy_Callback, self).__init__()
@@ -377,6 +387,7 @@ class Save_Numpy_Callback(tf.keras.callbacks.Callback):
 
 
 # [A Discriminative Feature Learning Approach for Deep Face Recognition](http://ydwen.github.io/papers/WenECCV16.pdf)
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class CenterLoss(tf.keras.losses.Loss):
     def __init__(self, num_classes, emb_shape=512, alpha=0.5, initial_file=None, **kwargs):
         super(CenterLoss, self).__init__(**kwargs)
@@ -442,6 +453,7 @@ class CenterLoss(tf.keras.losses.Loss):
         return cls(**config)
 
 
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class CenterLossCosine(CenterLoss):
     def __calculate_center_loss__(self, centers_batch, embedding):
         norm_emb = tf.nn.l2_normalize(embedding, 1)
@@ -450,6 +462,7 @@ class CenterLossCosine(CenterLoss):
 
 
 # TripletLoss helper class definitions [Triplet Loss and Online Triplet Mining in TensorFlow](https://omoindrot.github.io/triplet-loss)
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class TripletLossWapper(tf.keras.losses.Loss):
     def __init__(self, alpha=0.35, **kwargs):
         # reduction = tf.keras.losses.Reduction.NONE if tf.distribute.has_strategy() else tf.keras.losses.Reduction.AUTO
@@ -473,6 +486,7 @@ class TripletLossWapper(tf.keras.losses.Loss):
         return cls(**config)
 
 
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class BatchHardTripletLoss(TripletLossWapper):
     def __calculate_triplet_loss__(self, labels, embeddings, alpha):
         labels = tf.argmax(labels, axis=1)
@@ -495,6 +509,7 @@ class BatchHardTripletLoss(TripletLossWapper):
 
 
 # Triplet loss using arcface margin
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class ArcBatchHardTripletLoss(TripletLossWapper):
     def __init__(self, alpha=0.35, **kwargs):
         super(ArcBatchHardTripletLoss, self).__init__(alpha=alpha, **kwargs)
@@ -535,6 +550,7 @@ class ArcBatchHardTripletLoss(TripletLossWapper):
         return tf.maximum(basic_loss, 0.0)
 
 
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class BatchHardTripletLossEuclidean(TripletLossWapper):
     def __calculate_triplet_loss__(self, labels, embeddings, alpha):
         labels = tf.argmax(labels, axis=1)
@@ -569,6 +585,7 @@ class BatchHardTripletLossEuclidean(TripletLossWapper):
         return tf.maximum(basic_loss, 0.0)
 
 
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class BatchHardTripletLossEuclideanAutoAlpha(TripletLossWapper):
     def __init__(self, alpha=0.1, init_auto_alpha=1, **kwargs):
         # reduction = tf.keras.losses.Reduction.NONE if tf.distribute.has_strategy() else tf.keras.losses.Reduction.AUTO
@@ -612,6 +629,7 @@ class BatchHardTripletLossEuclideanAutoAlpha(TripletLossWapper):
         return tf.maximum(basic_loss, 0.0)
 
 
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class BatchAllTripletLoss(TripletLossWapper):
     def __calculate_triplet_loss__(self, labels, embeddings, alpha):
         labels = tf.argmax(labels, axis=1)
@@ -631,10 +649,12 @@ class BatchAllTripletLoss(TripletLossWapper):
         return pos_dists_loss + neg_dists_loss
 
 
+@keras.utils.register_keras_serializable(package="keras_insightface")
 def distiller_loss_euclidean(true_emb, pred_emb):
     return tf.reduce_sum(tf.square(pred_emb - true_emb), axis=-1)
 
 
+@keras.utils.register_keras_serializable(package="keras_insightface")
 def distiller_loss_cosine(true_emb, pred_emb):
     true_emb_normed = tf.nn.l2_normalize(true_emb, axis=-1)
     pred_emb_normed = tf.nn.l2_normalize(pred_emb, axis=-1)
@@ -643,6 +663,7 @@ def distiller_loss_cosine(true_emb, pred_emb):
 
 
 # [PDF 2106.05237 Knowledge distillation: A good teacher is patient and consistent](https://arxiv.org/pdf/2106.05237.pdf)
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class DistillKLDivergenceLoss(tf.keras.losses.Loss):
     def __init__(self, scale=10, **kwargs):
         super(DistillKLDivergenceLoss, self).__init__(**kwargs)

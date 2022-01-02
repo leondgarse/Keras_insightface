@@ -165,6 +165,7 @@ def buildin_models(
     return basic_model
 
 
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class NormDense(keras.layers.Layer):
     def __init__(self, units=1000, kernel_regularizer=None, loss_top_k=1, append_norm=False, **kwargs):
         super(NormDense, self).__init__(**kwargs)
@@ -297,6 +298,7 @@ def replace_ReLU_with_PReLU(model, target_activation="PReLU", **kwargs):
     return keras.models.clone_model(model, input_tensors=input_tensors, clone_function=convert_ReLU)
 
 
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class AconC(keras.layers.Layer):
     """
     - [Github nmaac/acon](https://github.com/nmaac/acon/blob/main/acon.py)
