@@ -148,7 +148,7 @@
     # For dataset folder name `/dataset/Foo`
     CUDA_VISIBLE_DEVICES='0' ./face_detector.py /dataset/Foo
     ```
-    to detect and align face images. Target saving folder will be `/dataset/Foo_aligned_112_112`. Then this one can be used as `data_path` for `train.Train`.
+    to detect and align face images. Target saving directory will be `/dataset/Foo_aligned_112_112`. Then this one can be used as `data_path` for `train.Train`.
 ## Training scripts
   - **Basic Scripts**
     - [backbones](backbones) basic model implementation of `mobilefacenet` / `mobilenetv3` / `efficientnet` / `botnet` / `ghostnet`. Most of them are copied from `keras.applications` source code and modified. Other backbones like `ResNet101V2` is loaded from `keras.applications` in `train.buildin_models`.
