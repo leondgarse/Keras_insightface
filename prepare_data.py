@@ -20,6 +20,7 @@ def MXnet_record_to_folder(dataset_dir, save_dir=None):
         return
 
     import mxnet as mx
+
     imgrec = mx.recordio.MXIndexedRecordIO(idx_path, bin_path, "r")
     rec_header, _ = mx.recordio.unpack(imgrec.read_idx(0))
 

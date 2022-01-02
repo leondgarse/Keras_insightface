@@ -175,7 +175,7 @@ def show_batch_sample(ds, rows=8, basic_size=1):
     aa = aa / 2 + 0.5
     columns = aa.shape[0] // 8
     fig = plt.figure(figsize=(columns * basic_size, rows * basic_size))
-    plt.imshow(np.vstack([np.hstack(aa[ii * columns: (ii + 1) * columns]) for ii in range(rows)]))
+    plt.imshow(np.vstack([np.hstack(aa[ii * columns : (ii + 1) * columns]) for ii in range(rows)]))
     plt.tight_layout()
     return fig
 

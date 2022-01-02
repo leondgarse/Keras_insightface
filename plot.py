@@ -271,11 +271,11 @@ def hist_plot_split(
 ):
     splits = [[int(sum(epochs[:id])), int(sum(epochs[:id])) + ii] for id, ii in enumerate(epochs)]
     if skip_epochs != 0:
-        splits = [[ss, ee] for ss, ee in splits if ee > skip_epochs]
-        splits[0][0] = max(splits[0][0], skip_epochs)
+        splits = [[ss, ee] for ss, ee in splits if ee > skip_epochs - init_epoch]
+        splits[0][0] = max(splits[0][0], skip_epochs - init_epoch)
         if names is not None and len(names) != 0:
             names = names[-len(splits) :]
-        if init_epoch == 0:
+        if init_epoch < skip_epochs:
             init_epoch = skip_epochs
 
     split_func = lambda aa: [aa[ii:jj] for ii, jj in splits if ii < len(aa)]

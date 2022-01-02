@@ -118,8 +118,8 @@ class YoloV5FaceDetector(BaseDetector):
 
     def pre_process_32(self, image):
         hh, ww, _ = image.shape
-        pad_hh = int(tf.math.ceil(hh / 32) * 32) - hh
-        pad_ww = int(tf.math.ceil(ww / 32) * 32) - ww
+        pad_hh = (32 - hh % 32) % 32  # int(tf.math.ceil(hh / 32) * 32) - hh
+        pad_ww = (32 - ww % 32) % 32  # int(tf.math.ceil(ww / 32) * 32) - ww
         if pad_ww != 0 or pad_hh != 0:
             image = tf.pad(image, [[0, pad_hh], [0, pad_ww], [0, 0]])
         return tf.expand_dims(image, 0)

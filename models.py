@@ -119,8 +119,8 @@ def buildin_models(
     nn = xx.outputs[0]
 
     if add_pointwise_conv:  # Model using `pointwise_conv + GDC` / `pointwise_conv + E` is smaller than `E`
-        nn = keras.layers.Conv2D(512, 1, use_bias=False, padding="valid")(nn)
-        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon)(nn)
+        nn = keras.layers.Conv2D(512, 1, use_bias=False, padding="valid", name="pw_conv")(nn)
+        nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="pw_bn")(nn)
         if pointwise_conv_act.lower() == "prelu":
             nn = keras.layers.PReLU(shared_axes=[1, 2], name="pw_" + pointwise_conv_act)(nn)
         else:
@@ -168,7 +168,9 @@ def buildin_models(
 class NormDense(keras.layers.Layer):
     def __init__(self, units=1000, kernel_regularizer=None, loss_top_k=1, append_norm=False, **kwargs):
         super(NormDense, self).__init__(**kwargs)
+        # self.init = keras.initializers.VarianceScaling(scale=2.0, mode="fan_out", distribution="truncated_normal")
         self.init = keras.initializers.glorot_normal()
+        # self.init = keras.initializers.TruncatedNormal(mean=0, stddev=0.01)
         self.units, self.loss_top_k, self.append_norm = units, loss_top_k, append_norm
         self.kernel_regularizer = keras.regularizers.get(kernel_regularizer)
         self.supports_masking = False
