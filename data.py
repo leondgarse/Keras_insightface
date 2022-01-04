@@ -198,38 +198,31 @@ def prepare_dataset(
     teacher_model_interf=None,
 ):
     AUTOTUNE = tf.data.experimental.AUTOTUNE
-    if os.path.exists(os.path.join(data_path, "train.idx")) and os.path.exists(os.path.join(data_path, "train.rec")):
-        print(">>>> Use MXNet record directly")
-        data_gen = MXNetRecordGen(data_path)
-        total_images, classes = data_gen.total_images, data_gen.classes
-        ds = tf.data.Dataset.from_generator(data_gen, output_types=(tf.float32, tf.int32), output_shapes=((*img_shape, 3), (classes,)))
-        ds = ds.shuffle(buffer_size=batch_size * 10)
-    else:
-        image_names, image_classes, embeddings, classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)
+    image_names, image_classes, embeddings, classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)
+    total_images = len(image_names)
+    if total_images == 0:
+        print(">>>> [Error] total_images is 0, image_names:", image_names, "image_classes:", image_classes)
+        return None, None
+    print(">>>> Image length: %d, Image class length: %d, classes: %d" % (len(image_names), len(image_classes), classes))
+    if image_per_class != 0:
+        pick, class_pick = pick_by_image_per_class(image_classes, image_per_class)
+        image_names, image_classes = image_names[pick], image_classes[pick]
         total_images = len(image_names)
-        if total_images == 0:
-            print(">>>> [Error] total_images is 0, image_names:", image_names, "image_classes:", image_classes)
-            return None, None
-        print(">>>> Image length: %d, Image class length: %d, classes: %d" % (len(image_names), len(image_classes), classes))
-        if image_per_class != 0:
-            pick, class_pick = pick_by_image_per_class(image_classes, image_per_class)
-            image_names, image_classes = image_names[pick], image_classes[pick]
-            total_images = len(image_names)
-            if len(embeddings) != 0:
-                embeddings = embeddings[pick]
-            print(">>>> After pick[%d], images: %d, valid classes: %d" % (image_per_class, len(image_names), class_pick.shape[0]))
+        if len(embeddings) != 0:
+            embeddings = embeddings[pick]
+        print(">>>> After pick[%d], images: %d, valid classes: %d" % (image_per_class, len(image_names), class_pick.shape[0]))
 
-        if len(embeddings) != 0 and teacher_model_interf is None:
-            # dataset with embedding values
-            print(">>>> embeddings: %s. This takes some time..." % (np.shape(embeddings),))
-            ds = tf.data.Dataset.from_tensor_slices((image_names, embeddings, image_classes))
-            process_func = lambda imm, emb, label: (tf_imread(imm), (emb, tf.one_hot(label, depth=classes, dtype=tf.int32)))
-        else:
-            ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes))
-            process_func = lambda imm, label: (tf_imread(imm), tf.one_hot(label, depth=classes, dtype=tf.int32))
+    if len(embeddings) != 0 and teacher_model_interf is None:
+        # dataset with embedding values
+        print(">>>> embeddings: %s. This takes some time..." % (np.shape(embeddings),))
+        ds = tf.data.Dataset.from_tensor_slices((image_names, embeddings, image_classes))
+        process_func = lambda imm, emb, label: (tf_imread(imm), (emb, tf.one_hot(label, depth=classes, dtype=tf.int32)))
+    else:
+        ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes))
+        process_func = lambda imm, label: (tf_imread(imm), tf.one_hot(label, depth=classes, dtype=tf.int32))
 
-        ds = ds.shuffle(buffer_size=total_images)
-        ds = ds.map(process_func, num_parallel_calls=AUTOTUNE)
+    ds = ds.shuffle(buffer_size=total_images)
+    ds = ds.map(process_func, num_parallel_calls=AUTOTUNE)
 
     if is_train and random_status >= 0:
         random_process_image = RandomProcessImage(img_shape, random_status, random_crop)
@@ -331,7 +324,8 @@ class Triplet_dataset:
         **kw,
     ):
         AUTOTUNE = tf.data.experimental.AUTOTUNE
-        image_names, image_classes, embeddings, classes, _ = pre_process_folder(data_path, image_names_reg, image_classes_rule)
+        self.image_classes_rule = ImageClassesRule_map(data_path) if image_classes_rule is None else image_classes_rule
+        image_names, image_classes, embeddings, classes, _ = pre_process_folder(data_path, image_names_reg, self.image_classes_rule)
         image_per_class = max(4, image_per_class)
         pick, _ = pick_by_image_per_class(image_classes, image_per_class)
         image_names, image_classes = image_names[pick].astype(str), image_classes[pick]
@@ -380,7 +374,7 @@ class Triplet_dataset:
             shuffle_dataset = self.image_dataframe.map(self.split_func)
             image_data = np.random.permutation(np.vstack(shuffle_dataset.values)).flatten()
             for ii in image_data:
-                yield (ii, int(ii.split(os.path.sep)[-2]))
+                yield (ii, self.image_classes_rule(ii))
             # return ((ii, int(ii.split(os.path.sep)[-2])) for ii in image_data)
 
     def image_shuffle_gen_with_emb(self):
@@ -389,5 +383,5 @@ class Triplet_dataset:
             shuffle_dataset = self.image_dataframe.map(self.split_func)
             image_data = np.random.permutation(np.vstack(shuffle_dataset.values)).flatten()
             for ii in image_data:
-                yield (ii, self.teacher_embeddings[ii], int(ii.split(os.path.sep)[-2]))
+                yield (ii, self.teacher_embeddings[ii], self.image_classes_rule(ii))
             # return ((ii, self.teacher_embeddings[ii], int(ii.split(os.path.sep)[-2])) for ii in image_data)
