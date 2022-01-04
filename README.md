@@ -6,27 +6,26 @@
 
   The training data containing the annotation (and the models trained with these data) are available for non-commercial research purposes only.
 # Table of Contents
-  <!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
+<!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
 
-  - [___Keras insightface___](#keras-insightface)
-  - [License](#license)
-  - [Table of Contents](#table-of-contents)
-  - [Current accuracy](#current-accuracy)
-  - [Usage](#usage)
-  	- [Environment](#environment)
-  	- [Beforehand Data Prepare](#beforehand-data-prepare)
-  	- [Training scripts](#training-scripts)
-  	- [Mixed precision float16](#mixed-precision-float16)
-  	- [Learning rate](#learning-rate)
-  	- [Optimizers](#optimizers)
-  	- [Multi GPU train using horovod or distribute strategy](#multi-gpu-train-using-horovod-or-distribute-strategy)
-  - [TFLite model inference time test on ARM64](#tflite-model-inference-time-test-on-arm64)
-  - [Sub Center ArcFace](#sub-center-arcface)
-  - [Knowledge distillation](#knowledge-distillation)
-  - [Evaluating on IJB datasets](#evaluating-on-ijb-datasets)
-  - [Related Projects](#related-projects)
+- [Current accuracy](#current-accuracy)
+- [Usage](#usage)
+	- [Environment](#environment)
+	- [Beforehand Data Prepare](#beforehand-data-prepare)
+	- [Project Structure](#project-structure)
+	- [Basic Training](#basic-training)
+	- [Other Basic Functions and Parameters](#other-basic-functions-and-parameters)
+	- [Learning rate](#learning-rate)
+	- [Mixed precision float16](#mixed-precision-float16)
+	- [Optimizers](#optimizers)
+	- [Multi GPU train using horovod or distribute strategy](#multi-gpu-train-using-horovod-or-distribute-strategy)
+- [Sub Center ArcFace](#sub-center-arcface)
+- [Knowledge distillation](#knowledge-distillation)
+- [Evaluating on IJB datasets](#evaluating-on-ijb-datasets)
+- [TFLite model inference time test on ARM64](#tflite-model-inference-time-test-on-arm64)
+- [Related Projects](#related-projects)
 
-  <!-- /TOC -->
+<!-- /TOC -->
 ***
 
 # Current accuracy
@@ -84,10 +83,6 @@
     pip install tf-nightly tfa-nightly glob2 pandas tqdm scikit-image scikit-learn ipython
     # Not required
     pip install pip-search icecream opencv-python cupy-cuda112 tensorflow-datasets tabulate mxnet-cu112 torch
-    ```
-    ```py
-    In [1]: tf.__version__
-    Out[1]: '2.7.0-dev202108115'
     ```
   - **Default import for ipython**
     ```py
@@ -149,8 +144,9 @@
     CUDA_VISIBLE_DEVICES='0' ./face_detector.py /dataset/Foo
     ```
     to detect and align face images. Target saving directory will be `/dataset/Foo_aligned_112_112`. Then this one can be used as `data_path` for `train.Train`.
-## Training scripts
-  - **Basic Scripts**
+  - **Cache file** `{dataset_name}_shuffle.npz` is saved in first time training. Remove it if dataset content changed.
+## Project Structure
+  - **Basic Modules**
     - [backbones](backbones) basic model implementation of `mobilefacenet` / `mobilenetv3` / `efficientnet` / `botnet` / `ghostnet`. Most of them are copied from `keras.applications` source code and modified. Other backbones like `ResNet101V2` is loaded from `keras.applications` in `train.buildin_models`.
     - [data.py](data.py) loads image data as `tf.dataset` for training. `Triplet` dataset is different from others.
     - [evals.py](evals.py) contains evaluating callback using `bin` files.
@@ -158,16 +154,16 @@
     - [myCallbacks.py](myCallbacks.py) contains my other callbacks, like saving model / learning rate adjusting / save history.
     - [models.py](models.py) contains model build related functions, like `buildin_models` / `add_l2_regularizer_2_model` / `replace_ReLU_with_PReLU`.
     - [train.py](train.py) contains a `Train` class. It uses a `scheduler` to connect different `loss` / `optimizer` / `epochs`. The basic function is simply `basic_model` --> `build dataset` --> `add output layer` --> `add callbacks` --> `compile` --> `fit`.
-  - **Other Scripts**
+  - **Other Modules**
+    - [augment.py](augment.py) including implementation of `RandAug` adn `AutoAug`.
     - [IJB_evals.py](IJB_evals.py) evaluates model accuracy using [insightface/evaluation/IJB/](https://github.com/deepinsight/insightface/tree/master/evaluation/IJB) datasets.
-    - [data_drop_top_k.py](data_drop_top_k.py) create dataset after trained with [Sub Center ArcFace](#sub-center-arcface) method.
     - [data_distiller.py](data_distiller.py) create dataset for [Knowledge distillation](#knowledge-distillation).
+    - [data_drop_top_k.py](data_drop_top_k.py) create dataset after trained with [Sub Center ArcFace](#sub-center-arcface) method.
     - [eval_folder.py](eval_folder.py) Run model evaluation on any custom dataset folder, which is in the same format with Training dataset.
+    - [face_detector.py](face_detector.py) contains face detectors. Currently 2 added, pure Keras one `YoloV5FaceDetector`, and ONNX one `SCRFD`.
     - [plot.py](plot.py) contains a history plot function.
     - [video_test.py](video_test.py) can be used to test model using video camera.
-  - **Model** contains two part
-    - **Basic model** is layers from `input` to `embedding`.
-    - **Model** is `Basic model` + `bottleneck` layer, like `softmax` / `arcface` layer. For triplet training, `Model` == `Basic model`. For combined `loss` training, it may have multiple outputs.
+## Basic Training
   - **Training example** `train.Train` is mostly functioned as a scheduler.
     ```py
     from tensorflow import keras
@@ -191,13 +187,13 @@
     ]
     tt.train(sch, 0)
     ```
-    Using `tt.train_single_scheduler` can control the behavior more detail.
-  - **models.print_buildin_models** is used to print build-in model names in `models.py`, which can be used in `models.buildin_models`.
-  - **models.add_l2_regularizer_2_model** will add `l2_regularizer` to `dense` / `convolution` layers, or set `apply_to_batch_normal=True` also to `PReLU` / `BatchNormalization` layers. The actual added `l2` value is divided by `2`.
-    ```py
-    # Will add keras.regularizers.L2(5e-4) to `dense` / `convolution` layers.
-    basic_model = models.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=False)
-    ```
+    May use `tt.train_single_scheduler` controlling the behavior more detail.
+  - **Model** basically containing two parts:
+    - **Basic model** is layers from `input` to `embedding`.
+    - **Model** is `Basic model` + `bottleneck` layer, like `softmax` / `arcface` layer. For triplet training, `Model` == `Basic model`. For combined `loss` training, it may have multiple outputs.
+  - **Saving strategy**
+    - **Model** will save the latest one on every epoch end to local path `./checkpoints`, name is specified by `train.Train` `save_path`.
+    - **basic_model** will be saved monitoring on the last `eval_paths` evaluating `bin` item, and save the best only.
   - **train.Train model parameters** including `basic_model` / `model`. Combine them to initialize model from different sources. Sometimes may need `custom_objects` to load model.
     | basic_model                                                     | model           | Used for                                    |
     | --------------------------------------------------------------- | --------------- | ------------------------------------------- |
@@ -206,11 +202,8 @@
     | None for 'embedding' layer or layer index of basic model output | model .h5 file  | Continue training from last saved model     |
     | None for 'embedding' layer or layer index of basic model output | model structure | Continue training from a modified model     |
     | None                                                            | None            | Reload model from "checkpoints/{save_path}" |
-  - **train.Train output_weight_decay** controls `L2 regularizer` value added to `output_layer`.
-    - `0` for None.
-    - `(0, 1)` for specific value, actual added value will also divided by `2`.
-    - `>= 1` will be value multiplied by `L2 regularizer` value in `basic_model` if added.
-  - **Scheduler** is a list of dicts, each contains a training plan
+
+  - **Scheduler** is a list of dicts, each containing a training plan
     - **epoch** indicates how many epochs will be trained. **Required**.
     - **loss** indicates the loss function. If not provided, will try to use the previous one if `model.built` is `True`.
     - **optimizer** is the optimizer used in this plan, `None` indicates using the last one.
@@ -245,16 +238,13 @@
     # `softmax` / `arcface` + `triplet` + `centerloss`
     sch = [{"loss": losses.ArcfaceLoss(), "centerloss": 1, "triplet": 32, "alpha": 0.2, "epoch": 2}]
     ```
-  - **Saving strategy**
-    - **Model** will save the latest one on every epoch end to local path `./checkpoints`, name is specified by `train.Train` `save_path`.
-    - **basic_model** will be saved monitoring on the last `eval_paths` evaluating `bin` item, and save the best only.
+  - **Restore training from break point**
     ```py
-    ''' Continue training from last saved file '''
     from tensorflow import keras
     import losses, train
     data_path = '/datasets/faces_emore_112x112_folders'
     eval_paths = ['/datasets/faces_emore/lfw.bin', '/datasets/faces_emore/cfp_fp.bin', '/datasets/faces_emore/agedb_30.bin']
-    tt = train.Train(data_path, 'keras_mobilenet_emore_II.h5', eval_paths, model='./checkpoints/keras_mobilenet_emore.h5',
+    tt = train.Train(data_path, 'keras_mobilenet_emore.h5', eval_paths, model='./checkpoints/keras_mobilenet_emore.h5',
                     batch_size=512, random_status=0, lr_base=0.1, lr_decay=0.5, lr_decay_steps=16, lr_min=1e-5)
 
     sch = [
@@ -263,14 +253,8 @@
       {"loss": losses.ArcfaceLoss(scale=64), "epoch": 35},
       # {"loss": losses.ArcfaceLoss(), "epoch": 20, "triplet": 64, "alpha": 0.35},
     ]
-    tt.train(sch, 15) # 15 is the initial_epoch
+    tt.train(sch, initial_epoch=15)
     ```
-    If reload a `centerloss` trained model, please keep `save_path` same as previous, as `centerloss` needs to reload saved `xxx_centers.npy` by `save_path` name.
-  - **Gently stop** is a callback to stop training gently. Input an `n` and `<Enter>` anytime during training, will set training stop on that epoch ends.
-  - **My history**
-    - This is a callback collecting training `loss`, `accuracy` and `evaluating accuracy`.
-    - On every epoch end, backup to the path `save_path` defined in `train.Train` with suffix `_hist.json`.
-    - Reload when initializing, if the backup `<save_path>_hist.json` file exists.
   - **Evaluation**
     ```py
     import evals
@@ -280,21 +264,46 @@
     # >>>> lfw evaluation max accuracy: 0.993167, thresh: 0.316535, previous max accuracy: 0.000000, PCA accuray = 0.993167 ± 0.003905
     # >>>> Improved = 0.993167
     ```
-    Default evaluating strategy is `on_epoch_end`. Setting an `eval_freq` greater than `1` in `train.Train` will also **add** an `on_batch_end` evaluation.
+    For training process, default evaluating strategy is `on_epoch_end`. Setting an `eval_freq` greater than `1` in `train.Train` will also **add** an `on_batch_end` evaluation.
     ```py
     # Change evaluating strategy to `on_epoch_end`, as long as `on_batch_end` for every `1000` batch.
     tt = train.Train(data_path, 'keras_mobilefacenet_256.h5', eval_paths, basic_model=basic_model, eval_freq=1000)
     ```
-## Mixed precision float16
-  - [Tensorflow Guide - Mixed precision](https://www.tensorflow.org/guide/mixed_precision)
-  - Enable `Mixed precision` at the beginning of all functional code by
+## Other Basic Functions and Parameters
+  - **train.Train output_weight_decay** controls `L2 regularizer` value added to `output_layer`.
+    - `0` for None.
+    - `(0, 1)` for specific value, actual added value will also divided by `2`.
+    - `>= 1` will be value multiplied by `L2 regularizer` value in `basic_model` if added.
+  - **train.Train random_status** controls data augmentation weights.
+    - `-1` will disable all augmentation.
+    - `0` will apply `random_flip_left_right` only.
+    - `1` will also apply `random_brightness`.
+    - `2` will also apply `random_contrast` and `random_saturation`.
+    - `3` will also apply `random_crop`.
+    - `>= 100` will apply `RandAugment` with `magnitude = 5 * random_status / 100`, so `random_status=100` means using `RandAugment` with `magnitude=5`.
+  - **train.Train random_cutout_mask_area** set ratio of randomly cutout image bottom `2/5` area, regarding as ignoring mask area.
+  - **models.buildin_models** is mainly for adding output feature layer `GDC` / `E` or others to a backbone model. The first parameter `stem_model` can be:
+    - String like `MobileNet` / `r50` / `ResNet50` or other names printed by `models.print_buildin_models()`.
+    - Self built `keras.models.Model` instance. Like `keras.applications.MobileNet(input_shape=(112, 112, 3), include_top=False)`.
+  - **models.add_l2_regularizer_2_model** will add `l2_regularizer` to `dense` / `convolution` layers, or set `apply_to_batch_normal=True` also to `PReLU` / `BatchNormalization` layers. The actual added `l2` value is divided by `2`.
     ```py
-    keras.mixed_precision.set_global_policy("mixed_float16")
+    # Will add keras.regularizers.L2(5e-4) to `dense` / `convolution` layers.
+    basic_model = models.add_l2_regularizer_2_model(basic_model, 1e-3, apply_to_batch_normal=False)
     ```
-  - In most training case, it will have a `~2x` speedup and less GPU memory consumption.
+  - **Gently stop** is a callback to stop training gently. Input an `n` and `<Enter>` anytime during training, will set training stop on that epoch ends.
+  - **My history**
+    - This is a callback collecting training `loss`, `accuracy` and `evaluating accuracy`.
+    - On every epoch end, backup to the path `save_path` defined in `train.Train` with suffix `_hist.json`.
+    - Reload when initializing, if the backup `<save_path>_hist.json` file exists.
+    - The saved `_hist.json` can be used for plotting using `plot.py`.
 ## Learning rate
-  - `train.Train` parameters `lr_base` / `lr_decay` / `lr_decay_steps` set different decay strategies and their parameters.
+  - `train.Train` parameters `lr_base` / `lr_decay` / `lr_decay_steps` / `lr_warmup_steps` set different decay strategies and their parameters.
   - `tt.lr_scheduler` can also be used to set learning rate scheduler directly.
+    ```py
+    tt = train.Train(...)
+    import myCallbacks
+    tt.lr_scheduler = myCallbacks.CosineLrSchedulerEpoch(lr_base=1e-3, first_restart_step=16, warmup_steps=3)
+    ```
   - **lr_decay_steps** controls different decay types.
     - Default is `Exponential decay` with `lr_base=0.001, lr_decay=0.05`.
     - For `CosineLrScheduler`, `steps_per_epoch` is set after dataset been inited.
@@ -303,21 +312,17 @@
     | lr_decay_steps | decay type                                       | mean of lr_decay_steps    | mean of lr_decay |
     | -------------- | ------------------------------------------------ | ------------------------- | ---------------- |
     | <= 1           | Exponential decay                                |                           | decay_rate       |
-    | > 1, < 500     | Cosine decay, will multiply with steps_per_epoch | first_restart_step, epoch | m_mul            |
-    | >= 500         | Cosine decay, specific batch number              | first_restart_step, batch | m_mul            |
+    | > 1            | Cosine decay, will multiply with steps_per_epoch | first_restart_step, epoch | m_mul            |
     | list           | Constant decay                                   | lr_decay_steps            | decay_rate       |
 
     ```py
     # lr_decay_steps == 0, Exponential
     tt = train.Train(..., lr_base=0.001, lr_decay=0.05, ...)
-    # 1 < lr_decay_steps < 500, Cosine decay, first_restart_step = lr_decay_steps * steps_per_epoch
+    # 1 < lr_decay_steps, Cosine decay, first_restart_step = lr_decay_steps * steps_per_epoch
     # restart on epoch [16 * 1 + 1, 16 * 3 + 2, 16 * 7 + 3] == [17, 50, 115]
     tt = train.Train(..., lr_base=0.001, lr_decay=0.5, lr_decay_steps=16, lr_min=1e-7, ...)
-    # 1 < lr_decay_steps < 500, lr_min == lr_base * lr_decay, Cosine decay, no restart
+    # 1 < lr_decay_steps, lr_min == lr_base * lr_decay, Cosine decay, no restart
     tt = train.Train(..., lr_base=0.001, lr_decay=1e-4, lr_decay_steps=24, lr_min=1e-7, ...)
-    # 500 <= lr_decay_steps, Cosine decay, first_restart_step = lr_decay_steps
-    # restart on batch [16000 + steps_per_epoch, 48000 + 2 * steps_per_epoch, 112000 + 3 * steps_per_epoch]
-    tt = train.Train(..., lr_base=0.001, lr_decay=0.5, lr_decay_steps=16 * 1000, lr_min=1e-7, ...)
     # lr_decay_steps is a list, Constant
     tt = train.Train(..., lr_base=0.1, lr_decay=0.1, lr_decay_steps=[3, 5, 7, 16, 20, 24], ...)
     ```
@@ -326,36 +331,39 @@
     from myCallbacks import exp_scheduler, CosineLrScheduler, constant_scheduler
     epochs = np.arange(60)
     plt.figure(figsize=(14, 6))
-    plt.plot(epochs, [exp_scheduler(ii, 0.001, 0.1) for ii in epochs], label="lr=0.001, decay=0.1")
-    plt.plot(epochs, [exp_scheduler(ii, 0.001, 0.05) for ii in epochs], label="lr=0.001, decay=0.05")
+    plt.plot(epochs, [exp_scheduler(ii, 0.001, 0.1, warmup_steps=10) for ii in epochs], label="lr=0.001, decay=0.1")
+    plt.plot(epochs, [exp_scheduler(ii, 0.001, 0.05, warmup_steps=10) for ii in epochs], label="lr=0.001, decay=0.05")
     plt.plot(epochs, [constant_scheduler(ii, 0.001, [10, 20, 30, 40], 0.1) for ii in epochs], label="Constant, lr=0.001, decay_steps=[10, 20, 30, 40], decay_rate=0.1")
 
     steps_per_epoch = 100
     batchs = np.arange(60 * steps_per_epoch)
-    aa = CosineLrScheduler(0.001, first_restart_step=50, lr_min=1e-6, warmup=0, m_mul=1e-3, steps_per_epoch=steps_per_epoch)
-    aa.build()
-    plt.plot(batchs / steps_per_epoch, [aa.on_train_batch_begin(ii) for ii in batchs], label="Cosine, first_restart_step=50, min=1e-6, m_mul=1e-3")
-    aa_60 = np.float(aa.on_train_batch_begin(60 * steps_per_epoch))
-    plt.text(60, aa_60, "[Cosine]\n({}, {:.2e})".format(60, aa_60), va="bottom", ha="right")
+    aa = CosineLrScheduler(0.001, first_restart_step=50, lr_min=1e-6, warmup_steps=0, m_mul=1e-3, steps_per_epoch=steps_per_epoch)
+    lrs = []
+    for ii in epochs:
+        aa.on_epoch_begin(ii)
+        lrs.extend([aa.on_train_batch_begin(jj) for jj in range(steps_per_epoch)])
+    plt.plot(batchs / steps_per_epoch, lrs, label="Cosine, first_restart_step=50, min=1e-6, m_mul=1e-3")
 
-    bb = CosineLrScheduler(0.001, first_restart_step=16, lr_min=1e-7, warmup=1, m_mul=0.4, steps_per_epoch=steps_per_epoch)
-    bb.build()
-    plt.plot(batchs / steps_per_epoch, [bb.on_train_batch_begin(ii) for ii in batchs], label="Cosine restart, first_restart_step=16, min=1e-7, warmup=1, m_mul=0.4")
-    plt.scatter(18, 0.0004, c='r')
-    plt.text(18, 0.0004, (18, 0.0004))
-
-    cc = CosineLrScheduler(0.001, first_restart_step=13 * 100, lr_min=1e-7, warmup=4, m_mul=0.5, steps_per_epoch=steps_per_epoch)
-    cc.build()
-    plt.plot(batchs / steps_per_epoch, [cc.on_train_batch_begin(ii) for ii in batchs], label="Cosine restart, on batch, first_restart_step=1300, min=1e-7, warmup=4, m_mul=0.5")
-    plt.scatter(18, 0.0005, c='r')
-    plt.text(18, 0.0005, (18, 0.0005))
+    bb = CosineLrScheduler(0.001, first_restart_step=16, lr_min=1e-7, warmup_steps=1, m_mul=0.4, steps_per_epoch=steps_per_epoch)
+    lrs = []
+    for ii in epochs:
+        bb.on_epoch_begin(ii)
+        lrs.extend([bb.on_train_batch_begin(jj) for jj in range(steps_per_epoch)])
+    plt.plot(batchs / steps_per_epoch, lrs, label="Cosine restart, first_restart_step=16, min=1e-7, warmup=1, m_mul=0.4")
 
     plt.xlim(0, 60)
     plt.legend()
-    # plt.grid()
+    plt.grid(True)
     plt.tight_layout()
     ```
     ![](checkpoints/learning_rate_decay.svg)
+## Mixed precision float16
+  - [Tensorflow Guide - Mixed precision](https://www.tensorflow.org/guide/mixed_precision)
+  - Enable `Mixed precision` at the beginning of all functional code by
+    ```py
+    keras.mixed_precision.set_global_policy("mixed_float16")
+    ```
+  - In most training case, it will have a `~2x` speedup and less GPU memory consumption.
 ## Optimizers
   - **SGDW / AdamW** [tensorflow_addons AdamW](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/AdamW).
     ```py
@@ -397,51 +405,6 @@
     ```py
     sch = [{"loss": keras.losses.CategoricalCrossentropy(label_smoothing=0.1, reduction=tf.keras.losses.Reduction.NONE), "epoch": 25}]
     ```
-***
-
-# TFLite model inference time test on ARM64
-  - Test using [TFLite Model Benchmark Tool](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/tools/benchmark)
-  - **Platform**
-    - CPU: `Qualcomm Technologies, Inc SDM630`
-    - System: `Android`
-    - Inference: `TFLite`
-  - **mobilenet_v2** comparing `orignal` / `dynamic` / `float16` / `uint8` conversion of `TFLite` model. Using header `GDC + emb_shape=512 + pointwise_conv=False`.
-    | mobilenet_v2 | Size (MB) | threads=1 (ms) | threads=4 (ms) |
-    | ------------ | --------- | -------------- | -------------- |
-    | orignal      | 11.576    | 52.224         | 18.102         |
-    | orignal xnn  | 11.576    | 29.116         | 8.744          |
-    | dynamic      | 3.36376   | 38.497         | 20.008         |
-    | dynamic xnn  | 3.36376   | 37.433         | 19.234         |
-    | float16      | 5.8267    | 53.986         | 19.191         |
-    | float16 xnn  | 5.8267    | 29.862         | 8.661          |
-    | uint8        | 3.59032   | 27.247         | 10.783         |
-
-  - **mobilenet_v2** comparing different headers using `float16 conversion + xnn + threads=4`
-    | emb_shape | output_layer | pointwise_conv | PReLU | Size (MB) | Time (ms) |
-    | ---------:|:------------ |:-------------- | ----- | ---------:| ---------:|
-    |       256 | GDC          | False          | False |   5.17011 |     8.214 |
-    |       512 | GDC          | False          | False |   5.82598 |     8.436 |
-    |       256 | GDC          | True           | False |   6.06384 |     9.129 |
-    |       512 | GDC          | True           | False |   6.32542 |     9.357 |
-    |       256 | E            | True           | False |   9.98053 |    10.669 |
-    |       256 | E            | False          | False |   14.9618 |    11.502 |
-    |       512 | E            | True           | False |    14.174 |    11.958 |
-    |       512 | E            | False          | False |   25.4481 |    15.063 |
-    |       512 | GDC          | False          | True  |   5.85275 |    10.481 |
-
-  - **Backbones comparing** using `float16 conversion + xnn + threads=4`, header `GDC + emb_shape=512 + pointwise_conv=False`
-    | Model              | Size (MB) | Time (ms) |
-    | ------------------ | --------- | --------- |
-    | mobilenet_v3_small | 2.80058   | 4.211     |
-    | mobilenet_v3_large | 6.95015   | 10.025    |
-    | ghostnet strides=2 | 8.06546   | 11.125    |
-    | mobilenet          | 7.4905    | 11.836    |
-    | se_mobilefacenet   | 1.88518   | 18.713    |
-    | mobilefacenet      | 1.84267   | 20.443    |
-    | EB0                | 9.40449   | 22.054    |
-    | EB1                | 14.4268   | 31.881    |
-    | ghostnet strides=1 | 8.16576   | 46.142    |
-    | mobilenet_m1       | 7.02651   | 52.648    |
 ***
 
 # Sub Center ArcFace
@@ -657,6 +620,51 @@
     ```sh
     python IJB_evals.py -h
     ```
+***
+
+# TFLite model inference time test on ARM64
+  - Test using [TFLite Model Benchmark Tool](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/tools/benchmark)
+  - **Platform**
+    - CPU: `Qualcomm Technologies, Inc SDM630`
+    - System: `Android`
+    - Inference: `TFLite`
+  - **mobilenet_v2** comparing `orignal` / `dynamic` / `float16` / `uint8` conversion of `TFLite` model. Using header `GDC + emb_shape=512 + pointwise_conv=False`.
+    | mobilenet_v2 | Size (MB) | threads=1 (ms) | threads=4 (ms) |
+    | ------------ | --------- | -------------- | -------------- |
+    | orignal      | 11.576    | 52.224         | 18.102         |
+    | orignal xnn  | 11.576    | 29.116         | 8.744          |
+    | dynamic      | 3.36376   | 38.497         | 20.008         |
+    | dynamic xnn  | 3.36376   | 37.433         | 19.234         |
+    | float16      | 5.8267    | 53.986         | 19.191         |
+    | float16 xnn  | 5.8267    | 29.862         | 8.661          |
+    | uint8        | 3.59032   | 27.247         | 10.783         |
+
+  - **mobilenet_v2** comparing different headers using `float16 conversion + xnn + threads=4`
+    | emb_shape | output_layer | pointwise_conv | PReLU | Size (MB) | Time (ms) |
+    | ---------:|:------------ |:-------------- | ----- | ---------:| ---------:|
+    |       256 | GDC          | False          | False |   5.17011 |     8.214 |
+    |       512 | GDC          | False          | False |   5.82598 |     8.436 |
+    |       256 | GDC          | True           | False |   6.06384 |     9.129 |
+    |       512 | GDC          | True           | False |   6.32542 |     9.357 |
+    |       256 | E            | True           | False |   9.98053 |    10.669 |
+    |       256 | E            | False          | False |   14.9618 |    11.502 |
+    |       512 | E            | True           | False |    14.174 |    11.958 |
+    |       512 | E            | False          | False |   25.4481 |    15.063 |
+    |       512 | GDC          | False          | True  |   5.85275 |    10.481 |
+
+  - **Backbones comparing** using `float16 conversion + xnn + threads=4`, header `GDC + emb_shape=512 + pointwise_conv=False`
+    | Model              | Size (MB) | Time (ms) |
+    | ------------------ | --------- | --------- |
+    | mobilenet_v3_small | 2.80058   | 4.211     |
+    | mobilenet_v3_large | 6.95015   | 10.025    |
+    | ghostnet strides=2 | 8.06546   | 11.125    |
+    | mobilenet          | 7.4905    | 11.836    |
+    | se_mobilefacenet   | 1.88518   | 18.713    |
+    | mobilefacenet      | 1.84267   | 20.443    |
+    | EB0                | 9.40449   | 22.054    |
+    | EB1                | 14.4268   | 31.881    |
+    | ghostnet strides=1 | 8.16576   | 46.142    |
+    | mobilenet_m1       | 7.02651   | 52.648    |
 ***
 
 # Related Projects
