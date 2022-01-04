@@ -307,7 +307,7 @@
   - **lr_decay_steps** controls different decay types.
     - Default is `Exponential decay` with `lr_base=0.001, lr_decay=0.05`.
     - For `CosineLrScheduler`, `steps_per_epoch` is set after dataset been inited.
-    - For `CosineLrScheduler`, default value of `keep_as_min=1`, means will train `1 epoch` using `lr_min` before each restart.
+    - For `CosineLrScheduler`, default value of `cooldown_steps=1`, means will train `1 epoch` using `lr_min` before each restart.
 
     | lr_decay_steps | decay type                                       | mean of lr_decay_steps    | mean of lr_decay |
     | -------------- | ------------------------------------------------ | ------------------------- | ---------------- |
