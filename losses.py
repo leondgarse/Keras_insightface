@@ -165,7 +165,7 @@ class CurricularFaceLoss(ArcfaceLossSimple):
         theta_valid = tf.where(y_pred_vals > self.threshold, theta, self.theta_min - theta)
 
         self.hard_scale.assign(tf.reduce_mean(y_pred_vals) * 0.01 + (1 - 0.01) * self.hard_scale)
-        tf.print(", hard_scale =", self.hard_scale, end="")
+        tf.print(", hard_scale:", self.hard_scale, end="")
         hard_norm_logits = tf.where(norm_logits > tf.expand_dims(theta, 1), norm_logits * (self.hard_scale + norm_logits), norm_logits)
 
         arcface_logits = tf.tensor_scatter_nd_update(hard_norm_logits, pick_cond, theta_valid) * self.scale
@@ -258,21 +258,24 @@ class MagFaceLoss(ArcfaceLossSimple):
 
         # MegFace loss_G, g = 1/(self.u_a**2) * x_norm + 1/(x_norm)
         regularizer_loss = self.regularizer_loss_scale * feature_norm + 1.0 / feature_norm
+        
         tf.print(
-            # ", regularizer_loss =",
+            " -",
+            # " regularizer_loss: ",
             # tf.reduce_mean(regularizer_loss),
-            ", arcface_loss =",
+            " arcface_loss: ",
             tf.reduce_mean(arcface_loss),
-            ", margin mean =",
+            ", margin mean: ",
             tf.reduce_mean(margin),
-            # ", margin min =",
-            # tf.reduce_min(margin),
-            # ", margin max =",
-            # tf.reduce_max(margin),
-            # ", feature_norm min =",
+            ", margin min: ",
+            tf.reduce_min(margin),
+            ", margin max: ",
+            tf.reduce_max(margin),
+            # ", feature_norm min: ",
             # tf.reduce_min(feature_norm),
-            # ", feature_norm max =",
-            # tf.reduce_max(feature_norm),
+            ", feature_norm max: ",
+            tf.reduce_max(feature_norm),
+            sep="",
             end="",
         )
         return arcface_loss + regularizer_loss * self.regularizer_loss_lambda
@@ -315,7 +318,7 @@ class AdaCosLoss(tf.keras.losses.Loss):
         B_avg = tf.where(pick_cond, tf.zeros_like(norm_logits), tf.exp(self.scale * norm_logits))
         B_avg = tf.reduce_mean(tf.reduce_sum(B_avg, axis=1))
         self.scale.assign(tf.math.log(B_avg) / tf.cos(tf.minimum(self.theta_med_max, theta_med)))
-        tf.print(", scale =", self.scale, ", theta_med =", theta_med, end="")
+        tf.print(", scale:", self.scale, "theta_med:", theta_med, end="")
 
         arcface_logits = norm_logits * self.scale
         return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
