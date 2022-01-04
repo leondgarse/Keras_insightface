@@ -34,7 +34,8 @@ class Train:
         lr_base=0.001,
         lr_decay=0.05,  # for cosine it's m_mul, or it's decay_rate for exponential or constant
         lr_decay_steps=0,  # <=1 for Exponential, (1, 500) for Cosine decay on epoch, >= 500 for Cosine decay on batch, list for Constant
-        lr_min=0,
+        lr_min=1e-6,
+        lr_warmup_steps=0,
         eval_freq=1,
         random_status=0,
         random_cutout_mask_area=0.0,  # ratio of randomly cutout bottom 2/5 area, regarding as ignoring mask area
@@ -113,7 +114,7 @@ class Train:
         if len(my_evals) != 0:
             my_evals[-1].save_model = os.path.splitext(save_path)[0]
         self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop = myCallbacks.basic_callbacks(
-            checkpoint=save_path, evals=my_evals, lr=lr_base, lr_decay=lr_decay, lr_min=lr_min, lr_decay_steps=lr_decay_steps
+            save_path, my_evals, lr=lr_base, lr_decay=lr_decay, lr_min=lr_min, lr_decay_steps=lr_decay_steps, lr_warmup_steps=lr_warmup_steps,
         )
         self.gently_stop = None  # may not working for windows
         self.my_evals, self.custom_callbacks = my_evals, []
