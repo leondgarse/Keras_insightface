@@ -282,6 +282,7 @@
     - `3` will also apply `random_crop`.
     - `>= 100` will apply `RandAugment` with `magnitude = 5 * random_status / 100`, so `random_status=100` means using `RandAugment` with `magnitude=5`.
   - **train.Train random_cutout_mask_area** set ratio of randomly cutout image bottom `2/5` area, regarding as ignoring mask area.
+  - **train.Train partial_fc_split** set a int number like `2` / `4`, will build model and dataset with total classes split in `partial_fc_split` parts. Works also on a single GPU. Currently only `ArcFace` loss family like `ArcFace` / `AirFaceLoss` / `CosFaceLoss` / `MagFaceLoss` supports. **Still under testing**.
   - **models.buildin_models** is mainly for adding output feature layer `GDC` / `E` or others to a backbone model. The first parameter `stem_model` can be:
     - String like `MobileNet` / `r50` / `ResNet50` or other names printed by `models.print_buildin_models()`.
     - Self built `keras.models.Model` instance. Like `keras.applications.MobileNet(input_shape=(112, 112, 3), include_top=False)`.
@@ -296,6 +297,14 @@
     - On every epoch end, backup to the path `save_path` defined in `train.Train` with suffix `_hist.json`.
     - Reload when initializing, if the backup `<save_path>_hist.json` file exists.
     - The saved `_hist.json` can be used for plotting using `plot.py`.
+  - **eval_folder.py** is used for test evaluating accuracy on custom test dataset:
+    ```sh
+    CUDA_VISIBLE_DEVICES='0' ./eval_folder.py -d {DATA_PATH} -m {BASIC_MODEL.h5}
+    ```
+    Or create own test bin file which can be used in `train.Train` `eval_paths`:
+    ```sh
+    CUDA_VISIBLE_DEVICES='0' ./eval_folder.py -d {DATA_PATH} -m {BASIC_MODEL.h5} -B {BIN_FILE.bin}
+    ```
 ## Learning rate
   - `train.Train` parameters `lr_base` / `lr_decay` / `lr_decay_steps` / `lr_warmup_steps` set different decay strategies and their parameters.
   - `tt.lr_scheduler` can also be used to set learning rate scheduler directly.

@@ -41,6 +41,7 @@ class Train:
         random_cutout_mask_area=0.0,  # ratio of randomly cutout bottom 2/5 area, regarding as ignoring mask area
         image_per_class=0,  # For triplet, image_per_class will be `4` if it's `< 4`
         mixup_alpha=0,  # mixup alpha, value in (0, 1] to enable
+        partial_fc_split=0,  # partial_fc test
         teacher_model_interf=None,  # Teacher model to generate embedding data, used for distilling training.
         sam_rho=0,
     ):
@@ -90,7 +91,7 @@ class Train:
             )
             return
 
-        self.softmax, self.arcface, self.triplet = "softmax", "arcface", "triplet"
+        self.softmax, self.arcface, self.arcface_partial, self.triplet = "softmax", "arcface", "arcface_partial", "triplet"
         self.center, self.distill = "center", "distill"
         if output_weight_decay >= 1:
             l2_weight_decay = 0
@@ -114,7 +115,13 @@ class Train:
         if len(my_evals) != 0:
             my_evals[-1].save_model = os.path.splitext(save_path)[0]
         self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop = myCallbacks.basic_callbacks(
-            save_path, my_evals, lr=lr_base, lr_decay=lr_decay, lr_min=lr_min, lr_decay_steps=lr_decay_steps, lr_warmup_steps=lr_warmup_steps,
+            save_path,
+            my_evals,
+            lr=lr_base,
+            lr_decay=lr_decay,
+            lr_min=lr_min,
+            lr_decay_steps=lr_decay_steps,
+            lr_warmup_steps=lr_warmup_steps,
         )
         self.gently_stop = None  # may not working for windows
         self.my_evals, self.custom_callbacks = my_evals, []
@@ -122,7 +129,7 @@ class Train:
         self.default_optimizer = "adam"
 
         self.data_path, self.random_status, self.image_per_class, self.mixup_alpha = data_path, random_status, image_per_class, mixup_alpha
-        self.random_cutout_mask_area = random_cutout_mask_area
+        self.random_cutout_mask_area, self.partial_fc_split = random_cutout_mask_area, partial_fc_split
         self.train_ds, self.steps_per_epoch, self.classes, self.is_triplet_dataset = None, None, 0, False
         self.teacher_model_interf, self.is_distill_ds = teacher_model_interf, False
         self.distill_emb_map_layer = None
@@ -160,7 +167,7 @@ class Train:
             if self.data_path.endswith(".tfrecord"):
                 self.train_ds, self.steps_per_epoch = data.prepare_distill_dataset_tfrecord(**dataset_params)
             else:
-                self.train_ds, self.steps_per_epoch = data.prepare_dataset(**dataset_params)
+                self.train_ds, self.steps_per_epoch = data.prepare_dataset(**dataset_params, partial_fc_split=self.partial_fc_split)
             self.is_triplet_dataset = False
         if self.train_ds is None:
             return
@@ -246,6 +253,20 @@ class Train:
             logits = softmax_logits(embedding)
             output_fp32 = keras.layers.Activation("softmax", dtype="float32", name=self.softmax)(logits)
             self.model = keras.models.Model(inputs, output_fp32)
+        elif self.partial_fc_split > 0 and type == self.arcface and (self.model == None or self.model.output_names[-1] != self.arcface_partial):
+            print(">>>> Add NormDensePartialFC layer, loss_top_k={}, is_magface_loss={}...".format(loss_top_k, is_magface_loss))
+            partial_arcface_logits = models.NormDensePartialFC(
+                partial_fc_split=self.partial_fc_split,
+                units=self.classes,
+                kernel_regularizer=output_kernel_regularizer,
+                loss_top_k=loss_top_k,
+                append_norm=is_magface_loss,
+                name=self.arcface_partial,
+                dtype="float32",
+            )
+            classes_inputs = keras.layers.Input([], dtype="int32", name="classes_inputs")
+            output_fp32 = partial_arcface_logits(embedding, classes_inputs)
+            self.model = keras.models.Model([inputs, classes_inputs], output_fp32)
         elif type == self.arcface and (self.model == None or self.model.output_names[-1] != self.arcface):
             print(">>>> Add arcface layer, loss_top_k={}, is_magface_loss={}...".format(loss_top_k, is_magface_loss))
             arcface_logits = models.NormDense(

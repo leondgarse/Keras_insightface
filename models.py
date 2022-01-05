@@ -187,6 +187,7 @@ class NormDense(keras.layers.Layer):
         super(NormDense, self).build(input_shape)
 
     def call(self, inputs, **kwargs):
+        # tf.print("tf.reduce_mean(self.w):", tf.reduce_mean(self.w))
         norm_w = K.l2_normalize(self.w, axis=0)
         norm_inputs = K.l2_normalize(inputs, axis=1)
         output = K.dot(norm_inputs, norm_w)
@@ -216,6 +217,46 @@ class NormDense(keras.layers.Layer):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
+
+@keras.utils.register_keras_serializable(package="keras_insightface")
+class NormDensePartialFC(NormDense):
+    def __init__(self, partial_fc_split=0, **kwargs):
+        super(NormDensePartialFC, self).__init__(**kwargs)
+        self.partial_fc_split = partial_fc_split
+        self.sub_units = self.units // self.partial_fc_split
+        self.splits = tf.convert_to_tensor([self.sub_units * (ii + 1) for ii in range(self.partial_fc_split)])
+
+    def build(self, embeddings_shape):
+        # print(f"{embeddings_shape = }")
+        # Drop class if cannot divided, keep output shape concurrent
+        self.sub_weights, self.sub_pads = [], []
+        for ii in range(self.partial_fc_split):
+            sub_weight = self.add_weight(
+                name="norm_dense_w_{}".format(ii),
+                shape=(embeddings_shape[-1], self.sub_units * self.loss_top_k),
+                initializer=self.init,
+                trainable=True,
+                regularizer=self.kernel_regularizer,
+            )
+            self.sub_weights.append(sub_weight)
+            self.sub_pads.append([[0, 0], [ii * self.sub_units, (self.partial_fc_split - ii - 1) * self.sub_units]])
+        self.padded_output_shape = self.compute_output_shape(embeddings_shape)
+
+    def call(self, embeddings, classes, **kwargs):
+        split_index = tf.argmax(classes[0] < self.splits)  # Classes is a label, not one-hot format
+        # tf.print("split_index:", split_index)
+        self.w = tf.gather(self.sub_weights, split_index)
+        normdense_out = super().call(embeddings)
+        pad = tf.gather(self.sub_pads, split_index)
+        output = tf.pad(normdense_out, pad)
+        output.set_shape(self.padded_output_shape)
+        return output
+
+    def get_config(self):
+        config = super(NormDensePartialFC, self).get_config()
+        config.update({"partial_fc_split": self.partial_fc_split})
+        return config
 
 
 def add_l2_regularizer_2_model(model, weight_decay, custom_objects={}, apply_to_batch_normal=False, apply_to_bias=False):

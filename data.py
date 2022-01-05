@@ -181,6 +181,45 @@ def show_batch_sample(ds, rows=8, basic_size=1):
     return fig
 
 
+def partial_fc_split_pick(image_names, image_classes, batch_size, split=2, debug=False):
+    total = len(image_classes)
+    classes = np.max(image_classes) + 1
+    splits = np.array([classes // split * ii for ii in range(split + 1)])  # Drop class if cannot divided, keep output shape concurrent
+
+    shuffle_indexes = np.random.permutation(total)
+    image_names, image_classes = image_names[shuffle_indexes], image_classes[shuffle_indexes]
+
+    picks = [np.logical_and(image_classes >= splits[ii], image_classes < splits[ii + 1]) for ii in range(split)]
+    if debug:
+        print(">>>> splits:", splits, ", total images in each split:", [ii.sum() for ii in picks])
+
+    indexes = np.arange(len(image_classes))
+    split_index = [indexes[ii][: ii.sum() // batch_size * batch_size].reshape(-1, batch_size) for ii in picks]
+    if debug:
+        print(">>>> After drop remainder:", [ii.shape for ii in split_index], ", prod:", [np.prod(ii.shape) for ii in split_index])
+    split_index = np.vstack(split_index)
+    np.random.shuffle(split_index)  # in place shuffle
+    split_index = split_index.ravel()  # flatten
+
+    """ Test """
+    if debug:
+        bb = image_classes[split_index]
+        rrs = []
+        for ii in range(bb.shape[0] // batch_size):
+            batch = bb[ii * batch_size : (ii + 1) * batch_size]
+            split_id = np.argmax(batch[0] < splits)
+            rrs.append(np.alltrue(np.logical_and(batch >= splits[split_id - 1], batch < splits[split_id])))
+        print(">>>> Total batches:", bb.shape[0] // batch_size, ", correctly split:", np.sum(rrs))
+
+    return image_names[split_index], image_classes[split_index]
+
+
+def partial_fc_split_gen(image_names, image_classes, batch_size, split=2, debug=False):
+    while True:
+        for image_name, image_class in zip(*partial_fc_split_pick(image_names, image_classes, batch_size, split, debug)):
+            yield (image_name, image_class)
+
+
 def prepare_dataset(
     data_path,
     image_names_reg=None,
@@ -192,6 +231,7 @@ def prepare_dataset(
     random_cutout_mask_area=0.0,
     mixup_alpha=0,
     image_per_class=0,
+    partial_fc_split=0,
     cache=False,
     shuffle_buffer_size=None,
     is_train=True,
@@ -215,13 +255,23 @@ def prepare_dataset(
     if len(embeddings) != 0 and teacher_model_interf is None:
         # dataset with embedding values
         print(">>>> embeddings: %s. This takes some time..." % (np.shape(embeddings),))
-        ds = tf.data.Dataset.from_tensor_slices((image_names, embeddings, image_classes))
+        ds = tf.data.Dataset.from_tensor_slices((image_names, embeddings, image_classes)).shuffle(buffer_size=total_images)
         process_func = lambda imm, emb, label: (tf_imread(imm), (emb, tf.one_hot(label, depth=classes, dtype=tf.int32)))
+    elif partial_fc_split != 0:
+        print(">>>> partial_fc_split provided:", partial_fc_split)
+        picked_images, _ = partial_fc_split_pick(image_names, image_classes, batch_size, split=partial_fc_split, debug=True)
+        total_images = picked_images.shape[0]
+        classes = classes // partial_fc_split * partial_fc_split
+        print(">>>> total images after pick: {}, classes: {}".format(total_images, classes))
+
+        gen_func = lambda: partial_fc_split_gen(image_names, image_classes, batch_size, split=partial_fc_split)
+        output_signature = (tf.TensorSpec(shape=(), dtype=tf.string), tf.TensorSpec(shape=(), dtype=tf.int64))
+        ds = tf.data.Dataset.from_generator(gen_func, output_signature=output_signature)
+        process_func = lambda imm, label: (tf_imread(imm), tf.one_hot(label, depth=classes, dtype=tf.int32))
     else:
-        ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes))
+        ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes)).shuffle(buffer_size=total_images)
         process_func = lambda imm, label: (tf_imread(imm), tf.one_hot(label, depth=classes, dtype=tf.int32))
 
-    ds = ds.shuffle(buffer_size=total_images)
     ds = ds.map(process_func, num_parallel_calls=AUTOTUNE)
 
     if is_train and random_status >= 0:
@@ -259,9 +309,13 @@ def prepare_dataset(
             emb_func = lambda imm, label: (imm, (teacher_model_interf(imm), label))
             ds = ds.map(emb_func, num_parallel_calls=AUTOTUNE)
 
+    if partial_fc_split != 0:
+        # Attanch classes in inputs for picking sub NormDense header
+        ds = ds.map(lambda imm, label: ((imm, tf.argmax(label, axis=-1, output_type=tf.int32)), label), num_parallel_calls=AUTOTUNE)
+
     ds = ds.prefetch(buffer_size=AUTOTUNE)
-    # steps_per_epoch = int(np.floor(total_images / float(batch_size)))
-    steps_per_epoch = len(ds)
+    steps_per_epoch = int(np.floor(total_images / float(batch_size)))
+    # steps_per_epoch = len(ds)
     return ds, steps_per_epoch
 
 
