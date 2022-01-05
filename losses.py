@@ -258,7 +258,7 @@ class MagFaceLoss(ArcfaceLossSimple):
 
         # MegFace loss_G, g = 1/(self.u_a**2) * x_norm + 1/(x_norm)
         regularizer_loss = self.regularizer_loss_scale * feature_norm + 1.0 / feature_norm
-        
+
         tf.print(
             " -",
             # " regularizer_loss: ",

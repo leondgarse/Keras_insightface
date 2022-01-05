@@ -215,7 +215,12 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("input_path", type=str, default=None, help="Could be: 1. Data path, containing images in class folders; 2. image folder path, containing multiple images; 3. jpg / png image path")
+    parser.add_argument(
+        "input_path",
+        type=str,
+        default=None,
+        help="Could be: 1. Data path, containing images in class folders; 2. image folder path, containing multiple images; 3. jpg / png image path",
+    )
     parser.add_argument("--use_scrfd", action="store_true", help="Use SCRFD instead of YoloV5FaceDetector")
     args = parser.parse_known_args(sys.argv[1:])[0]
 
