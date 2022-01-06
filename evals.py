@@ -38,12 +38,13 @@ class eval_callback(tf.keras.callbacks.Callback):
 
         self.is_distribute = False
         if tf.distribute.has_strategy():
-            self.is_distribute = True
             self.strategy = tf.distribute.get_strategy()
             self.num_replicas = self.strategy.num_replicas_in_sync
-            options = tf.data.Options()
-            options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
-            self.ds = self.strategy.experimental_distribute_dataset(self.ds.with_options(options))
+            if self.num_replicas > 1:
+                self.is_distribute = True
+                options = tf.data.Options()
+                options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+                self.ds = self.strategy.experimental_distribute_dataset(self.ds.with_options(options))
 
     def __do_predict__(self):
         embs = []
