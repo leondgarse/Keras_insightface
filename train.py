@@ -41,7 +41,7 @@ class Train:
         random_cutout_mask_area=0.0,  # ratio of randomly cutout bottom 2/5 area, regarding as ignoring mask area
         image_per_class=0,  # For triplet, image_per_class will be `4` if it's `< 4`
         mixup_alpha=0,  # mixup alpha, value in (0, 1] to enable
-        partial_fc_split=0,  # partial_fc test
+        partial_fc_split=0,  # set a int number like `2` / `4`, will build model and dataset with total classes split in `partial_fc_split` parts.
         teacher_model_interf=None,  # Teacher model to generate embedding data, used for distilling training.
         sam_rho=0,
     ):

@@ -234,6 +234,7 @@ class MagFaceLoss(ArcfaceLossSimple):
         self.use_cosface_margin = use_cosface_margin
         self.margin_scale = (max_margin - min_margin) / (max_feature_norm - min_feature_norm)
         self.regularizer_loss_scale = 1.0 / (self.max_feature_norm ** 2)
+        # np.set_printoptions(precision=4)
 
     def call(self, y_true, norm_logits_with_norm):
         # feature_norm is multiplied with -1 in NormDense layer, keeping low for not affecting accuracy metrics.
@@ -259,6 +260,7 @@ class MagFaceLoss(ArcfaceLossSimple):
         # MegFace loss_G, g = 1/(self.u_a**2) * x_norm + 1/(x_norm)
         regularizer_loss = self.regularizer_loss_scale * feature_norm + 1.0 / feature_norm
 
+        # tf.print(", arcface_loss:", tf.reduce_mean(arcface_loss), end="")
         tf.print(
             " -",
             # " regularizer_loss: ",
@@ -267,9 +269,9 @@ class MagFaceLoss(ArcfaceLossSimple):
             tf.reduce_mean(arcface_loss),
             ", margin mean: ",
             tf.reduce_mean(margin),
-            ", margin min: ",
+            ", min: ",
             tf.reduce_min(margin),
-            ", margin max: ",
+            ", max: ",
             tf.reduce_max(margin),
             # ", feature_norm min: ",
             # tf.reduce_min(feature_norm),

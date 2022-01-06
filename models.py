@@ -224,8 +224,8 @@ class NormDensePartialFC(NormDense):
     def __init__(self, partial_fc_split=0, **kwargs):
         super(NormDensePartialFC, self).__init__(**kwargs)
         self.partial_fc_split = partial_fc_split
-        self.sub_units = self.units // self.partial_fc_split
-        self.splits = tf.convert_to_tensor([self.sub_units * (ii + 1) for ii in range(self.partial_fc_split)])
+        # self.sub_units = self.units // self.partial_fc_split  # units is already divided by partial_fc_split
+        self.splits = tf.convert_to_tensor([self.units * (ii + 1) for ii in range(self.partial_fc_split)])
 
     def build(self, embeddings_shape):
         # print(f"{embeddings_shape = }")
@@ -234,24 +234,18 @@ class NormDensePartialFC(NormDense):
         for ii in range(self.partial_fc_split):
             sub_weight = self.add_weight(
                 name="norm_dense_w_{}".format(ii),
-                shape=(embeddings_shape[-1], self.sub_units * self.loss_top_k),
+                shape=(embeddings_shape[-1], self.units * self.loss_top_k),
                 initializer=self.init,
                 trainable=True,
                 regularizer=self.kernel_regularizer,
             )
             self.sub_weights.append(sub_weight)
-            self.sub_pads.append([[0, 0], [ii * self.sub_units, (self.partial_fc_split - ii - 1) * self.sub_units]])
-        self.padded_output_shape = self.compute_output_shape(embeddings_shape)
 
     def call(self, embeddings, classes, **kwargs):
         split_index = tf.argmax(classes[0] < self.splits)  # Classes is a label, not one-hot format
         # tf.print("split_index:", split_index)
         self.w = tf.gather(self.sub_weights, split_index)
-        normdense_out = super().call(embeddings)
-        pad = tf.gather(self.sub_pads, split_index)
-        output = tf.pad(normdense_out, pad)
-        output.set_shape(self.padded_output_shape)
-        return output
+        return super().call(embeddings)
 
     def get_config(self):
         config = super(NormDensePartialFC, self).get_config()
