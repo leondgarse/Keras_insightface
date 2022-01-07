@@ -184,7 +184,7 @@ def show_batch_sample(ds, rows=8, basic_size=1):
 def partial_fc_split_pick(image_names, image_classes, batch_size, split=2, debug=False):
     total = len(image_classes)
     classes = np.max(image_classes) + 1
-    splits = np.array([classes // split * ii for ii in range(split + 1)])   # Drop class if cannot divided, keep output shape concurrent
+    splits = np.array([classes // split * ii for ii in range(split + 1)])  # Drop class if cannot divided, keep output shape concurrent
 
     shuffle_indexes = np.random.permutation(total)
     image_names, image_classes = image_names[shuffle_indexes], image_classes[shuffle_indexes]
@@ -194,7 +194,7 @@ def partial_fc_split_pick(image_names, image_classes, batch_size, split=2, debug
         print(">>>> splits:", splits, ", total images in each split:", [ii.sum() for ii in picks])
 
     indexes = np.arange(len(image_classes))
-    split_index = [indexes[ii][:ii.sum() // batch_size * batch_size].reshape(-1, batch_size) for ii in picks]
+    split_index = [indexes[ii][: ii.sum() // batch_size * batch_size].reshape(-1, batch_size) for ii in picks]
     if debug:
         print(">>>> After drop remainder:", [ii.shape for ii in split_index], ", prod:", [np.prod(ii.shape) for ii in split_index])
     split_index = np.vstack(split_index)
@@ -264,7 +264,7 @@ def prepare_dataset(
         sub_classes = classes // partial_fc_split
         print(">>>> total images after pick: {}, sub_classes: {}".format(total_images, sub_classes))
 
-        gen_func = lambda : partial_fc_split_gen(image_names, image_classes, batch_size, split=partial_fc_split)
+        gen_func = lambda: partial_fc_split_gen(image_names, image_classes, batch_size, split=partial_fc_split)
         output_signature = (tf.TensorSpec(shape=(), dtype=tf.string), tf.TensorSpec(shape=(), dtype=tf.int64))
         ds = tf.data.Dataset.from_generator(gen_func, output_signature=output_signature)
         process_func = lambda imm, label: (tf_imread(imm), tf.one_hot(label % sub_classes, depth=sub_classes, dtype=tf.int32))
