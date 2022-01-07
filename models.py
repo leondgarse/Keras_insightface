@@ -10,7 +10,7 @@ def print_buildin_models():
     MXNet version resnet: mobilenet_m1, r18, r34, r50, r100, r101, se_r34, se_r50, se_r100
     Keras application: mobilenet, mobilenetv2, resnet50, resnet50v2, resnet101, resnet101v2, resnet152, resnet152v2
     EfficientNet: efficientnetb[0-7], efficientnetl2, efficientnetv2b[1-3], efficientnetv2[t, s, m, l, xl]
-    Custom 1: ghostnet, mobilefacenet, mobilenetv3_small, mobilenetv3_large, se_mobilefacenet, se_resnext
+    Custom 1: ghostnet, mobilefacenet, mobilenetv3_small, mobilenetv3_large, se_mobilefacenet, se_resnext, vargface
     Or other names from keras.applications like DenseNet121 / InceptionV3 / NASNetMobile / VGG19.
     """,
         end="",
@@ -75,6 +75,10 @@ def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet"
         from backbones import ghost_model
 
         xx = ghost_model.GhostNet(input_shape=input_shape, include_top=False, width=1.3, **kwargs)
+    elif name_lower == "vargface":
+        from backbones import vargface
+
+        xx = vargface.VargFace(input_shape=input_shape, **kwargs)
     elif hasattr(keras.applications, name):
         model_class = getattr(keras.applications, name)
         xx = model_class(weights=weights, include_top=False, input_shape=input_shape, **kwargs)
@@ -119,7 +123,9 @@ def buildin_models(
     nn = xx.outputs[0]
 
     if add_pointwise_conv:  # Model using `pointwise_conv + GDC` / `pointwise_conv + E` is smaller than `E`
-        nn = keras.layers.Conv2D(512, 1, use_bias=False, padding="valid", name="pw_conv")(nn)
+        filters = nn.shape[-1] // 2 if add_pointwise_conv == -1 else 512  # Compitable with previous models...
+        nn = keras.layers.Conv2D(filters, 1, use_bias=False, padding="valid", name="pw_conv")(nn)
+        # nn = keras.layers.Conv2D(nn.shape[-1] // 2, 1, use_bias=False, padding="valid", name="pw_conv")(nn)
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="pw_bn")(nn)
         if pointwise_conv_act.lower() == "prelu":
             nn = keras.layers.PReLU(shared_axes=[1, 2], name="pw_" + pointwise_conv_act)(nn)
@@ -142,7 +148,7 @@ def buildin_models(
         nn = keras.layers.Dense(emb_shape, use_bias=use_bias, kernel_initializer="glorot_normal", name="GAP_dense")(nn)
     elif output_layer == "GDC":
         """ GDC """
-        nn = keras.layers.DepthwiseConv2D(int(nn.shape[1]), depth_multiplier=1, use_bias=False, name="GDC_dw")(nn)
+        nn = keras.layers.DepthwiseConv2D(int(nn.shape[1]), use_bias=False, name="GDC_dw")(nn)
         # nn = keras.layers.Conv2D(512, int(nn.shape[1]), use_bias=False, padding="valid", groups=512)(nn)
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="GDC_batchnorm")(nn)
         if dropout > 0 and dropout < 1:
