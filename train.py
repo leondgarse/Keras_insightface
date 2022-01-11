@@ -484,3 +484,4 @@ class Train:
             if self.model is None or self.model.stop_training == True:
                 print(">>>> But it's an early stop, break...")
                 break
+        return initial_epoch

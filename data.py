@@ -274,25 +274,25 @@ def prepare_dataset(
 
     ds = ds.map(process_func, num_parallel_calls=AUTOTUNE)
 
+    if random_cutout_mask_area > 0:
+        print(">>>> random_cutout_mask_area provided:", random_cutout_mask_area)
+        mask_height = img_shape[0] * 2 // 5
+        mask_func = lambda imm, label: (
+            tf.cond(
+                tf.random.uniform(()) < random_cutout_mask_area,
+                lambda: tf.concat([imm[:-mask_height], tf.zeros_like(imm[-mask_height:]) + 128], axis=0),
+                lambda: imm,
+            ),
+            label,
+        )
+        ds = ds.map(mask_func, num_parallel_calls=AUTOTUNE)
+
     if is_train and random_status >= 0:
         random_process_image = RandomProcessImage(img_shape, random_status, random_crop)
         random_process_func = lambda xx, yy: (random_process_image.process(xx), yy)
         ds = ds.map(random_process_func, num_parallel_calls=AUTOTUNE)
 
     ds = ds.batch(batch_size, drop_remainder=True)  # Use batch --> map has slightly effect on dataset reading time, but harm the randomness
-    if random_cutout_mask_area > 0:
-        print(">>>> random_cutout_mask_area provided:", random_cutout_mask_area)
-        mask_height = img_shape[0] * 2 // 5
-        mask_func = lambda images, labels: (
-            tf.cond(
-                tf.random.uniform(()) < random_cutout_mask_area,
-                lambda: tf.concat([images[:, :-mask_height], tf.zeros_like(images[:, -mask_height:]) + 128], axis=1),
-                lambda: images,
-            ),
-            labels,
-        )
-        ds = ds.map(mask_func, num_parallel_calls=AUTOTUNE)
-
     if mixup_alpha > 0 and mixup_alpha <= 1:
         print(">>>> mixup_alpha provided:", mixup_alpha)
         ds = ds.map(lambda xx, yy: mixup((xx - 127.5) * 0.0078125, yy, alpha=mixup_alpha))
