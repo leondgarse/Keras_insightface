@@ -64,7 +64,7 @@ def tf_imread(file_path):
 
 
 class RandomProcessImage:
-    def __init__(self, img_shape=(112, 112), random_status=2, random_crop=None):
+    def __init__(self, img_shape=(112, 112), random_status=2, random_crop=None, random_cutout_mask_area=0):
         self.img_shape, self.random_status, self.random_crop = img_shape[:2], random_status, random_crop
         if random_status >= 100:
             magnitude = 5 * random_status / 100
@@ -78,10 +78,25 @@ class RandomProcessImage:
             import augment
 
             aa = augment.RandAugment(magnitude=magnitude, cutout_const=40)
-            aa.available_ops = ["AutoContrast", "Equalize", "Color", "Contrast", "Brightness", "Sharpness", "Cutout"]
-            self.process = lambda img: aa.distort(tf.image.random_flip_left_right(img))
+            if random_cutout_mask_area > 0:
+                print(">>>> random_cutout_mask_area provided:", random_cutout_mask_area)
+                # aa.available_ops = ["AutoContrast", "Equalize", "Color", "Contrast", "Brightness", "Sharpness"]
+                # random_cutout = 1 / len(aa.available_ops)
+                # self.process = lambda img: aa.distort(
+                #     random_cutout_or_cutout_mask(tf.image.random_flip_left_right(img), img_shape, random_cutout_mask_area, random_cutout)
+                # )
+                aa.available_ops = ["AutoContrast", "Equalize", "Color", "Contrast", "Brightness", "Sharpness", "Cutout"]
+                self.process = lambda img: aa.distort(
+                    random_cutout_or_cutout_mask(tf.image.random_flip_left_right(img), img_shape, random_cutout_mask_area, random_cutout=0)
+                )
+            else:
+                aa.available_ops = ["AutoContrast", "Equalize", "Color", "Contrast", "Brightness", "Sharpness", "Cutout"]
+                self.process = lambda img: aa.distort(tf.image.random_flip_left_right(img))
         else:
-            self.process = lambda img: self.tf_buildin_image_random(img)
+            if random_cutout_mask_area > 0:
+                self.process = lambda img: self.tf_buildin_image_random(random_cutout_or_cutout_mask(img, random_cutout_mask_area, random_cutout=0))
+            else:
+                self.process = lambda img: self.tf_buildin_image_random(img)
 
     def tf_buildin_image_random(self, img):
         if self.random_status >= 0:
@@ -100,6 +115,38 @@ class RandomProcessImage:
         if self.random_status >= 1:
             img = tf.clip_by_value(img, 0.0, 255.0)
         return img
+
+
+def random_cutout_or_cutout_mask(image, image_shape, random_cutout_mask_area=0.3, random_cutout=0, pad_size=20, replace=128):
+    from augment import cutout
+
+    # image_hh, image_ww = image.shape[:2]
+    image_hh, image_ww = image_shape[:2]
+    # mask_height = img_shape[0] * 3 // 5
+    min_hh, max_hh = int(float(image_hh) * 0.55), int(float(image_ww) * 0.7)
+    random_height = lambda: tf.random.uniform((), min_hh, max_hh, dtype=tf.int32)
+
+    cutout_func = lambda imm: tf.cond(
+        tf.random.uniform(()) < random_cutout,
+        lambda: cutout(imm, pad_size=pad_size, replace=replace),
+        lambda: imm,
+    )
+
+    if random_cutout > 0:
+        mask_func = lambda imm: tf.cond(
+            tf.random.uniform(()) < random_cutout_mask_area,
+            # lambda: tf.concat([imm[:mask_height], tf.zeros_like(imm[mask_height:]) + 128], axis=0),
+            lambda: tf.image.pad_to_bounding_box(imm[: random_height()] - replace, 0, 0, image_hh, image_ww) + replace,
+            lambda: cutout_func(cutout_func(imm)),  # randaug num_layers=2
+        )
+    else:
+        mask_func = lambda imm: tf.cond(
+            tf.random.uniform(()) < random_cutout_mask_area,
+            # lambda: tf.concat([imm[:mask_height], tf.zeros_like(imm[mask_height:]) + 128], axis=0),
+            lambda: tf.image.pad_to_bounding_box(imm[: random_height()] - replace, 0, 0, image_hh, image_ww) + replace,
+            lambda: imm,
+        )
+    return mask_func(image)
 
 
 def sample_beta_distribution(size, concentration_0=0.4, concentration_1=0.4):
@@ -274,23 +321,8 @@ def prepare_dataset(
 
     ds = ds.map(process_func, num_parallel_calls=AUTOTUNE)
 
-    if random_cutout_mask_area > 0:
-        print(">>>> random_cutout_mask_area provided:", random_cutout_mask_area)
-        # mask_height = img_shape[0] * 2 // 5
-        random_height = lambda: tf.random.uniform((), int(img_shape[0] * 0.55), int(img_shape[0] * 0.7), dtype=tf.int32)
-        mask_func = lambda imm, label: (
-            tf.cond(
-                tf.random.uniform(()) < random_cutout_mask_area,
-                # lambda: tf.concat([imm[:-mask_height], tf.zeros_like(imm[-mask_height:]) + 128], axis=0),
-                lambda: tf.image.pad_to_bounding_box(imm[:random_height()] - 128, 0, 0, img_shape[0], img_shape[1]) + 128,
-                lambda: imm,
-            ),
-            label,
-        )
-        ds = ds.map(mask_func, num_parallel_calls=AUTOTUNE)
-
     if is_train and random_status >= 0:
-        random_process_image = RandomProcessImage(img_shape, random_status, random_crop)
+        random_process_image = RandomProcessImage(img_shape, random_status, random_crop, random_cutout_mask_area)
         random_process_func = lambda xx, yy: (random_process_image.process(xx), yy)
         ds = ds.map(random_process_func, num_parallel_calls=AUTOTUNE)
 

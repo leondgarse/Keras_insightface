@@ -213,6 +213,7 @@ class CosFaceLoss(ArcfaceLossSimple):
 # [MagFace: A Universal Representation for Face Recognition and Quality Assessment](https://arxiv.org/pdf/2103.06627.pdf)
 @keras.utils.register_keras_serializable(package="keras_insightface")
 class MagFaceLoss(ArcfaceLossSimple):
+    """ Another set for fine-tune is: min_feature_norm, max_feature_norm, min_margin, max_margin, regularizer_loss_lambda = 1, 51, 0.45, 1, 5 """
     def __init__(
         self,
         min_feature_norm=10.0,
