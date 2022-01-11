@@ -276,11 +276,13 @@ def prepare_dataset(
 
     if random_cutout_mask_area > 0:
         print(">>>> random_cutout_mask_area provided:", random_cutout_mask_area)
-        mask_height = img_shape[0] * 2 // 5
+        # mask_height = img_shape[0] * 2 // 5
+        random_height = lambda: tf.random.uniform((), int(img_shape[0] * 0.55), int(img_shape[0] * 0.7), dtype=tf.int32)
         mask_func = lambda imm, label: (
             tf.cond(
                 tf.random.uniform(()) < random_cutout_mask_area,
-                lambda: tf.concat([imm[:-mask_height], tf.zeros_like(imm[-mask_height:]) + 128], axis=0),
+                # lambda: tf.concat([imm[:-mask_height], tf.zeros_like(imm[-mask_height:]) + 128], axis=0),
+                lambda: tf.image.pad_to_bounding_box(imm[:random_height()] - 128, 0, 0, img_shape[0], img_shape[1]) + 128,
                 lambda: imm,
             ),
             label,
