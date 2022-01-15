@@ -107,6 +107,8 @@ class BaseDetector:
 
 
 class YoloV5FaceDetector(BaseDetector):
+    """ Yolov5-face Ported from https://github.com/deepcam-cn/yolov5-face """
+
     def __init__(self, model_path=DEFAULT_DETECTOR, anchors=DEFAULT_ANCHORS, strides=DEFAULT_STRIDES):
         if isinstance(model_path, str) and model_path.startswith("http"):
             file_name = os.path.basename(model_path)
@@ -175,6 +177,8 @@ class YoloV5FaceDetector(BaseDetector):
 
 
 class SCRFD(BaseDetector):
+    """ SCRFD from https://github.com/deepinsight/insightface """
+
     def __init__(self, det_shape=640):
         self.model = self.download_and_prepare_det()
         self.det_shape = (det_shape, det_shape)
