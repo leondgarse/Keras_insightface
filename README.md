@@ -97,6 +97,7 @@
     for gpu in gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
     ```
+  - [All from scratch #71](https://github.com/leondgarse/Keras_insightface/discussions/71) is an explanation of the basic implementation line by line from scratch, depending only on basic packages like `tensorflow` / `numpy`.
 ## Beforehand Data Prepare
   - **Training Data** in this project is downloaded from [Insightface Dataset Zoo](https://github.com/deepinsight/insightface/wiki/Dataset-Zoo)
   - **Evaluating data** is `LFW` `CFP-FP` `AgeDB-30` bin files included in `MS1M-ArcFace` dataset

@@ -88,7 +88,8 @@ class eval_callback(tf.keras.callbacks.Callback):
             embs = self.__do_predict__()
 
         # tf.print("embs.shape: ", embs.shape)
-        if np.isnan(embs).sum() != 0:
+        # if np.isnan(embs).sum() != 0:
+        if not np.alltrue(np.isfinite(embs)):
             tf.print("NAN in embs, not a good one")
             return
         self.embs = embs
