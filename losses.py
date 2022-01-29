@@ -563,7 +563,7 @@ class ArcBatchHardTripletLoss(TripletLossWapper):
             tf.reduce_mean(pos_hd_margin_valid),
             "neg:",
             tf.reduce_mean(neg_hardest_dists),
-            end="",
+            end="\r",
         )
         # basic_loss = neg_hardest_dists - pos_hd_margin_valid + alpha
         basic_loss = neg_hardest_dists - pos_hd_margin_valid
@@ -668,6 +668,40 @@ class BatchAllTripletLoss(TripletLossWapper):
         neg_dists_loss = tf.reduce_sum(neg_dists_valid, -1) / (tf.reduce_sum(tf.cast(neg_valid_mask, dtype=tf.float32), -1) + 1)
         return pos_dists_loss + neg_dists_loss
 
+@keras.utils.register_keras_serializable(package="keras_insightface")
+class OfflineTripletLoss(TripletLossWapper):
+    def __calculate_triplet_loss__(self, labels, embeddings, alpha):
+        norm_emb = tf.nn.l2_normalize(embeddings, 1)
+        # [anchor, pos, neg, anchor, pos, neg] -> [pos, pos], [neg, neg]]
+        anchor_emb, pos_emb, neg_emb = tf.split(tf.reshape(norm_emb, [-1, 3, norm_emb.shape[-1]]), 3, axis=1)
+        anchor_emb, pos_emb, neg_emb = anchor_emb[:, 0], pos_emb[:, 0], neg_emb[:, 0]
+        # anchor_emb, pos_emb, neg_emb = norm_emb[::3], norm_emb[1::3], norm_emb[2::3]
+
+        pos_dist = tf.reduce_sum(anchor_emb * pos_emb, -1)
+        neg_dist = tf.reduce_sum(anchor_emb * neg_emb, -1)
+        basic_loss = neg_dist - pos_dist + alpha
+        return tf.maximum(basic_loss, 0.0)
+
+@keras.utils.register_keras_serializable(package="keras_insightface")
+class OfflineArcTripletLoss(TripletLossWapper):
+    def __init__(self, alpha=0.35, **kwargs):
+        super().__init__(alpha=alpha, **kwargs)
+        self.threshold = tf.cos(np.pi - alpha)
+        self.theta_min = -2
+
+    def __calculate_triplet_loss__(self, labels, embeddings, alpha):
+        norm_emb = tf.nn.l2_normalize(embeddings, 1)
+        # [anchor, pos, neg, anchor, pos, neg] -> [pos, pos], [neg, neg]]
+        anchor_emb, pos_emb, neg_emb = norm_emb[::3], norm_emb[1::3], norm_emb[2::3]
+
+        pos_dist = tf.reduce_sum(tf.multiply(anchor_emb, pos_emb), -1)
+        neg_dist = tf.reduce_sum(tf.multiply(anchor_emb, neg_emb), -1)
+
+        pos_margin = tf.cos(tf.acos(pos_dist) + self.alpha)
+        pos_valid = tf.where(pos_margin > self.threshold, pos_margin, self.theta_min - pos_margin)
+
+        basic_loss = neg_dist - pos_valid
+        return tf.maximum(basic_loss, 0.0)
 
 @keras.utils.register_keras_serializable(package="keras_insightface")
 def distiller_loss_euclidean(true_emb, pred_emb):
@@ -676,8 +710,12 @@ def distiller_loss_euclidean(true_emb, pred_emb):
 
 @keras.utils.register_keras_serializable(package="keras_insightface")
 def distiller_loss_cosine(true_emb, pred_emb):
-    true_emb_normed = tf.nn.l2_normalize(true_emb, axis=-1)
-    pred_emb_normed = tf.nn.l2_normalize(pred_emb, axis=-1)
+    # tf.print(true_emb.shape, true_emb.dtype, pred_emb.shape, pred_emb.dtype)
+    norm_one = tf.sqrt(1.0 / tf.cast(true_emb.shape[-1], true_emb.dtype))
+    true_emb = tf.where(tf.math.is_finite(true_emb), true_emb, tf.zeros_like(true_emb) + norm_one)
+    true_emb_normed = tf.nn.l2_normalize(true_emb, epsilon=1e-5, axis=-1)
+    pred_emb_normed = tf.nn.l2_normalize(pred_emb, epsilon=1e-5, axis=-1)
+    # tf.assert_equal(tf.math.is_nan(tf.reduce_mean(true_emb)), False, message='nan in true_emb_normed')
     loss = 1 - tf.reduce_sum(pred_emb_normed * true_emb_normed, axis=-1)
     return loss
 

@@ -30,6 +30,7 @@ class Train:
         compile=True,
         output_weight_decay=1,  # L2 regularizer for output layer, 0 for None, >=1 for value in basic_model, (0, 1) for specific value
         custom_objects={},
+        pretrained=None,    # If reloat weights from another h5 file
         batch_size=128,
         lr_base=0.001,
         lr_decay=0.05,  # for cosine it's m_mul, or it's decay_rate for exponential or constant
@@ -40,8 +41,9 @@ class Train:
         random_status=0,
         random_cutout_mask_area=0.0,  # ratio of randomly cutout bottom 2/5 area, regarding as ignoring mask area
         image_per_class=0,  # For triplet, image_per_class will be `4` if it's `< 4`
+        samples_per_mining=0,   # **Not working well**. Set a value > 0 will use offline_triplet_mining dataset
         mixup_alpha=0,  # mixup alpha, value in (0, 1] to enable
-        partial_fc_split=0,  # set a int number like `2` / `4`, will build model and dataset with total classes split in `partial_fc_split` parts.
+        partial_fc_split=0,  # **Not working well**. Set a int number like `2`, will build model and dataset with total classes split in parts.
         teacher_model_interf=None,  # Teacher model to generate embedding data, used for distilling training.
         sam_rho=0,
     ):
@@ -129,7 +131,7 @@ class Train:
         self.default_optimizer = "adam"
 
         self.data_path, self.random_status, self.image_per_class, self.mixup_alpha = data_path, random_status, image_per_class, mixup_alpha
-        self.random_cutout_mask_area, self.partial_fc_split = random_cutout_mask_area, partial_fc_split
+        self.random_cutout_mask_area, self.partial_fc_split, self.samples_per_mining = random_cutout_mask_area, partial_fc_split, samples_per_mining
         self.train_ds, self.steps_per_epoch, self.classes, self.is_triplet_dataset = None, None, 0, False
         self.teacher_model_interf, self.is_distill_ds = teacher_model_interf, False
         self.distill_emb_map_layer = None
@@ -141,7 +143,8 @@ class Train:
 
     def __init_dataset__(self, type, emb_loss_names):
         init_as_triplet = self.triplet in emb_loss_names or type == self.triplet
-        if self.train_ds is not None and init_as_triplet == self.is_triplet_dataset and self.is_distill_ds == False:
+        is_offline_triplet = self.samples_per_mining > 0
+        if self.train_ds is not None and init_as_triplet == self.is_triplet_dataset and not self.is_distill_ds and not is_offline_triplet:
             return
 
         dataset_params = {
@@ -153,7 +156,13 @@ class Train:
             "mixup_alpha": self.mixup_alpha,
             "teacher_model_interf": self.teacher_model_interf,
         }
-        if init_as_triplet:
+
+        if is_offline_triplet:
+            print(">>>> Init offline triplet dataset...")
+            aa = data.Triplet_dataset_offline(basic_model=self.basic_model, samples_per_mining=self.samples_per_mining, **dataset_params)
+            self.train_ds, self.steps_per_epoch = aa.ds, aa.steps_per_epoch
+            self.is_triplet_dataset = False
+        elif init_as_triplet:
             print(">>>> Init triplet dataset...")
             if self.data_path.endswith(".tfrecord"):
                 print(">>>> Combining tfrecord dataset with triplet is NOT recommended.")
@@ -227,6 +236,13 @@ class Train:
                 self.callbacks.append(wd_callback)  # should be after lr_scheduler
 
     def __init_model__(self, type, loss_top_k=1, is_magface_loss=False):
+        if self.pretrained is not None:
+            if self.model is None:
+                self.basic_model.load_weights(self.pretrained)
+            else:
+                self.model.load_weights(self.pretrained)
+            self.pretrained = None
+
         inputs = self.basic_model.inputs[0]
         embedding = self.basic_model.outputs[0]
         is_multi_output = lambda mm: len(mm.outputs) != 1 or isinstance(mm.layers[-1], keras.layers.Concatenate)
@@ -246,7 +262,7 @@ class Train:
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
                 softmax_logits.build(embedding.shape)
                 weight_cur = softmax_logits.get_weights()
-                weight_pre = self.model.layers[-2].get_weights()
+                weight_pre = self.model.layers[-1].get_weights()
                 if len(weight_cur) == len(weight_pre) and weight_cur[0].shape == weight_pre[0].shape:
                     print(">>>> Reload previous %s weight..." % (self.model.output_names[-1]))
                     softmax_logits.set_weights(weight_pre)
@@ -267,7 +283,7 @@ class Train:
             classes_inputs = keras.layers.Input([], dtype="int32", name="classes_inputs")
             output_fp32 = partial_arcface_logits(embedding, classes_inputs)
             self.model = keras.models.Model([inputs, classes_inputs], output_fp32)
-        elif type == self.arcface and (self.model == None or self.model.output_names[-1] != self.arcface):
+        elif type == self.arcface and (self.model == None or self.model.output_names[-1] != self.arcface or self.model.layers[-1].append_norm != is_magface_loss):
             print(">>>> Add arcface layer, loss_top_k={}, is_magface_loss={}...".format(loss_top_k, is_magface_loss))
             arcface_logits = models.NormDense(
                 self.classes, output_kernel_regularizer, loss_top_k, append_norm=is_magface_loss, name=self.arcface, dtype="float32"
@@ -275,7 +291,7 @@ class Train:
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
                 arcface_logits.build(embedding.shape)
                 weight_cur = arcface_logits.get_weights()
-                weight_pre = self.model.layers[-2].get_weights()
+                weight_pre = self.model.layers[-1].get_weights()
                 if len(weight_cur) == len(weight_pre) and weight_cur[0].shape == weight_pre[0].shape:
                     print(">>>> Reload previous %s weight..." % (self.model.output_names[-1]))
                     arcface_logits.set_weights(weight_pre)
@@ -466,7 +482,9 @@ class Train:
         print(">>>> Train %s DONE!!! epochs = %s, model.stop_training = %s" % (type, self.model.history.epoch, self.model.stop_training))
         print(">>>> My history:")
         self.my_history.print_hist()
-        print()
+        latest_save_path = os.path.join('checkpoints', os.path.splitext(self.save_path)[0] + '_basic_model_latest.h5')
+        print(">>>> Saving latest basic model to:", latest_save_path)
+        self.basic_model.save(latest_save_path)
 
     def train(self, train_schedule, initial_epoch=0):
         train_schedule = [train_schedule] if isinstance(train_schedule, dict) else train_schedule

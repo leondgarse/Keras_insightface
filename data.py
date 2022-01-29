@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from skimage.io import imread
+from tqdm import tqdm
 
 
 class ImageClassesRule_map:
@@ -50,6 +51,7 @@ def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None)
         image_classes = [image_classes_rule(ii) for ii in image_names]
         embeddings = np.array([])
         np.savez_compressed(dest_pickle, image_names=image_names, image_classes=image_classes)
+        image_names, image_classes = np.array(image_names), np.array(image_classes)
     classes = np.max(image_classes) + 1 if len(image_classes) > 0 else 0
     return image_names, image_classes, embeddings, classes, dest_pickle
 
@@ -220,11 +222,12 @@ def show_batch_sample(ds, rows=8, basic_size=1):
 
     aa, bb = ds.as_numpy_iterator().next()
     aa = aa / 2 + 0.5
-    columns = aa.shape[0] // 8
+    columns = aa.shape[0] // rows
     fig = plt.figure(figsize=(columns * basic_size, rows * basic_size))
     plt.imshow(np.vstack([np.hstack(aa[ii * columns : (ii + 1) * columns]) for ii in range(rows)]))
     plt.axis("off")
     plt.tight_layout()
+    plt.show()
     return fig
 
 
@@ -417,7 +420,7 @@ class Triplet_dataset:
         image_per_class = max(4, image_per_class)
         pick, _ = pick_by_image_per_class(image_classes, image_per_class)
         image_names, image_classes = image_names[pick].astype(str), image_classes[pick]
-        self.classes = classes
+        self.image_classes, self.classes = image_classes, classes
 
         image_dataframe = pd.DataFrame({"image_names": image_names, "image_classes": image_classes})
         self.image_dataframe = image_dataframe.groupby("image_classes").apply(lambda xx: xx.image_names.values)
@@ -473,3 +476,119 @@ class Triplet_dataset:
             for ii in image_data:
                 yield (ii, self.teacher_embeddings[ii], self.image_classes_rule(ii))
             # return ((ii, self.teacher_embeddings[ii], int(ii.split(os.path.sep)[-2])) for ii in image_data)
+
+
+class Triplet_dataset_offline:
+    def __init__(
+        self,
+        data_path,
+        image_names_reg=None,
+        image_classes_rule=None,
+        batch_size=48,
+        basic_model=None,
+        image_per_class=4,
+        alpha=0.35,  # Not using
+        samples_per_mining=-1,
+        img_shape=(112, 112, 3),
+        random_status=3,
+        random_crop=(100, 100, 3),
+        **kwargs,
+    ):
+        AUTOTUNE = tf.data.experimental.AUTOTUNE
+        self.image_classes_rule = ImageClassesRule_map(data_path) if image_classes_rule is None else image_classes_rule
+        image_names, image_classes, embeddings, classes, _ = pre_process_folder(data_path, image_names_reg, self.image_classes_rule)
+        image_per_class = max(4, image_per_class)
+        pick, _ = pick_by_image_per_class(image_classes, image_per_class)
+        image_names, image_classes = image_names[pick].astype(str), image_classes[pick]
+        self.image_names, self.image_classes, self.classes = image_names, image_classes, classes
+        self.basic_model, self.alpha = basic_model, alpha
+        # self.clone_basic_model = tf.keras.models.model_from_json(basic_model.to_json())
+        self.clone_basic_model = tf.keras.models.Model().from_config(basic_model.get_config())
+        self.clone_basic_model.trainable = False
+        if samples_per_mining > 1:
+            self.samples_per_mining = samples_per_mining // image_per_class
+        elif samples_per_mining > 0:
+            self.samples_per_mining = int(image_names.shape[0] * samples_per_mining) // image_per_class
+        else:
+            self.samples_per_mining = -1
+
+        image_dataframe = pd.DataFrame({"image_names": image_names, "image_classes": image_classes})
+        self.image_dataframe = image_dataframe.groupby("image_classes").apply(lambda xx: xx.image_names.values)
+        self.split_func = lambda xx: np.array(np.split(np.random.permutation(xx)[: len(xx) // image_per_class * image_per_class], len(xx) // image_per_class))
+        self.image_per_class = image_per_class
+        self.batch_size = batch_size // 3 * 3
+        self.img_shape = img_shape[:2]
+        self.channels = img_shape[2] if len(img_shape) > 2 else 3
+        print(">>>> The final train_dataset batch will be %s" % ([self.batch_size, *self.img_shape, self.channels]))
+
+        one_hot_label = lambda label: tf.one_hot(label, depth=classes, dtype=tf.int32)
+        random_process_image = RandomProcessImage(img_shape, random_status, random_crop)
+        random_imread = lambda imm: random_process_image.process(tf_imread(imm))
+        output_signature = (tf.TensorSpec(shape=(), dtype=tf.string), tf.TensorSpec(shape=(), dtype=tf.int64))
+        ds = tf.data.Dataset.from_generator(self.offline_triplet_mining, output_signature=output_signature).repeat()
+        process_func = lambda imm, label: (random_imread(imm), one_hot_label(label))
+        ds = ds.map(process_func, num_parallel_calls=AUTOTUNE)
+
+        ds = ds.batch(self.batch_size, drop_remainder=False)
+        ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
+        self.ds = ds.prefetch(buffer_size=AUTOTUNE)
+
+        # steps_per_epoch is not certain
+        total = self.samples_per_mining * image_per_class if self.samples_per_mining > 0 else len(image_classes)
+        print(">>>> total:", total)
+        self.steps_per_epoch = int(np.ceil(3 * total / float(self.batch_size)))
+
+    def offline_triplet_mining(self):
+        if self.samples_per_mining > 0:
+            shuffle_dataset = self.image_dataframe.map(self.split_func)
+            image_names = np.random.permutation(np.vstack(shuffle_dataset.values))[:self.samples_per_mining].flatten()
+        else:
+            image_names = self.image_names
+        image_names = np.random.permutation(image_names)
+
+        AUTOTUNE = tf.data.experimental.AUTOTUNE
+        ds = tf.data.Dataset.from_tensor_slices(image_names)
+        ds = ds.map(lambda xx: (tf_imread(xx) - 127.5) * 0.0078125).batch(self.batch_size).prefetch(buffer_size=AUTOTUNE)
+
+        """ Calculate all embedding values """
+        embs = tf.zeros([0, self.basic_model.output_shape[-1]])
+        self.clone_basic_model.set_weights(self.basic_model.get_weights())
+        # bb = tf.keras.models.clone_model(self.basic_model)
+        # self.basic_model.trainable = False
+        for batch in tqdm(ds, "Triplet Embedding", total=len(ds)):
+            emb = self.clone_basic_model(batch)
+            emb = tf.linalg.normalize(emb, axis=-1)[0]
+            embs = tf.concat([embs, emb], axis=0)
+        # self.basic_model.trainable = True
+        # print(">>>> Converting to array...")
+        labels = np.array([self.image_classes_rule(ii) for ii in image_names])
+
+        """ Mine anchors, positives, negatives """
+        # print(">>>> Into mining...")
+        # return self.mine_triplet_data_pairs_hardest_gen(embs, labels, image_names)
+
+        # def mine_triplet_data_pairs_hardest_gen(self, embs, labels, image_names):
+        # for idx, label in tqdm(enumerate(labels), "Triplet Mining"):
+        total = labels.shape[0]
+        batch_size = self.batch_size
+        total_batch = int(np.ceil(total / batch_size))
+        for batch_id in range(total_batch):
+            bss, bee = batch_id * batch_size, (batch_id + 1) * batch_size
+            bee = min(bee, total)
+            dists = tf.matmul(embs, embs[bss: bee], transpose_b=True)
+
+            cur_labels = labels[bss: bee]
+            cur_image_names = image_names[bss: bee]
+            pos_mask = tf.equal(tf.expand_dims(labels, 1), tf.expand_dims(cur_labels, 0))
+            pos_dists = tf.where(pos_mask, dists, tf.ones_like(dists))
+            hardest_pos_idxes = tf.argmin(pos_dists, axis=0)
+
+            neg_dists = tf.where(pos_mask, tf.zeros_like(dists) - 1, dists)
+            hardest_neg_idxes = tf.argmax(neg_dists, axis=0)
+
+            # for id, (anchor, pos, neg) in enumerate(zip(cur_labels, hardest_pos_idxes, hardest_neg_idxes)):
+            #     print(id, ": anchor:", anchor, "pos:", labels[pos], dists[pos, id].numpy(), "neg:", labels[neg], dists[neg, id].numpy())
+            for anchor_image, anchor_label, pos, neg in zip(cur_image_names, cur_labels, hardest_pos_idxes, hardest_neg_idxes):
+                yield (anchor_image, anchor_label)
+                yield (image_names[pos], labels[pos])
+                yield (image_names[neg], labels[neg])
