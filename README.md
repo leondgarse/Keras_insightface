@@ -366,7 +366,7 @@
     plt.grid(True)
     plt.tight_layout()
     ```
-    ![](checkpoints/learning_rate_decay.svg)
+    ![lr_scheduler](https://user-images.githubusercontent.com/5744524/151647335-d3a8f4bc-b3a7-4172-9106-9a38170b6abb.png)
 ## Mixed precision float16
   - [Tensorflow Guide - Mixed precision](https://www.tensorflow.org/guide/mixed_precision)
   - Enable `Mixed precision` at the beginning of all functional code by
