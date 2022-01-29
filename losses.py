@@ -214,6 +214,7 @@ class CosFaceLoss(ArcfaceLossSimple):
 @keras.utils.register_keras_serializable(package="keras_insightface")
 class MagFaceLoss(ArcfaceLossSimple):
     """ Another set for fine-tune is: min_feature_norm, max_feature_norm, min_margin, max_margin, regularizer_loss_lambda = 1, 51, 0.45, 1, 5 """
+
     def __init__(
         self,
         min_feature_norm=10.0,
@@ -668,6 +669,7 @@ class BatchAllTripletLoss(TripletLossWapper):
         neg_dists_loss = tf.reduce_sum(neg_dists_valid, -1) / (tf.reduce_sum(tf.cast(neg_valid_mask, dtype=tf.float32), -1) + 1)
         return pos_dists_loss + neg_dists_loss
 
+
 @keras.utils.register_keras_serializable(package="keras_insightface")
 class OfflineTripletLoss(TripletLossWapper):
     def __calculate_triplet_loss__(self, labels, embeddings, alpha):
@@ -681,6 +683,7 @@ class OfflineTripletLoss(TripletLossWapper):
         neg_dist = tf.reduce_sum(anchor_emb * neg_emb, -1)
         basic_loss = neg_dist - pos_dist + alpha
         return tf.maximum(basic_loss, 0.0)
+
 
 @keras.utils.register_keras_serializable(package="keras_insightface")
 class OfflineArcTripletLoss(TripletLossWapper):
@@ -702,6 +705,7 @@ class OfflineArcTripletLoss(TripletLossWapper):
 
         basic_loss = neg_dist - pos_valid
         return tf.maximum(basic_loss, 0.0)
+
 
 @keras.utils.register_keras_serializable(package="keras_insightface")
 def distiller_loss_euclidean(true_emb, pred_emb):

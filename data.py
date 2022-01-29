@@ -541,7 +541,7 @@ class Triplet_dataset_offline:
     def offline_triplet_mining(self):
         if self.samples_per_mining > 0:
             shuffle_dataset = self.image_dataframe.map(self.split_func)
-            image_names = np.random.permutation(np.vstack(shuffle_dataset.values))[:self.samples_per_mining].flatten()
+            image_names = np.random.permutation(np.vstack(shuffle_dataset.values))[: self.samples_per_mining].flatten()
         else:
             image_names = self.image_names
         image_names = np.random.permutation(image_names)
@@ -575,10 +575,10 @@ class Triplet_dataset_offline:
         for batch_id in range(total_batch):
             bss, bee = batch_id * batch_size, (batch_id + 1) * batch_size
             bee = min(bee, total)
-            dists = tf.matmul(embs, embs[bss: bee], transpose_b=True)
+            dists = tf.matmul(embs, embs[bss:bee], transpose_b=True)
 
-            cur_labels = labels[bss: bee]
-            cur_image_names = image_names[bss: bee]
+            cur_labels = labels[bss:bee]
+            cur_image_names = image_names[bss:bee]
             pos_mask = tf.equal(tf.expand_dims(labels, 1), tf.expand_dims(cur_labels, 0))
             pos_dists = tf.where(pos_mask, dists, tf.ones_like(dists))
             hardest_pos_idxes = tf.argmin(pos_dists, axis=0)

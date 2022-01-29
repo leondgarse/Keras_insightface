@@ -30,7 +30,7 @@ class Train:
         compile=True,
         output_weight_decay=1,  # L2 regularizer for output layer, 0 for None, >=1 for value in basic_model, (0, 1) for specific value
         custom_objects={},
-        pretrained=None,    # If reloat weights from another h5 file
+        pretrained=None,  # If reloat weights from another h5 file
         batch_size=128,
         lr_base=0.001,
         lr_decay=0.05,  # for cosine it's m_mul, or it's decay_rate for exponential or constant
@@ -41,7 +41,7 @@ class Train:
         random_status=0,
         random_cutout_mask_area=0.0,  # ratio of randomly cutout bottom 2/5 area, regarding as ignoring mask area
         image_per_class=0,  # For triplet, image_per_class will be `4` if it's `< 4`
-        samples_per_mining=0,   # **Not working well**. Set a value > 0 will use offline_triplet_mining dataset
+        samples_per_mining=0,  # **Not working well**. Set a value > 0 will use offline_triplet_mining dataset
         mixup_alpha=0,  # mixup alpha, value in (0, 1] to enable
         partial_fc_split=0,  # **Not working well**. Set a int number like `2`, will build model and dataset with total classes split in parts.
         teacher_model_interf=None,  # Teacher model to generate embedding data, used for distilling training.
@@ -483,7 +483,7 @@ class Train:
         print(">>>> Train %s DONE!!! epochs = %s, model.stop_training = %s" % (type, self.model.history.epoch, self.model.stop_training))
         print(">>>> My history:")
         self.my_history.print_hist()
-        latest_save_path = os.path.join('checkpoints', os.path.splitext(self.save_path)[0] + '_basic_model_latest.h5')
+        latest_save_path = os.path.join("checkpoints", os.path.splitext(self.save_path)[0] + "_basic_model_latest.h5")
         print(">>>> Saving latest basic model to:", latest_save_path)
         self.basic_model.save(latest_save_path)
 
