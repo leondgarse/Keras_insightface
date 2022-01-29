@@ -52,7 +52,7 @@ class Train:
         custom_objects.update(dict([ii for ii in getmembers(losses) if isfunction(ii[1]) or isclass(ii[1])]))
         custom_objects.update({"NormDense": models.NormDense})
 
-        self.model, self.basic_model, self.save_path, self.inited_from_model, self.sam_rho = None, None, save_path, False, sam_rho
+        self.model, self.basic_model, self.save_path, self.inited_from_model, self.sam_rho, self.pretrained = None, None, save_path, False, sam_rho, pretrained
         if model is None and basic_model is None:
             model = os.path.join("checkpoints", save_path)
             print(">>>> Try reload from:", model)
@@ -256,7 +256,8 @@ class Train:
         else:
             output_kernel_regularizer = None
 
-        if type == self.softmax and (self.model == None or self.model.output_names[-1] != self.softmax):
+        model_output_layer_name = None if self.model is None else self.model.output_names[-1]
+        if type == self.softmax and model_output_layer_name != self.softmax:
             print(">>>> Add softmax layer...")
             softmax_logits = keras.layers.Dense(self.classes, use_bias=False, name=self.softmax + "_logits", kernel_regularizer=output_kernel_regularizer)
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
@@ -269,7 +270,7 @@ class Train:
             logits = softmax_logits(embedding)
             output_fp32 = keras.layers.Activation("softmax", dtype="float32", name=self.softmax)(logits)
             self.model = keras.models.Model(inputs, output_fp32)
-        elif self.partial_fc_split > 0 and type == self.arcface and (self.model == None or self.model.output_names[-1] != self.arcface_partial):
+        elif self.partial_fc_split > 0 and type == self.arcface and (model_output_layer_name != self.arcface_partial):
             print(">>>> Add NormDensePartialFC layer, loss_top_k={}, is_magface_loss={}...".format(loss_top_k, is_magface_loss))
             partial_arcface_logits = models.NormDensePartialFC(
                 partial_fc_split=self.partial_fc_split,
@@ -283,7 +284,7 @@ class Train:
             classes_inputs = keras.layers.Input([], dtype="int32", name="classes_inputs")
             output_fp32 = partial_arcface_logits(embedding, classes_inputs)
             self.model = keras.models.Model([inputs, classes_inputs], output_fp32)
-        elif type == self.arcface and (self.model == None or self.model.output_names[-1] != self.arcface or self.model.layers[-1].append_norm != is_magface_loss):
+        elif type == self.arcface and (model_output_layer_name != self.arcface or self.model.layers[-1].append_norm != is_magface_loss):
             print(">>>> Add arcface layer, loss_top_k={}, is_magface_loss={}...".format(loss_top_k, is_magface_loss))
             arcface_logits = models.NormDense(
                 self.classes, output_kernel_regularizer, loss_top_k, append_norm=is_magface_loss, name=self.arcface, dtype="float32"
