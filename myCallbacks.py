@@ -222,7 +222,8 @@ def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_de
     if not os.path.exists(checkpoint_base):
         os.mkdir(checkpoint_base)
     checkpoint = os.path.join(checkpoint_base, checkpoint)
-    model_checkpoint = ModelCheckpoint(checkpoint, verbose=1, save_weights_only=True)
+    # model_checkpoint = ModelCheckpoint(checkpoint, verbose=1, save_weights_only=True)
+    model_checkpoint = ModelCheckpoint(checkpoint, verbose=1)
     # model_checkpoint = keras.callbacks.experimental.BackupAndRestore(checkpoint_base)
 
     if isinstance(lr_decay_steps, list):

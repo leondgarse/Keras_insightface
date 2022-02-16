@@ -236,13 +236,6 @@ class Train:
                 self.callbacks.append(wd_callback)  # should be after lr_scheduler
 
     def __init_model__(self, type, loss_top_k=1, is_magface_loss=False):
-        if self.pretrained is not None:
-            if self.model is None:
-                self.basic_model.load_weights(self.pretrained)
-            else:
-                self.model.load_weights(self.pretrained)
-            self.pretrained = None
-
         inputs = self.basic_model.inputs[0]
         embedding = self.basic_model.outputs[0]
         is_multi_output = lambda mm: len(mm.outputs) != 1 or isinstance(mm.layers[-1], keras.layers.Concatenate)
@@ -304,6 +297,13 @@ class Train:
             self.model.output_names[0] = type + "_embedding"
         else:
             print(">>>> Will NOT change model output layer.")
+
+        if self.pretrained is not None:
+            if self.model is None:
+                self.basic_model.load_weights(self.pretrained)
+            else:
+                self.model.load_weights(self.pretrained)
+            self.pretrained = None
 
     def __add_emb_output_to_model__(self, emb_type, emb_loss, emb_loss_weight):
         nns = self.model.output_names
