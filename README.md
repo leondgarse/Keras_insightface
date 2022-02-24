@@ -50,6 +50,7 @@
   | [Resnet101V2 swish](https://drive.google.com/file/d/1joXsSpu22aa-kvnG1lQGNdVGfdPArUXM/view?usp=sharing) | [MS1MV3,E50](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-790754) | 0.9985 | 0.989143 | 0.9845 | 0.952483 | 0.966406 |
   | [EfficientNetV2S](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/TT_effv2_s_strides1_pw512_F_dr02_drc02_lr_01_wd5e4_arc_emb512_sgd_bs512_ms1m_randaug_bnm09_bne1e5_cos16_float16_E50_arc_sgd_LA_basic_agedb_30_epoch_14_batch_8000_0.986167.h5) | [MS1MV3,E67](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-1735839) | 0.9985 | 0.991143 | 0.986167 | **0.956475** | **0.968605** |
   | [EffV2S,AdamW](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/TT_effv2_s_strides1_pw512_F_dr02_drc02_lr_01_wd5e2lr_arc_emb512_adamw_exclude_bn_bs512_ms1m_float16_basic_agedb_30_epoch_53_0.985833.h5) | [MS1MV3,E53](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-1821049) | 0.998500 | 0.991429 | 0.985833 | **0.957449** | **0.97065** |
+  | [EffV2S,MagFace](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/TT_effv2_s_strides1_pw512_F_dr02_drc02_lr_001_wd5e2lr_mag_10_110_04_08_35_emb512_adamw_bs512_ms1m_float16_basic_model_latest.h5) | [MS1MV3,E53](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-2240660) | 0.998500 | 0.991571 | 0.984667 | **0.958325** | **0.971212** |
   | [r18 converted](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/glint360k_cosface_r18_fp16_0.1.h5) | [Glint360k](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.997500 | 0.977143 | 0.976500 |0.936806 | 0.9533   |
   | [r34 converted](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/glint360k_cosface_r34_fp16_0.1.h5) | [Glint360k](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.998167 | 0.987000 | 0.982833 |0.951801 | 0.9656   |
   | [r50 converted](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/glint360k_cosface_r50_fp16_0.1.h5) | [Glint360k](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.998333 | 0.991 | 0.9835 | 0.957157 | 0.970292 |
@@ -678,6 +679,7 @@
 ***
 
 # Related Projects
+  - [Triplet Loss and Online Triplet Mining in TensorFlow](https://omoindrot.github.io/triplet-loss)
   - [TensorFlow Addons Losses: TripletSemiHardLoss](https://www.tensorflow.org/addons/tutorials/losses_triplet)
   - [TensorFlow Addons Layers: WeightNormalization](https://www.tensorflow.org/addons/tutorials/layers_weightnormalization)
   - [Github deepinsight/insightface](https://github.com/deepinsight/insightface)
