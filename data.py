@@ -103,6 +103,11 @@ class RandomProcessImage:
     def tf_buildin_image_random(self, img):
         if self.random_status >= 0:
             img = tf.image.random_flip_left_right(img)
+            # img = tf.cond(
+            #     tf.random.uniform(()) > 0.33,
+            #     lambda: tf.image.random_flip_left_right(img),
+            #     lambda: (tf.image.flip_left_right(img) + img) / 2,
+            # )
         if self.random_status >= 1:
             # 12.75 == 255 * 0.05
             img = tf.image.random_brightness(img, 12.75 * self.random_status)
