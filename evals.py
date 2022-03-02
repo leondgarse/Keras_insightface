@@ -97,6 +97,7 @@ class eval_callback(tf.keras.callbacks.Callback):
         embs_a = embs[::2]
         embs_b = embs[1::2]
         dists = (embs_a * embs_b).sum(1)
+        # dists = half_split_weighted_cosine_similarity_11(embs_a, embs_b)
 
         tt = np.sort(dists[self.test_issame[: dists.shape[0]]])
         ff = np.sort(dists[np.logical_not(self.test_issame[: dists.shape[0]])])
@@ -132,6 +133,30 @@ class eval_callback(tf.keras.callbacks.Callback):
                 save_path = save_path_base + "%s_%f.h5" % (cur_step, self.max_accuracy)
                 tf.print("Saving model to: %s" % (save_path))
                 self.basic_model.save(save_path, include_optimizer=False)
+
+
+def half_split_weighted_cosine_similarity_11(aa, bb):
+    half = aa.shape[-1] // 2
+    bb = bb[: aa.shape[0]]
+
+    top_weights = tf.norm(aa[:, :half], axis=1) * tf.norm(bb[:, :half], axis=1)
+    bottom_weights = tf.norm(aa[:, half:], axis=1) * tf.norm(bb[:, half:], axis=1)
+
+    top_sim = tf.reduce_sum(aa[:, :half] * bb[:, :half], axis=-1)
+    bottom_sim = tf.reduce_sum(aa[:, half:] * bb[:, half:], axis=-1)
+    return (top_sim + bottom_sim) / (top_weights + bottom_weights)
+
+
+def half_split_weighted_cosine_similarity(aa, bb):
+    half = aa.shape[-1] // 2
+    bb = tf.transpose(bb)
+
+    top_weights = tf.norm(aa[:, :half], axis=-1, keepdims=True) * tf.norm(bb[:half], axis=0, keepdims=True)
+    bottom_weights = tf.norm(aa[:, half:], axis=-1, keepdims=True) * tf.norm(bb[half:], axis=0, keepdims=True)
+
+    top_sim = aa[:, :half] @ bb[:half]
+    bottom_sim = aa[:, half:] @ bb[half:]
+    return (top_sim + bottom_sim) / (top_weights + bottom_weights)
 
 
 def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, nrof_folds=10, pca=0):
