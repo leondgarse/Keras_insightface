@@ -62,7 +62,7 @@
 
 # Usage
 ## Environment
-  - **Nvidia CUDA and cudnn** `Tensorflow 2.8.0-rc0` now using `cuda==11.2` `cudnn==8.1`
+  - **Currently using `Tensorflow 2.6.3` with `cuda==11.2` `cudnn==8.1`. Tested `TF 2.7.1` not working for me, `TF 2.8.0` not working for `MagFaceLoss`.**
     - [Install cuda-toolkit](https://developer.nvidia.com/cuda-toolkit)
     - [Install cudnn](https://developer.nvidia.com/rdp/cudnn-download)
   - **python and tensorflow version**
