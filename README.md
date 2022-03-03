@@ -70,15 +70,14 @@
     # $ ipython
     # Python 3.8.5 (default, Sep  4 2020, 07:30:14)
     >>> tf.__version__
-    # '2.8.0-rc0'
+    # '2.6.3'
 
     >>> import tensorflow_addons as tfa
     >>> tfa.__version__
-    Out[3]: '0.16.0-dev'
+    Out[3]: '0.16.1'
     ```
     Or `tf-nightly`
     ```sh
-    # conda create -n tf-nightly python==3.7.6
     conda create -n tf-nightly python==3.8.5
     conda activate tf-nightly
     pip install tf-nightly tfa-nightly glob2 pandas tqdm scikit-image scikit-learn ipython
