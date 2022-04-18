@@ -226,6 +226,52 @@ class NormDense(keras.layers.Layer):
 
 
 @keras.utils.register_keras_serializable(package="keras_insightface")
+class NormDenseVPL(NormDense):
+    def __init__(self, batch_size, units=1000, vpl_lambda=0.15, kernel_regularizer=None, append_norm=False, **kwargs):
+        super().__init__(units, kernel_regularizer, append_norm=append_norm, **kwargs)
+        self.vpl_lambda, self.batch_size = vpl_lambda, batch_size  # Need the actual batch_size here, for storing inputs
+        self.start_iters, self.allowed_delta = 8000 * batch_size // 512, 200 * batch_size // 512 # adjust according to batch_size
+
+    def build(self, input_shape):
+        # self.queue_features in same shape format as self.norm_features, for easier calling tf.tensor_scatter_nd_update
+        self.norm_features = self.add_weight(name="norm_features", shape=(self.batch_size, input_shape[-1]), dtype=self.compute_dtype, trainable=False)
+        self.queue_features = self.add_weight(name="queue_features", shape=(self.units, input_shape[-1]), initializer=self.init, trainable=False)
+        self.queue_iters = self.add_weight(name="queue_iters", shape=(self.units,), initializer="zeros", dtype="int64", trainable=False)
+        self.zero_queue_lambda = tf.zeros((self.units,), dtype=self.compute_dtype)
+        self.iters = self.add_weight(name="iters", shape=(), initializer="zeros", dtype="int64", trainable=False)
+        super().build(input_shape)
+
+    def call(self, inputs, **kwargs):
+        # tf.print("tf.reduce_mean(self.w):", tf.reduce_mean(self.w))
+        self.iters.assign_add(1)
+        queue_lambda = tf.cond(
+            self.iters > self.start_iters,
+            lambda: tf.where(self.iters - self.queue_iters <= self.allowed_delta, self.vpl_lambda, 0.0),  # prepare_queue_lambda
+            lambda: self.zero_queue_lambda,
+        )
+        # self.queue_lambda = queue_lambda
+
+        norm_w = K.l2_normalize(self.w, axis=0)
+        injected_weight = norm_w * (1 - queue_lambda) + tf.transpose(self.queue_features) * queue_lambda
+        injected_norm_weight = K.l2_normalize(injected_weight, axis=0)
+
+        # set_queue needs actual input labels, it's done in callback VPLUpdateQueue
+
+        norm_inputs = K.l2_normalize(inputs, axis=1)
+        self.norm_features.assign(norm_inputs)
+        output = K.dot(norm_inputs, injected_norm_weight)
+        if self.append_norm:
+            # Keep norm value low by * -1, so will not affect accuracy metrics.
+            output = tf.concat([output, tf.norm(inputs, axis=1, keepdims=True) * -1], axis=-1)
+        return output
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"batch_size": self.batch_size, "vpl_lambda": self.vpl_lambda})
+        return config
+
+
+@keras.utils.register_keras_serializable(package="keras_insightface")
 class NormDensePartialFC(NormDense):
     def __init__(self, partial_fc_split=0, **kwargs):
         super(NormDensePartialFC, self).__init__(**kwargs)

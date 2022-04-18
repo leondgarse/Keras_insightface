@@ -46,6 +46,7 @@ class Train:
         partial_fc_split=0,  # **Not working well**. Set a int number like `2`, will build model and dataset with total classes split in parts.
         teacher_model_interf=None,  # Teacher model to generate embedding data, used for distilling training.
         sam_rho=0,
+        use_vpl=False,  # https://openaccess.thecvf.com/content/CVPR2021/papers/Deng_Variational_Prototype_Learning_for_Deep_Face_Recognition_CVPR_2021_paper.pdf
     ):
         from inspect import getmembers, isfunction, isclass
 
@@ -53,6 +54,7 @@ class Train:
         custom_objects.update({"NormDense": models.NormDense})
 
         self.model, self.basic_model, self.save_path, self.inited_from_model, self.sam_rho, self.pretrained = None, None, save_path, False, sam_rho, pretrained
+        self.use_vpl = use_vpl
         if model is None and basic_model is None:
             model = os.path.join("checkpoints", save_path)
             print(">>>> Try reload from:", model)
@@ -105,7 +107,7 @@ class Train:
             output_weight_decay *= l2_weight_decay * 2
         self.output_weight_decay = output_weight_decay
 
-        self.batch_size = batch_size
+        self.batch_size, self.batch_size_per_replica = batch_size, batch_size
         if tf.distribute.has_strategy():
             strategy = tf.distribute.get_strategy()
             self.batch_size = batch_size * strategy.num_replicas_in_sync
@@ -113,7 +115,7 @@ class Train:
             self.data_options = tf.data.Options()
             self.data_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
 
-        my_evals = [evals.eval_callback(self.basic_model, ii, batch_size=batch_size, eval_freq=eval_freq) for ii in eval_paths]
+        my_evals = [evals.eval_callback(self.basic_model, ii, batch_size=self.batch_size_per_replica, eval_freq=eval_freq) for ii in eval_paths]
         if len(my_evals) != 0:
             my_evals[-1].save_model = os.path.splitext(save_path)[0]
         self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop = myCallbacks.basic_callbacks(
@@ -278,10 +280,17 @@ class Train:
             output_fp32 = partial_arcface_logits(embedding, classes_inputs)
             self.model = keras.models.Model([inputs, classes_inputs], output_fp32)
         elif type == self.arcface and (model_output_layer_name != self.arcface or self.model.layers[-1].append_norm != is_magface_loss):
-            print(">>>> Add arcface layer, loss_top_k={}, is_magface_loss={}...".format(loss_top_k, is_magface_loss))
-            arcface_logits = models.NormDense(
-                self.classes, output_kernel_regularizer, loss_top_k, append_norm=is_magface_loss, name=self.arcface, dtype="float32"
-            )
+            print(">>>> Add arcface layer, loss_top_k={}, is_magface_loss={}, use_vpl={}...".format(loss_top_k, is_magface_loss, self.use_vpl))
+            if self.use_vpl:
+                batch_size = self.batch_size_per_replica
+                arcface_logits = models.NormDenseVPL(
+                    batch_size, self.classes, kernel_regularizer=output_kernel_regularizer, append_norm=is_magface_loss, name=self.arcface, dtype="float32"
+                )
+            else:
+                arcface_logits = models.NormDense(
+                    self.classes, output_kernel_regularizer, loss_top_k, append_norm=is_magface_loss, name=self.arcface, dtype="float32"
+                )
+
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
                 arcface_logits.build(embedding.shape)
                 weight_cur = arcface_logits.get_weights()
@@ -464,9 +473,14 @@ class Train:
 
         print(">>>> loss_weights:", self.loss_weights)
         self.metrics = {ii: None if "embedding" in ii else "accuracy" for ii in self.model.output_names}
-        self.callbacks.append(keras.callbacks.TerminateOnNaN())
+        # self.callbacks.append(keras.callbacks.TerminateOnNaN())
+        self.callbacks.append(myCallbacks.ExitOnNaN())  # Exit directly avoiding further saving
         # self.callbacks.append(keras.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs=None: keras.backend.clear_session()))
         # self.callbacks.append(keras.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs=None: self.basic_model.save("aa_epoch{}.h5".format(epoch))))
+
+        if self.use_vpl:
+            loss.build(self.batch_size_per_replica)
+            self.callbacks.append(myCallbacks.VPLUpdateQueue())
 
         if self.gently_stop:
             self.callbacks.append(self.gently_stop)

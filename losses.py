@@ -53,13 +53,19 @@ class ArcfaceLoss(tf.keras.losses.Loss):
         self.from_logits, self.label_smoothing = from_logits, label_smoothing
         self.threshold = np.cos((np.pi - margin2) / margin1)  # grad(theta) == 0
         self.theta_min = (-1 - margin3) * 2
+        self.batch_labels_back_up = None
         # self.reduction_func = tf.keras.losses.CategoricalCrossentropy(
         #     from_logits=from_logits, label_smoothing=label_smoothing, reduction=reduction
         # )
         # self.norm_logits = tf.Variable(tf.zeros([512, 93431]), dtype="float32", trainable=False)
         # self.y_true = tf.Variable(tf.zeros([512, 93431], dtype="int32"), dtype="int32", trainable=False)
 
+    def build(self, batch_size):
+        self.batch_labels_back_up = tf.Variable(tf.zeros([batch_size], dtype="int64"), dtype="int64", trainable=False)
+
     def call(self, y_true, norm_logits):
+        if self.batch_labels_back_up is not None:
+            self.batch_labels_back_up.assign(tf.argmax(y_true, axis=-1))
         # norm_logits = y_pred
         # self.norm_logits.assign(norm_logits)
         # self.y_true.assign(y_true)
@@ -125,8 +131,14 @@ class ArcfaceLossSimple(tf.keras.losses.Loss):
         self.threshold = tf.cos(np.pi - margin)
         # self.low_pred_punish = tf.sin(np.pi - margin) * margin
         self.theta_min = -2
+        self.batch_labels_back_up = None
+
+    def build(self, batch_size):
+        self.batch_labels_back_up = tf.Variable(tf.zeros([batch_size], dtype="int64"), dtype="int64", trainable=False)
 
     def call(self, y_true, norm_logits):
+        if self.batch_labels_back_up is not None:
+            self.batch_labels_back_up.assign(tf.argmax(y_true, axis=-1))
         pick_cond = tf.where(y_true != 0)
         y_pred_vals = tf.gather_nd(norm_logits, pick_cond)
         theta = y_pred_vals * self.margin_cos - tf.sqrt(1 - tf.pow(y_pred_vals, 2)) * self.margin_sin
@@ -159,6 +171,8 @@ class CurricularFaceLoss(ArcfaceLossSimple):
         self.hard_scale = tf.Variable(hard_scale, dtype="float32", trainable=False)
 
     def call(self, y_true, norm_logits):
+        if self.batch_labels_back_up is not None:
+            self.batch_labels_back_up.assign(tf.argmax(y_true, axis=-1))
         pick_cond = tf.where(y_true != 0)
         y_pred_vals = tf.gather_nd(norm_logits, pick_cond)
         theta = y_pred_vals * self.margin_cos - tf.sqrt(1 - tf.pow(y_pred_vals, 2)) * self.margin_sin
@@ -189,6 +203,8 @@ class AirFaceLoss(ArcfaceLossSimple):
         self.margin_scale = 2 / np.pi
 
     def call(self, y_true, norm_logits):
+        if self.batch_labels_back_up is not None:
+            self.batch_labels_back_up.assign(tf.argmax(y_true, axis=-1))
         # norm_logits = tf.acos(norm_logits) * self.margin_scale
         # logits = tf.where(tf.cast(y_true, dtype=tf.bool), self.margin_head - norm_logits, 1 - norm_logits) * self.scale
         pick_cond = tf.where(y_true != 0)
@@ -205,6 +221,8 @@ class CosFaceLoss(ArcfaceLossSimple):
         super(CosFaceLoss, self).__init__(margin, scale, from_logits, label_smoothing, **kwargs)
 
     def call(self, y_true, norm_logits):
+        if self.batch_labels_back_up is not None:
+            self.batch_labels_back_up.assign(tf.argmax(y_true, axis=-1))
         pick_cond = tf.cast(y_true, dtype=tf.bool)
         logits = tf.where(pick_cond, norm_logits - self.margin, norm_logits) * self.scale
         return tf.keras.losses.categorical_crossentropy(y_true, logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
@@ -245,6 +263,8 @@ class MagFaceLoss(ArcfaceLossSimple):
         # self.precission_4 = lambda xx: tf.math.round(xx * 10000) / 10000
 
     def call(self, y_true, norm_logits_with_norm):
+        if self.batch_labels_back_up is not None:
+            self.batch_labels_back_up.assign(tf.argmax(y_true, axis=-1))
         # feature_norm is multiplied with -1 in NormDense layer, keeping low for not affecting accuracy metrics.
         norm_logits, feature_norm = norm_logits_with_norm[:, :-1], norm_logits_with_norm[:, -1] * -1
         feature_norm = tf.clip_by_value(feature_norm, self.min_feature_norm, self.max_feature_norm)
@@ -261,7 +281,7 @@ class MagFaceLoss(ArcfaceLossSimple):
             # Arcface process
             margin_cos, margin_sin = tf.cos(margin), tf.sin(margin)
             threshold = tf.cos(np.pi - margin)
-            theta = y_pred_vals * margin_cos - tf.sqrt(1 - tf.pow(y_pred_vals, 2)) * margin_sin
+            theta = y_pred_vals * margin_cos - tf.sqrt(tf.maximum(1 - tf.pow(y_pred_vals, 2), 0.0)) * margin_sin
             theta_valid = tf.where(y_pred_vals > threshold, theta, self.theta_min - theta)
 
         if self.use_curricular_scale:
@@ -717,11 +737,17 @@ def distiller_loss_cosine(true_emb, pred_emb):
     # tf.print(true_emb.shape, true_emb.dtype, pred_emb.shape, pred_emb.dtype)
     norm_one = tf.sqrt(1.0 / tf.cast(true_emb.shape[-1], true_emb.dtype))
     true_emb = tf.where(tf.math.is_finite(true_emb), true_emb, tf.zeros_like(true_emb) + norm_one)
-    true_emb_normed = tf.nn.l2_normalize(true_emb, epsilon=1e-5, axis=-1)
-    pred_emb_normed = tf.nn.l2_normalize(pred_emb, epsilon=1e-5, axis=-1)
+    true_norm_value = tf.norm(true_emb, axis=-1) + 1e-5
+    pred_norm_value = tf.norm(pred_emb, axis=-1) + 1e-5
+    true_emb_normed = true_emb / tf.expand_dims(true_norm_value, -1)
+    pred_emb_normed = pred_emb / tf.expand_dims(pred_norm_value, -1)
     # tf.assert_equal(tf.math.is_nan(tf.reduce_mean(true_emb)), False, message='nan in true_emb_normed')
-    loss = 1 - tf.reduce_sum(pred_emb_normed * true_emb_normed, axis=-1)
-    return loss
+    cosine_loss = 1 - tf.reduce_sum(pred_emb_normed * true_emb_normed, axis=-1)
+    return cosine_loss
+    # l2_loss = tf.abs(true_norm_value - pred_norm_value)
+    # tf.print("cos_loss:", cosine_loss, "l2_loss:", l2_loss)
+    # return cosine_loss + l2_loss * 0.001
+    # return tf.reduce_sum(tf.square(pred_emb - true_emb), axis=-1)
 
 
 # [PDF 2106.05237 Knowledge distillation: A good teacher is patient and consistent](https://arxiv.org/pdf/2106.05237.pdf)

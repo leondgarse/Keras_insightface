@@ -3,6 +3,7 @@ import select
 import os
 import json
 import numpy as np
+import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, LearningRateScheduler
 from tensorflow.python.keras import backend as K
@@ -24,6 +25,23 @@ class Gently_stop_callback(keras.callbacks.Callback):
         inputs, outputs, errors = select.select([sys.stdin], [], [], timeout)
         print()
         return (0, sys.stdin.readline().strip()) if inputs else (-1, default)
+
+
+class ExitOnNaN(keras.callbacks.Callback):
+    """ Callback that exit directly when a NaN loss is encountered, avoiding saving model """
+
+    def __init__(self):
+        super().__init__()
+        self._supports_tf_logs = True
+
+    def on_batch_end(self, batch, logs=None):
+        logs = logs or {}
+        loss = logs.get("loss")
+        if loss is not None:
+            if not tf.math.is_finite(loss):
+                print("\nError: Invalid loss, terminating training")
+                self.model.stop_training = True
+                sys.exit()
 
 
 class My_history(keras.callbacks.Callback):
@@ -69,6 +87,23 @@ class My_history(keras.callbacks.Callback):
         for kk, vv in self.history.items():
             print("  '%s': %s," % (kk, vv))
         print("}")
+
+
+class VPLUpdateQueue(keras.callbacks.Callback):
+    def __init__(self):
+        super().__init__()
+
+    def on_batch_end(self, batch, logs=None):
+        batch_labels_back_up = self.model.loss[0].batch_labels_back_up
+        update_label_pos = tf.expand_dims(batch_labels_back_up, 1)
+        vpl_norm_dense_layer = self.model.layers[-1]
+
+        updated_queue = tf.tensor_scatter_nd_update(vpl_norm_dense_layer.queue_features, update_label_pos, vpl_norm_dense_layer.norm_features)
+        vpl_norm_dense_layer.queue_features.assign(updated_queue)
+
+        iters = tf.repeat(vpl_norm_dense_layer.iters, tf.shape(batch_labels_back_up)[0])
+        updated_queue_iters = tf.tensor_scatter_nd_update(vpl_norm_dense_layer.queue_iters, update_label_pos, iters)
+        vpl_norm_dense_layer.queue_iters.assign(updated_queue_iters)
 
 
 class OptimizerWeightDecay(keras.callbacks.Callback):
