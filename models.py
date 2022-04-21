@@ -164,7 +164,7 @@ def buildin_models(
         nn = keras.layers.Dense(emb_shape, use_bias=use_bias, kernel_initializer="glorot_normal", name="F_dense")(nn)
 
     # `fix_gamma=True` in MXNet means `scale=False` in Keras
-    embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, scale=scale, name="pre_embedding")(nn)
+    embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, scale=scale, dtype="float32", name="pre_embedding")(nn)
     embedding_fp32 = keras.layers.Activation("linear", dtype="float32", name="embedding")(embedding)
 
     basic_model = keras.models.Model(inputs, embedding_fp32, name=xx.name)
@@ -230,7 +230,7 @@ class NormDenseVPL(NormDense):
     def __init__(self, batch_size, units=1000, vpl_lambda=0.15, kernel_regularizer=None, append_norm=False, **kwargs):
         super().__init__(units, kernel_regularizer, append_norm=append_norm, **kwargs)
         self.vpl_lambda, self.batch_size = vpl_lambda, batch_size  # Need the actual batch_size here, for storing inputs
-        self.start_iters, self.allowed_delta = 8000 * batch_size // 512, 200 * batch_size // 512 # adjust according to batch_size
+        self.start_iters, self.allowed_delta = 8000 * 128 // batch_size, 200 * 128 // batch_size # adjust according to batch_size
 
     def build(self, input_shape):
         # self.queue_features in same shape format as self.norm_features, for easier calling tf.tensor_scatter_nd_update
