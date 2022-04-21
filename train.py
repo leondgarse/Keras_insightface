@@ -46,7 +46,8 @@ class Train:
         partial_fc_split=0,  # **Not working well**. Set a int number like `2`, will build model and dataset with total classes split in parts.
         teacher_model_interf=None,  # Teacher model to generate embedding data, used for distilling training.
         sam_rho=0,
-        use_vpl=False,  # https://openaccess.thecvf.com/content/CVPR2021/papers/Deng_Variational_Prototype_Learning_for_Deep_Face_Recognition_CVPR_2021_paper.pdf
+        vpl_start_iters=-1,  # Enable by setting value > 0, like 8000. https://openaccess.thecvf.com/content/CVPR2021/papers/Deng_Variational_Prototype_Learning_for_Deep_Face_Recognition_CVPR_2021_paper.pdf
+        vpl_allowed_delta=200,
     ):
         from inspect import getmembers, isfunction, isclass
 
@@ -54,7 +55,7 @@ class Train:
         custom_objects.update({"NormDense": models.NormDense})
 
         self.model, self.basic_model, self.save_path, self.inited_from_model, self.sam_rho, self.pretrained = None, None, save_path, False, sam_rho, pretrained
-        self.use_vpl = use_vpl
+        self.vpl_start_iters, self.vpl_allowed_delta = vpl_start_iters, vpl_allowed_delta
         if model is None and basic_model is None:
             model = os.path.join("checkpoints", save_path)
             print(">>>> Try reload from:", model)
@@ -280,11 +281,12 @@ class Train:
             output_fp32 = partial_arcface_logits(embedding, classes_inputs)
             self.model = keras.models.Model([inputs, classes_inputs], output_fp32)
         elif type == self.arcface and (model_output_layer_name != self.arcface or self.model.layers[-1].append_norm != is_magface_loss):
-            print(">>>> Add arcface layer, loss_top_k={}, is_magface_loss={}, use_vpl={}...".format(loss_top_k, is_magface_loss, self.use_vpl))
-            if self.use_vpl:
+            vpl_kwargs = {"vpl_lambda": 0.15, "start_iters": self.vpl_start_iters, "allowed_delta": self.vpl_allowed_delta}
+            print(">>>> Add arcface layer, loss_top_k={}, is_magface_loss={}, vpl_kwargs={}...".format(loss_top_k, is_magface_loss, vpl_kwargs))
+            if self.vpl_start_iters > 0:
                 batch_size = self.batch_size_per_replica
                 arcface_logits = models.NormDenseVPL(
-                    batch_size, self.classes, kernel_regularizer=output_kernel_regularizer, append_norm=is_magface_loss, name=self.arcface, dtype="float32"
+                    batch_size, self.classes, output_kernel_regularizer, append_norm=is_magface_loss, **vpl_kwargs, name=self.arcface, dtype="float32"
                 )
             else:
                 arcface_logits = models.NormDense(
@@ -478,7 +480,7 @@ class Train:
         # self.callbacks.append(keras.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs=None: keras.backend.clear_session()))
         # self.callbacks.append(keras.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs=None: self.basic_model.save("aa_epoch{}.h5".format(epoch))))
 
-        if self.use_vpl:
+        if self.vpl_start_iters > 0: # VPL mode, needs the actual batch_size
             loss.build(self.batch_size_per_replica)
             self.callbacks.append(myCallbacks.VPLUpdateQueue())
 

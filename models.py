@@ -227,10 +227,12 @@ class NormDense(keras.layers.Layer):
 
 @keras.utils.register_keras_serializable(package="keras_insightface")
 class NormDenseVPL(NormDense):
-    def __init__(self, batch_size, units=1000, vpl_lambda=0.15, kernel_regularizer=None, append_norm=False, **kwargs):
+    def __init__(self, batch_size, units=1000, kernel_regularizer=None, append_norm=False, vpl_lambda=0.15, start_iters=8000, allowed_delta=200, **kwargs):
         super().__init__(units, kernel_regularizer, append_norm=append_norm, **kwargs)
         self.vpl_lambda, self.batch_size = vpl_lambda, batch_size  # Need the actual batch_size here, for storing inputs
-        self.start_iters, self.allowed_delta = 8000 * 128 // batch_size, 200 * 128 // batch_size # adjust according to batch_size
+        # self.start_iters, self.allowed_delta = 8000 * 128 // batch_size, 200 * 128 // batch_size # adjust according to batch_size
+        self.start_iters, self.allowed_delta = start_iters, allowed_delta # adjust according to batch_size
+        print(">>>> [NormDenseVPL], vpl_lambda={}, start_iters={}, allowed_delta={}".format(vpl_lambda, start_iters, allowed_delta))
 
     def build(self, input_shape):
         # self.queue_features in same shape format as self.norm_features, for easier calling tf.tensor_scatter_nd_update
