@@ -24,6 +24,7 @@
 - [Evaluating on IJB datasets](#evaluating-on-ijb-datasets)
 - [TFLite model inference time test on ARM64](#tflite-model-inference-time-test-on-arm64)
 - [Related Projects](#related-projects)
+- [Citing](#citing)
 
 <!-- /TOC -->
 ***
@@ -688,4 +689,20 @@
   - [Github QiaoranC/tf_ResNeSt_RegNet_model](https://github.com/QiaoranC/tf_ResNeSt_RegNet_model)
   - [Partial FC: Training 10 Million Identities on a Single Machine](https://arxiv.org/pdf/2010.05222.pdf)
   - [Github IrvingMeng/MagFace](https://github.com/IrvingMeng/MagFace)
+***
+
+# Citing
+  - **BibTeX**
+    ```bibtex
+    @misc{leondgarse,
+      author = {Leondgarse},
+      title = {Keras Insightface},
+      year = {2022},
+      publisher = {GitHub},
+      journal = {GitHub repository},
+      doi = {10.5281/zenodo.6506949},
+      howpublished = {\url{https://github.com/leondgarse/Keras_insightface}}
+    }
+    ```
+  - **Latest DOI**: [![DOI](https://zenodo.org/badge/229437028.svg)](https://zenodo.org/badge/latestdoi/229437028)
 ***
