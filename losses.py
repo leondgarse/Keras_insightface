@@ -262,6 +262,16 @@ class MagFaceLoss(ArcfaceLossSimple):
         # np.set_printoptions(precision=4)
         # self.precission_4 = lambda xx: tf.math.round(xx * 10000) / 10000
 
+    def __apply_margin__(self, norm_logits, margin):
+        if self.use_cosface_margin:
+            margin_logits = norm_logits - margin
+        else:
+            margin_cos, margin_sin = tf.cos(margin), tf.sin(margin)
+            threshold = tf.cos(np.pi - margin)
+            theta = norm_logits * margin_cos - tf.sqrt(tf.maximum(1 - tf.pow(norm_logits, 2), 0.0)) * margin_sin
+            margin_logits = tf.where(norm_logits > threshold, theta, self.theta_min - theta)
+        return margin_logits
+
     def call(self, y_true, norm_logits_with_norm):
         if self.batch_labels_back_up is not None:
             self.batch_labels_back_up.assign(tf.argmax(y_true, axis=-1))
@@ -270,6 +280,7 @@ class MagFaceLoss(ArcfaceLossSimple):
         feature_norm = tf.clip_by_value(feature_norm, self.min_feature_norm, self.max_feature_norm)
         # margin = (self.u_margin-self.l_margin) / (self.u_a-self.l_a)*(x-self.l_a) + self.l_margin
         margin = self.margin_scale * (feature_norm - self.min_feature_norm) + self.min_margin
+        # margin = tf.expand_dims(margin, 1)
 
         pick_cond = tf.where(y_true != 0)
         y_pred_vals = tf.gather_nd(norm_logits, pick_cond)
@@ -290,6 +301,7 @@ class MagFaceLoss(ArcfaceLossSimple):
             norm_logits = tf.where(norm_logits > tf.expand_dims(theta_valid, 1), norm_logits * (self.curricular_hard_scale + norm_logits), norm_logits)
 
         arcface_logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, theta_valid) * self.scale
+        # arcface_logits = tf.where(tf.cast(y_true, dtype=tf.bool), self.__apply_margin__(norm_logits, margin), norm_logits)
         arcface_loss = tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
 
         # MegFace loss_G, g = 1/(self.u_a**2) * x_norm + 1/(x_norm)

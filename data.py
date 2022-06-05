@@ -252,8 +252,13 @@ def partial_fc_split_pick(image_names, image_classes, batch_size, split=2, debug
     split_index = [indexes[ii][: ii.sum() // batch_size * batch_size].reshape(-1, batch_size) for ii in picks]
     if debug:
         print(">>>> After drop remainder:", [ii.shape for ii in split_index], ", prod:", [np.prod(ii.shape) for ii in split_index])
-    split_index = np.vstack(split_index)
-    np.random.shuffle(split_index)  # in place shuffle
+    # split_index = np.vstack(split_index)
+    # np.random.shuffle(split_index)  # in place shuffle
+    # split_index = split_index.ravel()  # flatten
+
+    # split_index: [partial_1 * batch_size, partial_2 * batch_size, partial_1 * batch_size, partial_2 * batch_size]
+    min_batches = min([ii.shape[0] for ii in split_index])
+    split_index = np.concatenate([np.expand_dims(ii[:min_batches], 1) for ii in split_index], axis=1)
     split_index = split_index.ravel()  # flatten
 
     """ Test """
@@ -262,7 +267,8 @@ def partial_fc_split_pick(image_names, image_classes, batch_size, split=2, debug
         rrs = []
         for ii in range(bb.shape[0] // batch_size):
             batch = bb[ii * batch_size : (ii + 1) * batch_size]
-            split_id = np.argmax(batch[0] < splits[1:])
+            # split_id = np.argmax(batch[0] < splits[1:])
+            split_id = ii % split
             rrs.append(np.alltrue(np.logical_and(batch >= splits[split_id], batch < splits[split_id + 1])))
         print(">>>> Total batches:", bb.shape[0] // batch_size, ", correctly split:", np.sum(rrs))
 
@@ -323,6 +329,7 @@ def prepare_dataset(
         output_signature = (tf.TensorSpec(shape=(), dtype=tf.string), tf.TensorSpec(shape=(), dtype=tf.int64))
         ds = tf.data.Dataset.from_generator(gen_func, output_signature=output_signature)
         process_func = lambda imm, label: (tf_imread(imm), tf.one_hot(label % sub_classes, depth=sub_classes, dtype=tf.int32))
+        # process_func = lambda imm, label: (tf_imread(imm), tf.one_hot(label, depth=classes, dtype=tf.int32))
     else:
         ds = tf.data.Dataset.from_tensor_slices((image_names, image_classes)).shuffle(buffer_size=total_images)
         process_func = lambda imm, label: (tf_imread(imm), tf.one_hot(label, depth=classes, dtype=tf.int32))
@@ -345,15 +352,15 @@ def prepare_dataset(
         if teacher_model_interf.output_shape[-1] == classes:
             print(">>>> KLDivergence teacher model interface provided.")
             emb_func = lambda imm, label: (imm, teacher_model_interf(imm))
-            ds = ds.map(emb_func, num_parallel_calls=AUTOTUNE)
+            ds = ds.map(emb_func)  # num_parallel_calls=AUTOTUNE
         else:
             print(">>>> Teacher model interface provided.")
             emb_func = lambda imm, label: (imm, (teacher_model_interf(imm), label))
-            ds = ds.map(emb_func, num_parallel_calls=AUTOTUNE)
+            ds = ds.map(emb_func)  # num_parallel_calls=AUTOTUNE
 
-    if partial_fc_split != 0:
-        # Attanch classes in inputs for picking sub NormDense header
-        ds = ds.map(lambda imm, label: ((imm, tf.argmax(label, axis=-1, output_type=tf.int32)), label), num_parallel_calls=AUTOTUNE)
+    # if partial_fc_split != 0:
+    #     # Attanch classes in inputs for picking sub NormDense header
+    #     ds = ds.map(lambda imm, label: ((imm, tf.argmax(label, axis=-1, output_type=tf.int32)), label), num_parallel_calls=AUTOTUNE)
 
     ds = ds.prefetch(buffer_size=AUTOTUNE)
     steps_per_epoch = int(np.floor(total_images / float(batch_size)))
@@ -449,13 +456,13 @@ class Triplet_dataset:
             output_signature = (tf.TensorSpec(shape=(), dtype=tf.string), tf.TensorSpec(shape=(), dtype=tf.int64))
             ds = tf.data.Dataset.from_generator(self.image_shuffle_gen, output_signature=output_signature)
             process_func = lambda imm, label: (random_imread(imm), one_hot_label(label))
-        ds = ds.map(process_func, num_parallel_calls=AUTOTUNE)
+        ds = ds.map(process_func)  # num_parallel_calls=AUTOTUNE
 
         ds = ds.batch(self.batch_size, drop_remainder=True)
         if teacher_model_interf is not None:
             print(">>>> Teacher model interference provided.")
             emb_func = lambda imm, label: (imm, (teacher_model_interf(imm), label))
-            ds = ds.map(emb_func, num_parallel_calls=AUTOTUNE)
+            ds = ds.map(emb_func)  # num_parallel_calls=AUTOTUNE
 
         ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
         self.ds = ds.prefetch(buffer_size=AUTOTUNE)
@@ -508,8 +515,8 @@ class Triplet_dataset_offline:
         self.image_names, self.image_classes, self.classes = image_names, image_classes, classes
         self.basic_model, self.alpha = basic_model, alpha
         # self.clone_basic_model = tf.keras.models.model_from_json(basic_model.to_json())
-        self.clone_basic_model = tf.keras.models.Model().from_config(basic_model.get_config())
-        self.clone_basic_model.trainable = False
+        # self.clone_basic_model = tf.keras.models.Model().from_config(basic_model.get_config())
+        # self.clone_basic_model.trainable = False
         if samples_per_mining > 1:
             self.samples_per_mining = samples_per_mining // image_per_class
         elif samples_per_mining > 0:
@@ -557,16 +564,16 @@ class Triplet_dataset_offline:
 
         """ Calculate all embedding values """
         embs = tf.zeros([0, self.basic_model.output_shape[-1]])
-        self.clone_basic_model.set_weights(self.basic_model.get_weights())
+        # self.clone_basic_model.set_weights(self.basic_model.get_weights())
         # bb = tf.keras.models.clone_model(self.basic_model)
         # self.basic_model.trainable = False
         for batch in tqdm(ds, "Triplet Embedding", total=len(ds)):
-            emb = self.clone_basic_model(batch)
-            emb = tf.linalg.normalize(emb, axis=-1)[0]
+            emb = tf.stop_gradient(self.basic_model(batch))
+            emb = tf.nn.l2_normalize(emb, axis=-1)
             embs = tf.concat([embs, emb], axis=0)
         # self.basic_model.trainable = True
         # print(">>>> Converting to array...")
-        labels = np.array([self.image_classes_rule(ii) for ii in image_names])
+        labels = tf.convert_to_tensor([self.image_classes_rule(ii) for ii in image_names])
 
         """ Mine anchors, positives, negatives """
         # print(">>>> Into mining...")
@@ -576,7 +583,7 @@ class Triplet_dataset_offline:
         # for idx, label in tqdm(enumerate(labels), "Triplet Mining"):
         total = labels.shape[0]
         batch_size = self.batch_size
-        total_batch = int(np.ceil(total / batch_size))
+        total_batch = int(tf.math.ceil(total / batch_size))
         for batch_id in range(total_batch):
             bss, bee = batch_id * batch_size, (batch_id + 1) * batch_size
             bee = min(bee, total)

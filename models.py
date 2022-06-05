@@ -148,8 +148,8 @@ def buildin_models(
         nn = keras.layers.Dense(emb_shape, use_bias=use_bias, kernel_initializer="glorot_normal", name="GAP_dense")(nn)
     elif output_layer == "GDC":
         """ GDC """
-        nn = keras.layers.DepthwiseConv2D(int(nn.shape[1]), use_bias=False, name="GDC_dw")(nn)
-        # nn = keras.layers.Conv2D(512, int(nn.shape[1]), use_bias=False, padding="valid", groups=512)(nn)
+        nn = keras.layers.DepthwiseConv2D(nn.shape[1], use_bias=False, name="GDC_dw")(nn)
+        # nn = keras.layers.Conv2D(nn.shape[-1], nn.shape[1], use_bias=False, padding="valid", groups=nn.shape[-1])(nn)
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="GDC_batchnorm")(nn)
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
@@ -173,27 +173,43 @@ def buildin_models(
 
 @keras.utils.register_keras_serializable(package="keras_insightface")
 class NormDense(keras.layers.Layer):
-    def __init__(self, units=1000, kernel_regularizer=None, loss_top_k=1, append_norm=False, **kwargs):
+    def __init__(self, units=1000, kernel_regularizer=None, loss_top_k=1, append_norm=False, partial_fc_split=0, **kwargs):
         super(NormDense, self).__init__(**kwargs)
         # self.init = keras.initializers.VarianceScaling(scale=2.0, mode="fan_out", distribution="truncated_normal")
         self.init = keras.initializers.glorot_normal()
         # self.init = keras.initializers.TruncatedNormal(mean=0, stddev=0.01)
-        self.units, self.loss_top_k, self.append_norm = units, loss_top_k, append_norm
+        self.units, self.loss_top_k, self.append_norm, self.partial_fc_split = units, loss_top_k, append_norm, partial_fc_split
         self.kernel_regularizer = keras.regularizers.get(kernel_regularizer)
         self.supports_masking = False
 
     def build(self, input_shape):
-        self.w = self.add_weight(
-            name="norm_dense_w",
-            shape=(input_shape[-1], self.units * self.loss_top_k),
-            initializer=self.init,
-            trainable=True,
-            regularizer=self.kernel_regularizer,
-        )
+        if self.partial_fc_split > 1:
+            self.cur_id = self.add_weight(name="cur_id", shape=(), initializer="zeros", dtype="int64", trainable=False)
+            self.sub_weights = self.add_weight(
+                name="norm_dense_w_subs",
+                shape=(self.partial_fc_split, input_shape[-1], self.units * self.loss_top_k),
+                initializer=self.init,
+                trainable=True,
+                regularizer=self.kernel_regularizer,
+            )
+        else:
+            self.w = self.add_weight(
+                name="norm_dense_w",
+                shape=(input_shape[-1], self.units * self.loss_top_k),
+                initializer=self.init,
+                trainable=True,
+                regularizer=self.kernel_regularizer,
+            )
         super(NormDense, self).build(input_shape)
 
     def call(self, inputs, **kwargs):
         # tf.print("tf.reduce_mean(self.w):", tf.reduce_mean(self.w))
+        if self.partial_fc_split > 1:
+            # self.sub_weights.scatter_nd_update([[(self.cur_id - 1) % self.partial_fc_split]], [self.w])
+            # self.w.assign(tf.gather(self.sub_weights, self.cur_id))
+            self.w = tf.gather(self.sub_weights, self.cur_id)
+            self.cur_id.assign((self.cur_id + 1) % self.partial_fc_split)
+
         norm_w = K.l2_normalize(self.w, axis=0)
         norm_inputs = K.l2_normalize(inputs, axis=1)
         output = K.dot(norm_inputs, norm_w)
@@ -215,6 +231,7 @@ class NormDense(keras.layers.Layer):
                 "units": self.units,
                 "loss_top_k": self.loss_top_k,
                 "append_norm": self.append_norm,
+                "partial_fc_split": self.partial_fc_split,
                 "kernel_regularizer": keras.regularizers.serialize(self.kernel_regularizer),
             }
         )
@@ -227,12 +244,12 @@ class NormDense(keras.layers.Layer):
 
 @keras.utils.register_keras_serializable(package="keras_insightface")
 class NormDenseVPL(NormDense):
-    def __init__(self, batch_size, units=1000, kernel_regularizer=None, append_norm=False, vpl_lambda=0.15, start_iters=8000, allowed_delta=200, **kwargs):
-        super().__init__(units, kernel_regularizer, append_norm=append_norm, **kwargs)
+    def __init__(self, batch_size, units=1000, kernel_regularizer=None, vpl_lambda=0.15, start_iters=8000, allowed_delta=200, **kwargs):
+        super().__init__(units, kernel_regularizer, **kwargs)
         self.vpl_lambda, self.batch_size = vpl_lambda, batch_size  # Need the actual batch_size here, for storing inputs
         # self.start_iters, self.allowed_delta = 8000 * 128 // batch_size, 200 * 128 // batch_size # adjust according to batch_size
-        self.start_iters, self.allowed_delta = start_iters, allowed_delta # adjust according to batch_size
-        print(">>>> [NormDenseVPL], vpl_lambda={}, start_iters={}, allowed_delta={}".format(vpl_lambda, start_iters, allowed_delta))
+        self.start_iters, self.allowed_delta = start_iters, allowed_delta
+        # print(">>>> [NormDenseVPL], vpl_lambda={}, start_iters={}, allowed_delta={}".format(vpl_lambda, start_iters, allowed_delta))
 
     def build(self, input_shape):
         # self.queue_features in same shape format as self.norm_features, for easier calling tf.tensor_scatter_nd_update
@@ -251,7 +268,12 @@ class NormDenseVPL(NormDense):
             lambda: tf.where(self.iters - self.queue_iters <= self.allowed_delta, self.vpl_lambda, 0.0),  # prepare_queue_lambda
             lambda: self.zero_queue_lambda,
         )
+        tf.print(" - vpl_sample_ratio:", tf.reduce_mean(tf.cast(queue_lambda > 0, "float32")), end="")
         # self.queue_lambda = queue_lambda
+
+        if self.partial_fc_split > 1:
+            self.w = tf.gather(self.sub_weights, self.cur_id)
+            self.cur_id.assign((self.cur_id + 1) % self.partial_fc_split)
 
         norm_w = K.l2_normalize(self.w, axis=0)
         injected_weight = norm_w * (1 - queue_lambda) + tf.transpose(self.queue_features) * queue_lambda
@@ -270,40 +292,6 @@ class NormDenseVPL(NormDense):
     def get_config(self):
         config = super().get_config()
         config.update({"batch_size": self.batch_size, "vpl_lambda": self.vpl_lambda})
-        return config
-
-
-@keras.utils.register_keras_serializable(package="keras_insightface")
-class NormDensePartialFC(NormDense):
-    def __init__(self, partial_fc_split=0, **kwargs):
-        super(NormDensePartialFC, self).__init__(**kwargs)
-        self.partial_fc_split = partial_fc_split
-        # self.sub_units = self.units // self.partial_fc_split  # units is already divided by partial_fc_split
-        self.splits = tf.convert_to_tensor([self.units * (ii + 1) for ii in range(self.partial_fc_split)])
-
-    def build(self, embeddings_shape):
-        # print(f"{embeddings_shape = }")
-        # Drop class if cannot divided, keep output shape concurrent
-        self.sub_weights, self.sub_pads = [], []
-        for ii in range(self.partial_fc_split):
-            sub_weight = self.add_weight(
-                name="norm_dense_w_{}".format(ii),
-                shape=(embeddings_shape[-1], self.units * self.loss_top_k),
-                initializer=self.init,
-                trainable=True,
-                regularizer=self.kernel_regularizer,
-            )
-            self.sub_weights.append(sub_weight)
-
-    def call(self, embeddings, classes, **kwargs):
-        split_index = tf.argmax(classes[0] < self.splits)  # Classes is a label, not one-hot format
-        # tf.print("split_index:", split_index)
-        self.w = tf.gather(self.sub_weights, split_index)
-        return super().call(embeddings)
-
-    def get_config(self):
-        config = super(NormDensePartialFC, self).get_config()
-        config.update({"partial_fc_split": self.partial_fc_split})
         return config
 
 

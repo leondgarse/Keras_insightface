@@ -325,34 +325,37 @@ def hist_plot_split(
     )
 
 
-def choose_accuracy(aa, skip_name_len=0, sort_agedb=False, evals=EVALS_NAME):
+def choose_accuracy(aa, skip_name_len=0, sort_metric=False, metric_key="agedb_30", key_picks=EVALS_NAME):
     import json
     import pandas as pd
 
-    # evals = ['lfw', 'cfp_fp', 'agedb_30']
-    dd_agedb_max, dd_all_max, dd_sum_max = {}, {}, {}
+    # key_picks = ['lfw', 'cfp_fp', 'agedb_30']
+    dd_metric_max, dd_all_max, dd_sum_max, dd_latest = {}, {}, {}, {}
+    metric_key = metric_key if metric_key in key_picks else key_picks[-1]  # Pick -1 item if metric_key not in key_picks
     for pp in aa:
         with open(pp, "r") as ff:
             hh = json.load(ff)
         nn = os.path.splitext(os.path.basename(pp))[0][skip_name_len:]
-        agedb_arg_max = np.argmax(hh["agedb_30"])
-        dd_agedb_max[nn] = {kk: hh[kk][agedb_arg_max] for kk in evals if kk in hh}
-        dd_agedb_max[nn]["epoch"] = int(agedb_arg_max)
+        metric_arg_max = np.argmax(hh[metric_key])
+        dd_metric_max[nn] = {kk: hh[kk][metric_arg_max] for kk in key_picks if kk in hh}
+        dd_metric_max[nn]["epoch"] = int(metric_arg_max)
 
-        dd_all_max[nn] = {kk: "%.4f, %2d" % (max(hh[kk]), np.argmax(hh[kk])) for kk in evals if kk in hh}
-        # dd_all_max[nn] = {kk: max(hh[kk]) for kk in evals}
-        # dd_all_max[nn].update({kk + "_epoch": np.argmax(hh[kk]) for kk in evals})
+        dd_all_max[nn] = {kk: "%.4f, %2d" % (max(hh[kk]), np.argmax(hh[kk])) for kk in key_picks if kk in hh}
+        # dd_all_max[nn] = {kk: max(hh[kk]) for kk in key_picks}
+        # dd_all_max[nn].update({kk + "_epoch": np.argmax(hh[kk]) for kk in key_picks})
 
-        sum_arg_max = np.argmax(np.sum([hh[kk] for kk in evals if kk in hh], axis=0))
-        dd_sum_max[nn] = {kk: hh[kk][sum_arg_max] for kk in evals if kk in hh}
+        sum_arg_max = np.argmax(np.sum([hh[kk] for kk in key_picks if kk in hh], axis=0))
+        dd_sum_max[nn] = {kk: hh[kk][sum_arg_max] for kk in key_picks if kk in hh}
         dd_sum_max[nn]["epoch"] = int(sum_arg_max)
+        dd_latest[nn] = {kk: hh[kk][-1] for kk in key_picks if kk in hh}
+        dd_latest[nn]["epoch"] = len(hh[metric_key])
 
-    names = ["agedb max", "all max", "sum max"]
-    for nn, dd in zip(names, [dd_agedb_max, dd_all_max, dd_sum_max]):
+    names = [metric_key + " max", "all max", "sum max", "latest"]
+    for nn, dd in zip(names, [dd_metric_max, dd_all_max, dd_sum_max, dd_latest]):
         print()
         print(">>>>", nn, ":")
         # print(pd.DataFrame(dd).T.to_markdown())
         rr = pd.DataFrame(dd).T
-        rr = rr.sort_values("agedb_30") if sort_agedb else rr
+        rr = rr.sort_values(metric_key) if sort_metric else rr
         print(rr.to_markdown())
-    return dd_agedb_max, dd_all_max, dd_sum_max
+    return dd_metric_max, dd_all_max, dd_sum_max

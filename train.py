@@ -253,6 +253,7 @@ class Train:
             output_kernel_regularizer = None
 
         model_output_layer_name = None if self.model is None else self.model.output_names[-1]
+        # arcface_not_match = self.model.layers[-1].append_norm != is_magface_loss or self.partial_fc_split != self.model.layers[-1].partial_fc_split
         if type == self.softmax and model_output_layer_name != self.softmax:
             print(">>>> Add softmax layer...")
             softmax_logits = keras.layers.Dense(self.classes, use_bias=False, name=self.softmax + "_logits", kernel_regularizer=output_kernel_regularizer)
@@ -266,32 +267,31 @@ class Train:
             logits = softmax_logits(embedding)
             output_fp32 = keras.layers.Activation("softmax", dtype="float32", name=self.softmax)(logits)
             self.model = keras.models.Model(inputs, output_fp32)
-        elif self.partial_fc_split > 0 and type == self.arcface and (model_output_layer_name != self.arcface_partial):
-            print(">>>> Add NormDensePartialFC layer, loss_top_k={}, is_magface_loss={}...".format(loss_top_k, is_magface_loss))
-            partial_arcface_logits = models.NormDensePartialFC(
-                partial_fc_split=self.partial_fc_split,
-                units=self.classes,
-                kernel_regularizer=output_kernel_regularizer,
-                loss_top_k=loss_top_k,
-                append_norm=is_magface_loss,
-                name=self.arcface_partial,
-                dtype="float32",
-            )
-            classes_inputs = keras.layers.Input([], dtype="int32", name="classes_inputs")
-            output_fp32 = partial_arcface_logits(embedding, classes_inputs)
-            self.model = keras.models.Model([inputs, classes_inputs], output_fp32)
+        # elif self.partial_fc_split > 0 and type == self.arcface and (model_output_layer_name != self.arcface_partial):
+        #     print(">>>> Add NormDensePartialFC layer, loss_top_k={}, is_magface_loss={}...".format(loss_top_k, is_magface_loss))
+        #     partial_arcface_logits = models.NormDensePartialFC(
+        #         partial_fc_split=self.partial_fc_split,
+        #         units=self.classes,
+        #         kernel_regularizer=output_kernel_regularizer,
+        #         loss_top_k=loss_top_k,
+        #         append_norm=is_magface_loss,
+        #         name=self.arcface_partial,
+        #         dtype="float32",
+        #     )
+        #     classes_inputs = keras.layers.Input([], dtype="int32", name="classes_inputs")
+        #     output_fp32 = partial_arcface_logits(embedding, classes_inputs)
+        #     self.model = keras.models.Model([inputs, classes_inputs], output_fp32)
+
         elif type == self.arcface and (model_output_layer_name != self.arcface or self.model.layers[-1].append_norm != is_magface_loss):
-            vpl_kwargs = {"vpl_lambda": 0.15, "start_iters": self.vpl_start_iters, "allowed_delta": self.vpl_allowed_delta}
-            print(">>>> Add arcface layer, loss_top_k={}, is_magface_loss={}, vpl_kwargs={}...".format(loss_top_k, is_magface_loss, vpl_kwargs))
-            if self.vpl_start_iters > 0:
+            vpl_start_iters = self.vpl_start_iters * self.steps_per_epoch if self.vpl_start_iters < 50 else self.vpl_start_iters
+            vpl_kwargs = {"vpl_lambda": 0.15, "start_iters": vpl_start_iters, "allowed_delta": self.vpl_allowed_delta}
+            arc_kwargs = {"loss_top_k": loss_top_k, "append_norm": is_magface_loss, "partial_fc_split": self.partial_fc_split, "name": self.arcface}
+            print(">>>> Add arcface layer, arc_kwargs={}, vpl_kwargs={}...".format(arc_kwargs, vpl_kwargs))
+            if vpl_start_iters > 0:
                 batch_size = self.batch_size_per_replica
-                arcface_logits = models.NormDenseVPL(
-                    batch_size, self.classes, output_kernel_regularizer, append_norm=is_magface_loss, **vpl_kwargs, name=self.arcface, dtype="float32"
-                )
+                arcface_logits = models.NormDenseVPL(batch_size, self.classes, output_kernel_regularizer, **arc_kwargs, **vpl_kwargs, dtype="float32")
             else:
-                arcface_logits = models.NormDense(
-                    self.classes, output_kernel_regularizer, loss_top_k, append_norm=is_magface_loss, name=self.arcface, dtype="float32"
-                )
+                arcface_logits = models.NormDense(self.classes, output_kernel_regularizer, **arc_kwargs, dtype="float32")
 
             if self.model != None and "_embedding" not in self.model.output_names[-1]:
                 arcface_logits.build(embedding.shape)
@@ -480,7 +480,7 @@ class Train:
         # self.callbacks.append(keras.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs=None: keras.backend.clear_session()))
         # self.callbacks.append(keras.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs=None: self.basic_model.save("aa_epoch{}.h5".format(epoch))))
 
-        if self.vpl_start_iters > 0: # VPL mode, needs the actual batch_size
+        if self.vpl_start_iters > 0:  # VPL mode, needs the actual batch_size
             loss.build(self.batch_size_per_replica)
             self.callbacks.append(myCallbacks.VPLUpdateQueue())
 
