@@ -62,7 +62,7 @@ def block(inputs, out_channel, strides=1, activation="relu", use_se=False, conv_
         shortcut = conv2d_no_bias(inputs, out_channel, 1, strides=strides, name=name + "_shortcut_")
         shortcut = batchnorm_with_activation(shortcut, activation=None, name=name + "_shortcut_")
     else:
-        shortcut = inputs
+        shortcut = inputs if strides == 1 else keras.layers.MaxPooling2D(1, strides=strides)(inputs)
 
     nn = batchnorm_with_activation(inputs, activation=None, name=name + "_1_")
     nn = conv2d_no_bias(nn, out_channel, 3, strides=1, padding="same", name=name + "_1_")
@@ -74,12 +74,14 @@ def block(inputs, out_channel, strides=1, activation="relu", use_se=False, conv_
     return keras.layers.Add(name=name + "_add")([shortcut, nn])
 
 
-def resnet_stack_fn(inputs, out_channels, depthes, strides=2, activation="relu", use_se=False):
+def resnet_stack_fn(inputs, out_channels, depthes, use_se=False, use_max_pool=False, strides=2, activation="relu"):
     nn = inputs
     use_ses = use_se if isinstance(use_se, (list, tuple)) else [use_se] * len(out_channels)
     for id, (out_channel, depth, use_se) in enumerate(zip(out_channels, depthes, use_ses)):
         name = "stack" + str(id + 1)
-        nn = block(nn, out_channel, strides, activation, use_se, True, name=name + "_block1")
+        conv_shortcut = False if use_max_pool and inputs.shape[-1] == out_channel else True
+        # print(f"{conv_shortcut = }, {use_max_pool = }")
+        nn = block(nn, out_channel, strides, activation, use_se, conv_shortcut, name=name + "_block1")
         for ii in range(2, depth + 1):
             nn = block(nn, out_channel, 1, activation, use_se, False, name=name + "_block" + str(ii))
     return nn
@@ -100,36 +102,36 @@ def ResNet(input_shape, stack_fn, classes=1000, activation="relu", model_name="r
     return model
 
 
-def ResNet18(input_shape, classes=1000, activation="relu", use_se=False, model_name="ResNet18", **kwargs):
+def ResNet18(input_shape, classes=1000, activation="relu", use_se=False, use_max_pool=False, model_name="ResNet18", **kwargs):
     out_channels = [64, 128, 256, 512]
     depthes = [2, 2, 2, 2]
-    stack_fn = lambda nn: resnet_stack_fn(nn, out_channels, depthes, activation=activation, use_se=use_se)
+    stack_fn = lambda nn: resnet_stack_fn(nn, out_channels, depthes, use_se, use_max_pool, activation=activation)
     return ResNet(input_shape, stack_fn, classes, activation, model_name=model_name, **kwargs)
 
 
-def ResNet34(input_shape, classes=1000, activation="relu", use_se=False, model_name="ResNet34", **kwargs):
+def ResNet34(input_shape, classes=1000, activation="relu", use_se=False, use_max_pool=False, model_name="ResNet34", **kwargs):
     out_channels = [64, 128, 256, 512]
     depthes = [3, 4, 6, 3]
-    stack_fn = lambda nn: resnet_stack_fn(nn, out_channels, depthes, activation=activation, use_se=use_se)
+    stack_fn = lambda nn: resnet_stack_fn(nn, out_channels, depthes, use_se, use_max_pool, activation=activation)
     return ResNet(input_shape, stack_fn, classes, activation, model_name=model_name, **kwargs)
 
 
-def ResNet50(input_shape, classes=1000, activation="relu", use_se=False, model_name="ResNet50", **kwargs):
+def ResNet50(input_shape, classes=1000, activation="relu", use_se=False, use_max_pool=False, model_name="ResNet50", **kwargs):
     out_channels = [64, 128, 256, 512]
     depthes = [3, 4, 14, 3]
-    stack_fn = lambda nn: resnet_stack_fn(nn, out_channels, depthes, activation=activation, use_se=use_se)
+    stack_fn = lambda nn: resnet_stack_fn(nn, out_channels, depthes, use_se, use_max_pool, activation=activation)
     return ResNet(input_shape, stack_fn, classes, activation, model_name=model_name, **kwargs)
 
 
-def ResNet100(input_shape, classes=1000, activation="relu", use_se=False, model_name="ResNet100", **kwargs):
+def ResNet100(input_shape, classes=1000, activation="relu", use_se=False, use_max_pool=False, model_name="ResNet100", **kwargs):
     out_channels = [64, 128, 256, 512]
     depthes = [3, 13, 30, 3]
-    stack_fn = lambda nn: resnet_stack_fn(nn, out_channels, depthes, activation=activation, use_se=use_se)
+    stack_fn = lambda nn: resnet_stack_fn(nn, out_channels, depthes, use_se, use_max_pool, activation=activation)
     return ResNet(input_shape, stack_fn, classes, activation, model_name=model_name, **kwargs)
 
 
-def ResNet101(input_shape, classes=1000, activation="relu", use_se=False, model_name="ResNet101", **kwargs):
+def ResNet101(input_shape, classes=1000, activation="relu", use_se=False, use_max_pool=False, model_name="ResNet101", **kwargs):
     out_channels = [64, 128, 256, 512]
     depthes = [3, 4, 23, 3]
-    stack_fn = lambda nn: resnet_stack_fn(nn, out_channels, depthes, activation=activation, use_se=use_se)
+    stack_fn = lambda nn: resnet_stack_fn(nn, out_channels, depthes, use_se, use_max_pool, activation=activation)
     return ResNet(input_shape, stack_fn, classes, activation, model_name=model_name, **kwargs)

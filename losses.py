@@ -345,6 +345,72 @@ class MagFaceLoss(ArcfaceLossSimple):
         return config
 
 
+# [AdaFace: Quality Adaptive Margin for Face Recognition](https://arxiv.org/pdf/2204.00964.pdf)
+@keras.utils.register_keras_serializable(package="keras_insightface")
+class AdaFaceLoss(ArcfaceLossSimple):
+    """
+    margin_alpha:
+      - When margin_alpha=0.33, the model performs the best. For 0.22 or 0.66, the performance is still higher.
+      - As long as h is set such that ∥dzi∥ has some variation, margin_alpha is not very sensitive.
+
+    margin:
+      - The performance is best for HQ datasets when margin=0.4, for LQ datasets when margin=0.75.
+      - Large margin results in large angular margin variation based on the image quality, resulting in more adaptivity.
+
+    mean_std_alpha: Update pace for batch_mean and batch_std.
+    """
+    def __init__(self, margin=0.4, margin_alpha=0.333, mean_std_alpha=0.01, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
+        super().__init__(scale=scale, from_logits=from_logits, label_smoothing=label_smoothing, **kwargs)
+        self.min_feature_norm, self.max_feature_norm, self.epislon = 0.001, 100, 1e-3
+        self.margin, self.margin_alpha, self.mean_std_alpha = margin, margin_alpha, mean_std_alpha
+        self.batch_mean = tf.Variable(20, dtype="float32", trainable=False)
+        self.batch_std = tf.Variable(100, dtype="float32", trainable=False)
+        self.cos_max_epislon = tf.acos(-1.0) - self.epislon  # pi - epislon
+
+    def call(self, y_true, norm_logits_with_norm):
+        if self.batch_labels_back_up is not None:  # For VPL mode
+            self.batch_labels_back_up.assign(tf.argmax(y_true, axis=-1))
+        # feature_norm is multiplied with -1 in NormDense layer, keeping low for not affecting accuracy metrics.
+        norm_logits, feature_norm = norm_logits_with_norm[:, :-1], norm_logits_with_norm[:, -1] * -1
+        feature_norm = tf.clip_by_value(feature_norm, self.min_feature_norm, self.max_feature_norm)
+        norm_mean, norm_std = tf.nn.moments(feature_norm, axes=-1)
+        self.batch_mean.assign(self.mean_std_alpha * norm_mean + (1.0 - self.mean_std_alpha) * self.batch_mean)
+        self.batch_std.assign(self.mean_std_alpha * norm_std + (1.0 - self.mean_std_alpha) * self.batch_std)
+
+        margin_scaler = (feature_norm - self.batch_mean) / (self.batch_std + self.epislon)  # 66% between -1, 1
+        margin_scaler = tf.clip_by_value(margin_scaler * self.margin_alpha, -1, 1)  # 68% between -0.333 ,0.333 when h:0.333
+        scalared_margin = self.margin * margin_scaler
+        # ex: m=0.5, h:0.333
+        # range
+        #       (66% range)
+        #   -1 -0.333  0.333   1  (margin_scaler)
+        # -0.5 -0.166  0.166 0.5  (m * margin_scaler)
+
+        pick_cond = tf.where(y_true != 0)
+        y_pred_vals = tf.gather_nd(norm_logits, pick_cond)
+        angular_theta = tf.cos(tf.clip_by_value(tf.acos(y_pred_vals) - scalared_margin, self.epislon, self.cos_max_epislon))  # g_angular
+        additive_theta = angular_theta - (self.margin + scalared_margin)  # g_additive
+        # theta_valid = y_pred_vals - margin
+        # theta_valid = tf.where(y_pred_vals > additive_theta, additive_theta, y_pred_vals)
+        tf.print(", margin: ", tf.reduce_mean(scalared_margin), sep="", end="\r")
+
+        arcface_logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, additive_theta) * self.scale
+        # return arcface_logits
+        # arcface_logits = tf.where(tf.cast(y_true, dtype=tf.bool), self.__apply_margin__(norm_logits, margin), norm_logits)
+        return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "margin": self.margin,
+                "margin_alpha": self.margin_alpha,
+                "mean_std_alpha": self.mean_std_alpha,
+            }
+        )
+        return config
+
+
 # [AdaCos: Adaptively Scaling Cosine Logits for Effectively Learning Deep Face Representations](https://arxiv.org/pdf/1905.00292.pdf)
 @keras.utils.register_keras_serializable(package="keras_insightface")
 class AdaCosLoss(tf.keras.losses.Loss):

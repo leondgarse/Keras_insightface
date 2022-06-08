@@ -449,7 +449,8 @@ class Train:
         # self.basic_model.trainable = True
         self.__init_optimizer__(optimizer)
         if not self.inited_from_model:
-            self.__init_model__(type, lossTopK, is_magface_loss=isinstance(loss, losses.MagFaceLoss))
+            is_magface_loss = isinstance(loss, losses.MagFaceLoss) or isinstance(loss, losses.AdaFaceLoss)
+            self.__init_model__(type, lossTopK, is_magface_loss)
 
         # loss_weights
         self.cur_loss, self.loss_weights = [loss], {ii: lossWeight for ii in self.model.output_names}
