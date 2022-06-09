@@ -262,16 +262,6 @@ class MagFaceLoss(ArcfaceLossSimple):
         # np.set_printoptions(precision=4)
         # self.precission_4 = lambda xx: tf.math.round(xx * 10000) / 10000
 
-    def __apply_margin__(self, norm_logits, margin):
-        if self.use_cosface_margin:
-            margin_logits = norm_logits - margin
-        else:
-            margin_cos, margin_sin = tf.cos(margin), tf.sin(margin)
-            threshold = tf.cos(np.pi - margin)
-            theta = norm_logits * margin_cos - tf.sqrt(tf.maximum(1 - tf.pow(norm_logits, 2), 0.0)) * margin_sin
-            margin_logits = tf.where(norm_logits > threshold, theta, self.theta_min - theta)
-        return margin_logits
-
     def call(self, y_true, norm_logits_with_norm):
         if self.batch_labels_back_up is not None:
             self.batch_labels_back_up.assign(tf.argmax(y_true, axis=-1))
@@ -280,28 +270,33 @@ class MagFaceLoss(ArcfaceLossSimple):
         feature_norm = tf.clip_by_value(feature_norm, self.min_feature_norm, self.max_feature_norm)
         # margin = (self.u_margin-self.l_margin) / (self.u_a-self.l_a)*(x-self.l_a) + self.l_margin
         margin = self.margin_scale * (feature_norm - self.min_feature_norm) + self.min_margin
-        # margin = tf.expand_dims(margin, 1)
+        margin = tf.expand_dims(margin, 1)
 
         pick_cond = tf.where(y_true != 0)
         y_pred_vals = tf.gather_nd(norm_logits, pick_cond)
         if self.use_cosface_margin:
             # Cosface process
-            # arcface_logits = tf.where(tf.cast(y_true, dtype=tf.bool), norm_logits - margin, norm_logits) * self.scale
-            theta_valid = y_pred_vals - margin
+            arcface_logits = tf.where(tf.cast(y_true, dtype=tf.bool), norm_logits - margin, norm_logits) * self.scale
+            # theta_valid = y_pred_vals - margin
         else:
             # Arcface process
             margin_cos, margin_sin = tf.cos(margin), tf.sin(margin)
-            threshold = tf.cos(np.pi - margin)
-            theta = y_pred_vals * margin_cos - tf.sqrt(tf.maximum(1 - tf.pow(y_pred_vals, 2), 0.0)) * margin_sin
-            theta_valid = tf.where(y_pred_vals > threshold, theta, self.theta_min - theta)
+            # threshold = tf.cos(np.pi - margin)
+            # theta = y_pred_vals * margin_cos - tf.sqrt(tf.maximum(1 - tf.pow(y_pred_vals, 2), 0.0)) * margin_sin
+            # theta_valid = tf.where(y_pred_vals > threshold, theta, self.theta_min - theta)
+            # arcface_logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, theta_valid) * self.scale
+            arcface_logits = tf.where(
+                tf.cast(y_true, dtype=tf.bool),
+                norm_logits * margin_cos - tf.sqrt(tf.maximum(1 - tf.pow(norm_logits, 2), 0.0)) * margin_sin,
+                norm_logits,
+            )
+            arcface_logits = tf.minimum(arcface_logits, norm_logits) * self.scale
 
-        if self.use_curricular_scale:
-            self.curricular_hard_scale.assign(tf.reduce_mean(y_pred_vals) * 0.01 + (1 - 0.01) * self.curricular_hard_scale)
-            tf.print(", hard_scale:", self.curricular_hard_scale, end="")
-            norm_logits = tf.where(norm_logits > tf.expand_dims(theta_valid, 1), norm_logits * (self.curricular_hard_scale + norm_logits), norm_logits)
+        # if self.use_curricular_scale:
+        #     self.curricular_hard_scale.assign(tf.reduce_mean(y_pred_vals) * 0.01 + (1 - 0.01) * self.curricular_hard_scale)
+        #     tf.print(", hard_scale:", self.curricular_hard_scale, end="")
+        #     norm_logits = tf.where(norm_logits > tf.expand_dims(theta_valid, 1), norm_logits * (self.curricular_hard_scale + norm_logits), norm_logits)
 
-        arcface_logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, theta_valid) * self.scale
-        # arcface_logits = tf.where(tf.cast(y_true, dtype=tf.bool), self.__apply_margin__(norm_logits, margin), norm_logits)
         arcface_loss = tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
 
         # MegFace loss_G, g = 1/(self.u_a**2) * x_norm + 1/(x_norm)
@@ -359,6 +354,7 @@ class AdaFaceLoss(ArcfaceLossSimple):
 
     mean_std_alpha: Update pace for batch_mean and batch_std.
     """
+
     def __init__(self, margin=0.4, margin_alpha=0.333, mean_std_alpha=0.01, scale=64.0, from_logits=True, label_smoothing=0, **kwargs):
         super().__init__(scale=scale, from_logits=from_logits, label_smoothing=label_smoothing, **kwargs)
         self.min_feature_norm, self.max_feature_norm, self.epislon = 0.001, 100, 1e-3
@@ -379,24 +375,28 @@ class AdaFaceLoss(ArcfaceLossSimple):
 
         margin_scaler = (feature_norm - self.batch_mean) / (self.batch_std + self.epislon)  # 66% between -1, 1
         margin_scaler = tf.clip_by_value(margin_scaler * self.margin_alpha, -1, 1)  # 68% between -0.333 ,0.333 when h:0.333
-        scalared_margin = self.margin * margin_scaler
+        scalared_margin = tf.expand_dims(self.margin * margin_scaler, 1)
+        tf.print(", margin: ", tf.reduce_mean(scalared_margin), sep="", end="\r")
         # ex: m=0.5, h:0.333
         # range
         #       (66% range)
         #   -1 -0.333  0.333   1  (margin_scaler)
         # -0.5 -0.166  0.166 0.5  (m * margin_scaler)
 
-        pick_cond = tf.where(y_true != 0)
-        y_pred_vals = tf.gather_nd(norm_logits, pick_cond)
-        angular_theta = tf.cos(tf.clip_by_value(tf.acos(y_pred_vals) - scalared_margin, self.epislon, self.cos_max_epislon))  # g_angular
-        additive_theta = angular_theta - (self.margin + scalared_margin)  # g_additive
-        # theta_valid = y_pred_vals - margin
+        # pick_cond = tf.where(y_true != 0)
+        # y_pred_vals = tf.gather_nd(norm_logits, pick_cond)
+        # angular_theta = tf.cos(tf.clip_by_value(tf.acos(y_pred_vals) - scalared_margin, self.epislon, self.cos_max_epislon))  # g_angular
+        # additive_theta = angular_theta - (self.margin + scalared_margin)  # g_additive
         # theta_valid = tf.where(y_pred_vals > additive_theta, additive_theta, y_pred_vals)
-        tf.print(", margin: ", tf.reduce_mean(scalared_margin), sep="", end="\r")
+        # arcface_logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, additive_theta) * self.scale
+        arcface_logits = tf.where(
+            tf.cast(y_true, dtype=tf.bool),
+            tf.cos(tf.clip_by_value(tf.acos(norm_logits) - scalared_margin, self.epislon, self.cos_max_epislon)) - (self.margin + scalared_margin),
+            norm_logits,
+        )
+        arcface_logits *= self.scale
 
-        arcface_logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, additive_theta) * self.scale
         # return arcface_logits
-        # arcface_logits = tf.where(tf.cast(y_true, dtype=tf.bool), self.__apply_margin__(norm_logits, margin), norm_logits)
         return tf.keras.losses.categorical_crossentropy(y_true, arcface_logits, from_logits=self.from_logits, label_smoothing=self.label_smoothing)
 
     def get_config(self):

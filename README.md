@@ -64,7 +64,7 @@
 
 # Usage
 ## Environment
-  - **Currently using `Tensorflow 2.6.3` with `cuda==11.2` `cudnn==8.1`. Tested `TF 2.7.1` not working for me, `TF 2.8.0` not working for `MagFaceLoss`.**
+  - **Currently using `Tensorflow 2.9.1` with `cuda==11.2` `cudnn==8.1`
     - [Install cuda-toolkit](https://developer.nvidia.com/cuda-toolkit)
     - [Install cudnn](https://developer.nvidia.com/rdp/cudnn-download)
   - **python and tensorflow version**
@@ -72,11 +72,11 @@
     # $ ipython
     # Python 3.8.5 (default, Sep  4 2020, 07:30:14)
     >>> tf.__version__
-    # '2.6.3'
+    # '2.9.1'
 
     >>> import tensorflow_addons as tfa
     >>> tfa.__version__
-    Out[3]: '0.16.1'
+    Out[3]: '0.17.0'
     ```
     Or `tf-nightly`
     ```sh

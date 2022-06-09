@@ -238,7 +238,7 @@ class Train:
                 wd_callback = myCallbacks.OptimizerWeightDecay(lr_base, wd_base, is_lr_on_batch=self.is_lr_on_batch)
                 self.callbacks.append(wd_callback)  # should be after lr_scheduler
 
-    def __init_model__(self, type, loss_top_k=1, is_magface_loss=False):
+    def __init_model__(self, type, loss_top_k=1, header_append_norm=False):
         inputs = self.basic_model.inputs[0]
         embedding = self.basic_model.outputs[0]
         is_multi_output = lambda mm: len(mm.outputs) != 1 or isinstance(mm.layers[-1], keras.layers.Concatenate)
@@ -253,7 +253,7 @@ class Train:
             output_kernel_regularizer = None
 
         model_output_layer_name = None if self.model is None else self.model.output_names[-1]
-        # arcface_not_match = self.model.layers[-1].append_norm != is_magface_loss or self.partial_fc_split != self.model.layers[-1].partial_fc_split
+        # arcface_not_match = self.model.layers[-1].append_norm != header_append_norm or self.partial_fc_split != self.model.layers[-1].partial_fc_split
         if type == self.softmax and model_output_layer_name != self.softmax:
             print(">>>> Add softmax layer...")
             softmax_logits = keras.layers.Dense(self.classes, use_bias=False, name=self.softmax + "_logits", kernel_regularizer=output_kernel_regularizer)
@@ -267,25 +267,10 @@ class Train:
             logits = softmax_logits(embedding)
             output_fp32 = keras.layers.Activation("softmax", dtype="float32", name=self.softmax)(logits)
             self.model = keras.models.Model(inputs, output_fp32)
-        # elif self.partial_fc_split > 0 and type == self.arcface and (model_output_layer_name != self.arcface_partial):
-        #     print(">>>> Add NormDensePartialFC layer, loss_top_k={}, is_magface_loss={}...".format(loss_top_k, is_magface_loss))
-        #     partial_arcface_logits = models.NormDensePartialFC(
-        #         partial_fc_split=self.partial_fc_split,
-        #         units=self.classes,
-        #         kernel_regularizer=output_kernel_regularizer,
-        #         loss_top_k=loss_top_k,
-        #         append_norm=is_magface_loss,
-        #         name=self.arcface_partial,
-        #         dtype="float32",
-        #     )
-        #     classes_inputs = keras.layers.Input([], dtype="int32", name="classes_inputs")
-        #     output_fp32 = partial_arcface_logits(embedding, classes_inputs)
-        #     self.model = keras.models.Model([inputs, classes_inputs], output_fp32)
-
-        elif type == self.arcface and (model_output_layer_name != self.arcface or self.model.layers[-1].append_norm != is_magface_loss):
+        elif type == self.arcface and (model_output_layer_name != self.arcface or self.model.layers[-1].append_norm != header_append_norm):
             vpl_start_iters = self.vpl_start_iters * self.steps_per_epoch if self.vpl_start_iters < 50 else self.vpl_start_iters
             vpl_kwargs = {"vpl_lambda": 0.15, "start_iters": vpl_start_iters, "allowed_delta": self.vpl_allowed_delta}
-            arc_kwargs = {"loss_top_k": loss_top_k, "append_norm": is_magface_loss, "partial_fc_split": self.partial_fc_split, "name": self.arcface}
+            arc_kwargs = {"loss_top_k": loss_top_k, "append_norm": header_append_norm, "partial_fc_split": self.partial_fc_split, "name": self.arcface}
             print(">>>> Add arcface layer, arc_kwargs={}, vpl_kwargs={}...".format(arc_kwargs, vpl_kwargs))
             if vpl_start_iters > 0:
                 batch_size = self.batch_size_per_replica
@@ -449,8 +434,8 @@ class Train:
         # self.basic_model.trainable = True
         self.__init_optimizer__(optimizer)
         if not self.inited_from_model:
-            is_magface_loss = isinstance(loss, losses.MagFaceLoss) or isinstance(loss, losses.AdaFaceLoss)
-            self.__init_model__(type, lossTopK, is_magface_loss)
+            header_append_norm = isinstance(loss, losses.MagFaceLoss) or isinstance(loss, losses.AdaFaceLoss)
+            self.__init_model__(type, lossTopK, header_append_norm)
 
         # loss_weights
         self.cur_loss, self.loss_weights = [loss], {ii: lossWeight for ii in self.model.output_names}
