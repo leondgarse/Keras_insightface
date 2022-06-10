@@ -281,6 +281,7 @@ class MagFaceLoss(ArcfaceLossSimple):
         else:
             # Arcface process
             margin_cos, margin_sin = tf.cos(margin), tf.sin(margin)
+            # XLA after TF > 2.7.0 not supporting this gather_nd -> tensor_scatter_nd_update method...
             # threshold = tf.cos(np.pi - margin)
             # theta = y_pred_vals * margin_cos - tf.sqrt(tf.maximum(1 - tf.pow(y_pred_vals, 2), 0.0)) * margin_sin
             # theta_valid = tf.where(y_pred_vals > threshold, theta, self.theta_min - theta)
@@ -383,6 +384,7 @@ class AdaFaceLoss(ArcfaceLossSimple):
         #   -1 -0.333  0.333   1  (margin_scaler)
         # -0.5 -0.166  0.166 0.5  (m * margin_scaler)
 
+        # XLA after TF > 2.7.0 not supporting this gather_nd -> tensor_scatter_nd_update method...
         # pick_cond = tf.where(y_true != 0)
         # y_pred_vals = tf.gather_nd(norm_logits, pick_cond)
         # angular_theta = tf.cos(tf.clip_by_value(tf.acos(y_pred_vals) - scalared_margin, self.epislon, self.cos_max_epislon))  # g_angular
