@@ -256,6 +256,7 @@ class MagFaceLoss(ArcfaceLossSimple):
         self.margin_scale = (max_margin - min_margin) / (max_feature_norm - min_feature_norm)
         self.regularizer_loss_scale = 1.0 / (self.max_feature_norm ** 2)
         self.use_curricular_scale = False
+        self.epislon = 1e-3
         if curricular_hard_scale >= 0:
             self.curricular_hard_scale = tf.Variable(curricular_hard_scale, dtype="float32", trainable=False)
             self.use_curricular_scale = True
@@ -267,6 +268,7 @@ class MagFaceLoss(ArcfaceLossSimple):
             self.batch_labels_back_up.assign(tf.argmax(y_true, axis=-1))
         # feature_norm is multiplied with -1 in NormDense layer, keeping low for not affecting accuracy metrics.
         norm_logits, feature_norm = norm_logits_with_norm[:, :-1], norm_logits_with_norm[:, -1] * -1
+        norm_logits = tf.clip_by_value(norm_logits, -1 + self.epislon, 1 - self.epislon)
         feature_norm = tf.clip_by_value(feature_norm, self.min_feature_norm, self.max_feature_norm)
         # margin = (self.u_margin-self.l_margin) / (self.u_a-self.l_a)*(x-self.l_a) + self.l_margin
         margin = self.margin_scale * (feature_norm - self.min_feature_norm) + self.min_margin
@@ -369,8 +371,13 @@ class AdaFaceLoss(ArcfaceLossSimple):
             self.batch_labels_back_up.assign(tf.argmax(y_true, axis=-1))
         # feature_norm is multiplied with -1 in NormDense layer, keeping low for not affecting accuracy metrics.
         norm_logits, feature_norm = norm_logits_with_norm[:, :-1], norm_logits_with_norm[:, -1] * -1
+        norm_logits = tf.clip_by_value(norm_logits, -1 + self.epislon, 1 - self.epislon)
         feature_norm = tf.clip_by_value(feature_norm, self.min_feature_norm, self.max_feature_norm)
-        norm_mean, norm_std = tf.nn.moments(feature_norm, axes=-1)
+        # norm_mean, norm_var = tf.stop_gradient(tf.nn.moments(feature_norm, axes=-1))
+        # norm_std  = tf.sqrt(norm_var * feature_norm.shape[0] / (feature_norm.shape[0] - 1))
+        norm_mean = tf.stop_gradient(tf.math.reduce_mean(feature_norm))
+        samples = tf.cast(tf.maximum(1, feature_norm.shape[0] - 1), feature_norm.dtype)
+        norm_std = tf.stop_gradient(tf.sqrt(tf.math.reduce_sum((feature_norm - norm_mean) ** 2) / samples))  # Torch std
         self.batch_mean.assign(self.mean_std_alpha * norm_mean + (1.0 - self.mean_std_alpha) * self.batch_mean)
         self.batch_std.assign(self.mean_std_alpha * norm_std + (1.0 - self.mean_std_alpha) * self.batch_std)
 
