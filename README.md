@@ -58,8 +58,8 @@
   | [r100 converted](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/glint360k_cosface_r100_fp16_0.1.h5) | [Glint360k](https://github.com/leondgarse/Keras_insightface/discussions/15#discussioncomment-935871) | 0.9985 | 0.992286 | 0.985167 | **0.962512** | **0.974689** |
   | [r50 magface](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/r50_magface_MS1MV2.h5) | [MS1MV2,E25](https://github.com/leondgarse/Keras_insightface/discussions/57) | 0.998167 | 0.981143 | 0.980500 | 0.943622 ||
   | [r100 magface](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/r100_magface_MS1MV2.h5) | [MS1MV2,E25](https://github.com/leondgarse/Keras_insightface/discussions/57) | 0.998333 | 0.987429 | 0.983333 | 0.949562 ||
-  | [r100 4m adaface](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/adaface_ir101_webface4m.h5) | [WebFace4M,E26](https://github.com/leondgarse/Keras_insightface/discussions/57#discussioncomment-2903459) | 0.998500 | 0.991857 | 0.977833 | 0.957059 | 0.971724 |
-  | [r100 12m adaface](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/adaface_ir101_webface12m.h5) | [WebFace12M,E26](https://github.com/leondgarse/Keras_insightface/discussions/57#discussioncomment-2903459) | 0.998333 | 0.992857 | 0.980667 | **0.963389** | **0.975763** |
+  | [r100 4m adaface](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/adaface_ir101_webface4m_rgb.h5) | [WebFace4M,E26](https://github.com/leondgarse/Keras_insightface/discussions/57#discussioncomment-2903459) | 0.998333 | 0.992857 | 0.978833 | 0.960954 | 0.974485 |
+  | [r100 12m adaface](https://github.com/leondgarse/Keras_insightface/releases/download/v1.0.0/adaface_ir101_webface12m_rgb.h5) | [WebFace12M,E26](https://github.com/leondgarse/Keras_insightface/discussions/57#discussioncomment-2903459) | 0.998500 | 0.993286 | 0.981667 | **0.964752** | **0.977451** |
 
 ***
 
