@@ -21,7 +21,7 @@ def batchnorm_with_activation(inputs, activation="relu", zero_gamma=False, name=
     )(inputs)
     if activation:
         act_name = name + activation
-        if activation == "PReLU":
+        if activation.lower() == "prelu":
             nn = keras.layers.PReLU(shared_axes=[1, 2], alpha_initializer=tf.initializers.Constant(0.25), name=act_name)(nn)
         else:
             nn = keras.layers.Activation(activation=activation, name=act_name)(nn)

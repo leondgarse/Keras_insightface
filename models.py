@@ -164,7 +164,7 @@ def buildin_models(
         nn = keras.layers.Dense(emb_shape, use_bias=use_bias, kernel_initializer="glorot_normal", name="F_dense")(nn)
 
     # `fix_gamma=True` in MXNet means `scale=False` in Keras
-    embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, scale=scale, dtype="float32", name="pre_embedding")(nn)
+    embedding = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, scale=scale, name="pre_embedding")(nn)
     embedding_fp32 = keras.layers.Activation("linear", dtype="float32", name="embedding")(embedding)
 
     basic_model = keras.models.Model(inputs, embedding_fp32, name=xx.name)
@@ -210,8 +210,8 @@ class NormDense(keras.layers.Layer):
             self.w = tf.gather(self.sub_weights, self.cur_id)
             self.cur_id.assign((self.cur_id + 1) % self.partial_fc_split)
 
-        norm_w = K.l2_normalize(self.w, axis=0)
-        norm_inputs = K.l2_normalize(inputs, axis=1)
+        norm_w = tf.nn.l2_normalize(self.w, axis=0, epsilon=1e-5)
+        norm_inputs = tf.nn.l2_normalize(inputs, axis=1, epsilon=1e-5)
         output = K.dot(norm_inputs, norm_w)
         if self.loss_top_k > 1:
             output = K.reshape(output, (-1, self.units, self.loss_top_k))
