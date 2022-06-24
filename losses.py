@@ -366,6 +366,16 @@ class AdaFaceLoss(ArcfaceLossSimple):
         self.batch_std = tf.Variable(100, dtype="float32", trainable=False)
         self.cos_max_epislon = tf.acos(-1.0) - self.epislon  # pi - epislon
 
+    def __to_scaled_margin__(self, feature_norm):
+        norm_mean = tf.math.reduce_mean(feature_norm)
+        samples = tf.cast(tf.maximum(1, feature_norm.shape[0] - 1), feature_norm.dtype)
+        norm_std = tf.sqrt(tf.math.reduce_sum((feature_norm - norm_mean) ** 2) / samples)  # Torch std
+        self.batch_mean.assign(self.mean_std_alpha * norm_mean + (1.0 - self.mean_std_alpha) * self.batch_mean)
+        self.batch_std.assign(self.mean_std_alpha * norm_std + (1.0 - self.mean_std_alpha) * self.batch_std)
+        margin_scaler = (feature_norm - self.batch_mean) / (self.batch_std + self.epislon)  # 66% between -1, 1
+        margin_scaler = tf.clip_by_value(margin_scaler * self.margin_alpha, -1, 1)  # 68% between -0.333 ,0.333 when h:0.333
+        return tf.expand_dims(self.margin * margin_scaler, 1)
+
     def call(self, y_true, norm_logits_with_norm):
         if self.batch_labels_back_up is not None:  # For VPL mode
             self.batch_labels_back_up.assign(tf.argmax(y_true, axis=-1))
@@ -373,36 +383,22 @@ class AdaFaceLoss(ArcfaceLossSimple):
         norm_logits, feature_norm = norm_logits_with_norm[:, :-1], norm_logits_with_norm[:, -1] * -1
         norm_logits = tf.clip_by_value(norm_logits, -1 + self.epislon, 1 - self.epislon)
         feature_norm = tf.clip_by_value(feature_norm, self.min_feature_norm, self.max_feature_norm)
-        # norm_mean, norm_var = tf.stop_gradient(tf.nn.moments(feature_norm, axes=-1))
-        # norm_std  = tf.sqrt(norm_var * feature_norm.shape[0] / (feature_norm.shape[0] - 1))
-        norm_mean = tf.stop_gradient(tf.math.reduce_mean(feature_norm))
-        samples = tf.cast(tf.maximum(1, feature_norm.shape[0] - 1), feature_norm.dtype)
-        norm_std = tf.stop_gradient(tf.sqrt(tf.math.reduce_sum((feature_norm - norm_mean) ** 2) / samples))  # Torch std
-        self.batch_mean.assign(self.mean_std_alpha * norm_mean + (1.0 - self.mean_std_alpha) * self.batch_mean)
-        self.batch_std.assign(self.mean_std_alpha * norm_std + (1.0 - self.mean_std_alpha) * self.batch_std)
-
-        margin_scaler = (feature_norm - self.batch_mean) / (self.batch_std + self.epislon)  # 66% between -1, 1
-        margin_scaler = tf.clip_by_value(margin_scaler * self.margin_alpha, -1, 1)  # 68% between -0.333 ,0.333 when h:0.333
-        scalared_margin = tf.expand_dims(self.margin * margin_scaler, 1)
-        tf.print(", margin: ", tf.reduce_mean(scalared_margin), sep="", end="\r")
+        scaled_margin = tf.stop_gradient(self.__to_scaled_margin__(feature_norm))
+        # tf.print(", margin: ", tf.reduce_mean(scaled_margin), sep="", end="\r")
+        tf.print(", margin hist: ", tf.histogram_fixed_width(scaled_margin, [-self.margin, self.margin], nbins=3), sep="", end="\r")
         # ex: m=0.5, h:0.333
         # range
         #       (66% range)
         #   -1 -0.333  0.333   1  (margin_scaler)
         # -0.5 -0.166  0.166 0.5  (m * margin_scaler)
 
-        # XLA after TF > 2.7.0 not supporting this gather_nd -> tensor_scatter_nd_update method...
-        # pick_cond = tf.where(y_true != 0)
-        # y_pred_vals = tf.gather_nd(norm_logits, pick_cond)
-        # angular_theta = tf.cos(tf.clip_by_value(tf.acos(y_pred_vals) - scalared_margin, self.epislon, self.cos_max_epislon))  # g_angular
-        # additive_theta = angular_theta - (self.margin + scalared_margin)  # g_additive
-        # theta_valid = tf.where(y_pred_vals > additive_theta, additive_theta, y_pred_vals)
-        # arcface_logits = tf.tensor_scatter_nd_update(norm_logits, pick_cond, additive_theta) * self.scale
+        # XLA after TF > 2.7.0 not supporting gather_nd -> tensor_scatter_nd_update method...
         arcface_logits = tf.where(
             tf.cast(y_true, dtype=tf.bool),
-            tf.cos(tf.clip_by_value(tf.acos(norm_logits) - scalared_margin, self.epislon, self.cos_max_epislon)) - (self.margin + scalared_margin),
+            tf.cos(tf.clip_by_value(tf.acos(norm_logits) - scaled_margin, self.epislon, self.cos_max_epislon)) - (self.margin + scaled_margin),
             norm_logits,
         )
+        # arcface_logits = tf.minimum(arcface_logits, norm_logits) * self.scale
         arcface_logits *= self.scale
 
         # return arcface_logits
@@ -415,9 +411,20 @@ class AdaFaceLoss(ArcfaceLossSimple):
                 "margin": self.margin,
                 "margin_alpha": self.margin_alpha,
                 "mean_std_alpha": self.mean_std_alpha,
+                "_batch_mean_": float(self.batch_mean.numpy()),
+                "_batch_std_": float(self.batch_std.numpy()),
             }
         )
         return config
+
+    @classmethod
+    def from_config(cls, config):
+        _batch_mean_ = config.pop("_batch_mean_", 20.0)
+        _batch_std_ = config.pop("_batch_std_", 100.0)
+        aa = cls(**config)
+        aa.batch_mean.assign(_batch_mean_)
+        aa.batch_std.assign(_batch_std_)
+        return aa
 
 
 # [AdaCos: Adaptively Scaling Cosine Logits for Effectively Learning Deep Face Representations](https://arxiv.org/pdf/1905.00292.pdf)
