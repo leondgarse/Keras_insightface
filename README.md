@@ -35,6 +35,7 @@
   - The `r18` / `r34` / `r50` / `r100` on `glint360k` are models loaded weights from official publication.
   - `r50 magface` and `r100 magface` are ported from [Github IrvingMeng/MagFace](https://github.com/IrvingMeng/MagFace).
   - `r100 4m adaface` and `r100 12m adaface` are ported from [Github mk-minchul/AdaFace](https://github.com/mk-minchul/AdaFace).
+  - **Please note `WebFace4M` / `WebFace12M` pretrained models cannot be used for any commercial purposes: [WebFace](https://www.face-benchmark.org/download.html).**
 
   | Model backbone | Training | lfw      | cfp_fp   | agedb_30 | IJBB     | IJBC     |
   | -------------- | ----- | -------- | -------- | -------- | -------- | -------- |
