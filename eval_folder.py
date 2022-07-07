@@ -163,7 +163,7 @@ class Eval_folder:
         return p1_images, p2_images, pos_scores, n1_images, n2_images, neg_scores
 
 
-def plot_tpr_far(score, label):
+def plot_tpr_far(score, label, new_figure=True, label_prefix=""):
     fpr, tpr, _ = roc_curve(label, score)
     roc_auc = auc(fpr, tpr)
 
@@ -175,8 +175,11 @@ def plot_tpr_far(score, label):
     try:
         import matplotlib.pyplot as plt
 
-        fig = plt.figure()
-        plt.plot(fpr, tpr, lw=1, label="AUC = %0.4f%%" % (roc_auc * 100))
+        fig = plt.figure() if new_figure else None
+        label = "AUC = %0.4f%%" % (roc_auc * 100)
+        if label_prefix and len(label_prefix) > 0:
+            label = label_prefix + " " + label
+        plt.plot(fpr, tpr, lw=1, label=label)
         plt.xlim([10 ** -6, 0.1])
         plt.xscale("log")
         plt.xticks(fpr_show)
