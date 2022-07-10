@@ -161,7 +161,7 @@
     - [models.py](models.py) contains model build related functions, like `buildin_models` / `add_l2_regularizer_2_model` / `replace_ReLU_with_PReLU`.
     - [train.py](train.py) contains a `Train` class. It uses a `scheduler` to connect different `loss` / `optimizer` / `epochs`. The basic function is simply `basic_model` --> `build dataset` --> `add output layer` --> `add callbacks` --> `compile` --> `fit`.
   - **Other Modules**
-    - [augment.py](augment.py) including implementation of `RandAug` adn `AutoAug`.
+    - [augment.py](augment.py) including implementation of `RandAug` and `AutoAug`.
     - [IJB_evals.py](IJB_evals.py) evaluates model accuracy using [insightface/evaluation/IJB/](https://github.com/deepinsight/insightface/tree/master/evaluation/IJB) datasets.
     - [data_distiller.py](data_distiller.py) create dataset for [Knowledge distillation](#knowledge-distillation).
     - [data_drop_top_k.py](data_drop_top_k.py) create dataset after trained with [Sub Center ArcFace](#sub-center-arcface) method.
