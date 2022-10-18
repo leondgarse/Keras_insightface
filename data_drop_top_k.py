@@ -19,7 +19,7 @@ def data_drop_top_k(model, data_path, dest_file=None, deg_thresh=75, limit=0):
     image_names, image_classes = np.array(image_names)[sorted_idx], np.array(image_classes)[sorted_idx]
 
     if isinstance(model, str):
-        from train import NormDense
+        from models import NormDense
 
         mm = tf.keras.models.load_model(model, custom_objects={"NormDense": NormDense}, compile=False)
     else:
