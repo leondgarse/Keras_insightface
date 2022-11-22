@@ -10,7 +10,10 @@ from tqdm import tqdm
 class ImageClassesRule_map:
     def __init__(self, dir, dir_rule="*", excludes=[]):
         raw_classes = [os.path.basename(ii) for ii in glob2.glob(os.path.join(dir, dir_rule))]
-        self.raw_classes = sorted([ii for ii in raw_classes if ii not in excludes])
+        raw_classes = [ii for ii in raw_classes if ii not in excludes]
+        is_all_numeric = np.alltrue([str.isnumeric(ii) for ii in raw_classes])
+
+        self.raw_classes = sorted(raw_classes, key=lambda xx: int(xx)) if is_all_numeric else sorted(raw_classes)
         self.classes_2_indices = {ii: id for id, ii in enumerate(self.raw_classes)}
         self.indices_2_classes = {vv: kk for kk, vv in self.classes_2_indices.items()}
 
@@ -89,16 +92,20 @@ class RandomProcessImage:
                 # )
                 aa.available_ops = ["AutoContrast", "Equalize", "Color", "Contrast", "Brightness", "Sharpness", "Cutout"]
                 self.process = lambda img: aa.distort(
-                    random_cutout_or_cutout_mask(tf.image.random_flip_left_right(img), img_shape, random_cutout_mask_area, random_cutout=0)
+                    random_cutout_or_cutout_mask(tf.image.random_flip_left_right(self.__resize__(img)), img_shape, random_cutout_mask_area, random_cutout=0)
                 )
             else:
                 aa.available_ops = ["AutoContrast", "Equalize", "Color", "Contrast", "Brightness", "Sharpness", "Cutout"]
-                self.process = lambda img: aa.distort(tf.image.random_flip_left_right(img))
+                self.process = lambda img: aa.distort(tf.image.random_flip_left_right(self.__resize__(img)))
         else:
             if random_cutout_mask_area > 0:
-                self.process = lambda img: self.tf_buildin_image_random(random_cutout_or_cutout_mask(img, random_cutout_mask_area, random_cutout=0))
+                self.process = lambda img: self.tf_buildin_image_random(random_cutout_or_cutout_mask(img, img_shape, random_cutout_mask_area, random_cutout=0))
             else:
                 self.process = lambda img: self.tf_buildin_image_random(img)
+
+    def __resize__(self, img):
+        return tf.image.resize(img, self.img_shape) if img.shape[:2] != self.img_shape else img
+        # return tf.image.resize(img, self.img_shape)
 
     def tf_buildin_image_random(self, img):
         if self.random_status >= 0:

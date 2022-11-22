@@ -96,6 +96,11 @@ class Train:
             )
             return
 
+        input_shape = self.basic_model.input_shape[1:]
+        if input_shape[0] is None or input_shape[1] is None:
+            input_shape = (112, 112, 3)
+        self.input_shape = input_shape
+
         self.softmax, self.arcface, self.arcface_partial, self.triplet = "softmax", "arcface", "arcface_partial", "triplet"
         self.center, self.distill = "center", "distill"
         if output_weight_decay >= 1:
@@ -153,6 +158,7 @@ class Train:
         dataset_params = {
             "data_path": self.data_path,
             "batch_size": self.batch_size,
+            "img_shape": self.input_shape,
             "random_status": self.random_status,
             "random_cutout_mask_area": self.random_cutout_mask_area,
             "image_per_class": self.image_per_class,

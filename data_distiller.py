@@ -60,6 +60,22 @@ class Torch_model_interf:
         return output.cpu().detach().numpy()
 
 
+class ONNX_model_interf:
+    def __init__(self, model_file, image_size=(112, 112)):
+        import onnxruntime as ort
+
+        ort.set_default_logger_severity(3)
+        self.ort_session = ort.InferenceSession(model_file)
+        self.output_names = [self.ort_session.get_outputs()[0].name]
+        self.input_name = self.ort_session.get_inputs()[0].name
+
+    def __call__(self, imgs):
+        imgs = imgs.transpose(0, 3, 1, 2).astype("float32")
+        imgs = (imgs - 127.5) * 0.0078125
+        outputs = self.ort_session.run(self.output_names, {self.input_name: imgs})
+        return outputs[0]
+
+
 def teacher_model_interf_wrapper(model_file):
     if model_file.endswith(".h5"):
         # Keras model file
@@ -71,6 +87,10 @@ def teacher_model_interf_wrapper(model_file):
     if model_file.endswith(".pth") or model_file.endswith(".pt"):
         # Try pytorch
         mm = Torch_model_interf(model_file)
+        emb_shape = mm(np.ones([1, 112, 112, 3])).shape[-1]
+    elif model_file.endswith(".onnx"):
+        # Try onnx
+        mm = ONNX_model_interf(model_file)
         emb_shape = mm(np.ones([1, 112, 112, 3])).shape[-1]
     else:
         # MXNet model file, like models/r50-arcface-emore/model,1
