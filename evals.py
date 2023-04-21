@@ -291,12 +291,13 @@ if __name__ == "__main__":
     parser.add_argument("-b", "--batch_size", type=int, default=128, help="Batch size")
     parser.add_argument("-t", "--test_bin_files", nargs="*", type=str, help="Test bin files")
     parser.add_argument("-F", "--no_flip", action="store_true", help="Disable flip")
+    parser.add_argument("-p", "--pca_acc", action="store_true", help="Enable PCA_acc result")
     args = parser.parse_known_args(sys.argv[1:])[0]
 
     basic_model = tf.keras.models.load_model(args.basic_model, compile=False)
     flip = not args.no_flip
     for test_bin_file in args.test_bin_files:
-        aa = eval_callback(basic_model, test_bin_file, batch_size=args.batch_size, flip=flip)
+        aa = eval_callback(basic_model, test_bin_file, batch_size=args.batch_size, flip=flip, PCA_acc=args.pca_acc)
         aa.on_epoch_end()
 elif __name__ == "__test__":
     from data_distiller import teacher_model_interf_wrapper
