@@ -70,7 +70,7 @@ def __init_model_from_name__(name, input_shape=(112, 112, 3), weights="imagenet"
         from backbones import mobile_facenet
 
         use_se = True if "se" in name_lower else False
-        xx = mobile_facenet.mobile_facenet(input_shape=input_shape, include_top=False, name=name, use_se=use_se)
+        xx = mobile_facenet.MobileFaceNet(input_shape=input_shape, include_top=False, name=name, use_se=use_se)
     elif name_lower == "ghostnet":
         from backbones import ghost_model
 
@@ -133,21 +133,21 @@ def buildin_models(
             nn = keras.layers.Activation(pointwise_conv_act, name="pw_" + pointwise_conv_act)(nn)
 
     if output_layer == "E":
-        """ Fully Connected """
+        """Fully Connected"""
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="E_batchnorm")(nn)
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
         nn = keras.layers.Flatten(name="E_flatten")(nn)
         nn = keras.layers.Dense(emb_shape, use_bias=use_bias, kernel_initializer="glorot_normal", name="E_dense")(nn)
     elif output_layer == "GAP":
-        """ GlobalAveragePooling2D """
+        """GlobalAveragePooling2D"""
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="GAP_batchnorm")(nn)
         nn = keras.layers.GlobalAveragePooling2D(name="GAP_pool")(nn)
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
         nn = keras.layers.Dense(emb_shape, use_bias=use_bias, kernel_initializer="glorot_normal", name="GAP_dense")(nn)
     elif output_layer == "GDC":
-        """ GDC """
+        """GDC"""
         nn = keras.layers.DepthwiseConv2D(nn.shape[1], use_bias=False, name="GDC_dw")(nn)
         # nn = keras.layers.Conv2D(nn.shape[-1], nn.shape[1], use_bias=False, padding="valid", groups=nn.shape[-1])(nn)
         nn = keras.layers.BatchNormalization(momentum=bn_momentum, epsilon=bn_epsilon, name="GDC_batchnorm")(nn)
@@ -157,7 +157,7 @@ def buildin_models(
         nn = keras.layers.Flatten(name="GDC_flatten")(nn)
         # nn = keras.layers.Dense(emb_shape, activation=None, use_bias=use_bias, kernel_initializer="glorot_normal", name="GDC_dense")(nn)
     elif output_layer == "F":
-        """ F, E without first BatchNormalization """
+        """F, E without first BatchNormalization"""
         if dropout > 0 and dropout < 1:
             nn = keras.layers.Dropout(dropout)(nn)
         nn = keras.layers.Flatten(name="F_flatten")(nn)

@@ -11,7 +11,7 @@ CONV_KERNEL_INITIALIZER = keras.initializers.VarianceScaling(scale=2.0, mode="fa
 
 
 def hard_swish(inputs, name=None):
-    """ `out = xx * relu6(xx + 3) / 6`, arxiv: https://arxiv.org/abs/1905.02244 """
+    """`out = xx * relu6(xx + 3) / 6`, arxiv: https://arxiv.org/abs/1905.02244"""
     return keras.layers.Multiply(name=name)([inputs, tf.nn.relu6(inputs + 3) / 6])
 
 
@@ -31,7 +31,7 @@ def activation_by_name(inputs, activation="relu", name=None):
 
 
 def batchnorm_with_activation(inputs, activation="relu", zero_gamma=False, epsilon=BATCH_NORM_EPSILON, name=None):
-    """ Performs a batch normalization followed by an activation. """
+    """Performs a batch normalization followed by an activation."""
     bn_axis = -1 if K.image_data_format() == "channels_last" else 1
     gamma_initializer = tf.zeros_initializer() if zero_gamma else tf.ones_initializer()
     nn = keras.layers.BatchNormalization(

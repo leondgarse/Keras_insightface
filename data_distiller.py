@@ -128,7 +128,7 @@ class Data_distiller:
         print(">>>> Output:", self.dest_file)
 
     def __init_ds_model_dest__(self):
-        """ Init dataset """
+        """Init dataset"""
         image_names, image_classes, _, classes, dataset_pickle_file_src = pre_process_folder(self.data_path)
         print(">>>> Image length: %d, Image class length: %d, classes: %d" % (len(image_names), len(image_classes), classes))
         if self.limit > 0:
@@ -179,7 +179,7 @@ class Data_distiller:
             yield imm.numpy(), label.numpy(), emb
 
     def __save_to_npz__(self):
-        """ Extract embeddings """
+        """Extract embeddings"""
         steps = int(np.ceil(self.total // self.batch_size)) + 1
         image_names, image_classes, embeddings = [], [], []
         for imm, label, emb in tqdm(self.emb_gen, self.tqdm_desc, total=steps):
@@ -190,7 +190,7 @@ class Data_distiller:
         np.savez_compressed(self.dest_file, image_names=image_names, image_classes=image_classes, embeddings=embeddings)
 
     def __save_to_tfrecord_by_batch__(self):
-        """ Encode feature definations, save also `classes` and `emb_shape` """
+        """Encode feature definations, save also `classes` and `emb_shape`"""
         self.encode_base_info = {
             "classes": tf.train.Feature(int64_list=tf.train.Int64List(value=[self.classes])),
             "emb_shape": tf.train.Feature(int64_list=tf.train.Int64List(value=[self.emb_shape])),

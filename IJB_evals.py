@@ -400,7 +400,7 @@ class IJB_test:
         return scores, names
 
     def run_model_test_1N(self, npoints=100):
-        fars_cal = [10 ** ii for ii in np.arange(-4, 0, 4 / npoints)] + [1]  # plot in range [10-4, 1]
+        fars_cal = [10**ii for ii in np.arange(-4, 0, 4 / npoints)] + [1]  # plot in range [10-4, 1]
         fars_show_idx = np.arange(len(fars_cal))[:: npoints // 4]  # npoints=100, fars_show=[0.0001, 0.001, 0.01, 0.1, 1.0]
 
         g1_templates, g1_ids, g2_templates, g2_ids, probe_mixed_templates, probe_mixed_ids = extract_gallery_prob_data(
@@ -501,7 +501,7 @@ def plot_roc_and_calculate_tpr(scores, names=None, label=None):
             plt.plot(fpr_dict[name], tpr_dict[name], lw=1, label="[%s (AUC = %0.4f%%)]" % (name, roc_auc_dict[name] * 100))
         title = "ROC on IJB" + name.split("IJB")[-1][0] if "IJB" in name else "ROC on IJB"
 
-        plt.xlim([10 ** -6, 0.1])
+        plt.xlim([10**-6, 0.1])
         plt.xscale("log")
         plt.xticks(x_labels)
         plt.xlabel("False Positive Rate")

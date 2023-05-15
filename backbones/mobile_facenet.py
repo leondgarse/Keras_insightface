@@ -1,123 +1,92 @@
-from tensorflow.keras import backend as K
-from tensorflow.keras.layers import (
-    Input,
-    Conv2D,
-    BatchNormalization,
-    Layer,
-    PReLU,
-    SeparableConv2D,
-    DepthwiseConv2D,
-    add,
-    Flatten,
-    Dense,
-    Dropout,
-    GlobalAveragePooling2D,
-    Reshape,
-    Multiply,
-)
-from tensorflow.keras.models import Model
-
-"""Building Block Functions"""
+import tensorflow as tf
+from tensorflow.keras import layers, models, initializers
 
 
-def se_block(inputs, reduction=16):
-    channel_axis = 1 if K.image_data_format() == "channels_first" else -1
-    filters = inputs.shape[channel_axis]
-    nn = GlobalAveragePooling2D()(inputs)
-    nn = Reshape((1, 1, filters))(nn)
-    nn = Conv2D(filters // reduction, kernel_size=1)(nn)
-    nn = PReLU(shared_axes=[1, 2])(nn)
-    nn = Conv2D(filters, kernel_size=1, activation="sigmoid")(nn)
-    nn = Multiply()([inputs, nn])
+def se_block(inputs, reduction=16, name=""):
+    input_channels = inputs.shape[-1]
+    nn = layers.GlobalAveragePooling2D(keepdims=True)(inputs)
+    # nn = Reshape((1, 1, input_channels))(nn)
+    nn = layers.Conv2D(input_channels // reduction, kernel_size=1, name=name + "1_conv")(nn)
+    nn = layers.PReLU(shared_axes=[1, 2], alpha_initializer=initializers.Constant(0.25), name=name + "prelu")(nn)
+    nn = layers.Conv2D(input_channels, kernel_size=1, name=name + "2_conv")(nn)
+    nn = layers.Activation(activation="sigmoid")(nn)
+    nn = layers.Multiply(name=name + "out")([inputs, nn])
     return nn
 
 
-def se_block_2(inputs, reduction=16):
-    channel_axis = 1 if K.image_data_format() == "channels_first" else -1
-    filters = inputs.shape[channel_axis]
-    se = GlobalAveragePooling2D()(inputs)
-    se = Dense(filters // reduction, activation="PReLU", use_bias=False)(se)
-    se = Dense(filters, activation="sigmoid", use_bias=False)(se)
-    # if K.image_data_format() == 'channels_first':
-    #     se = Permute((3, 1, 2))(se)
-    x = Multiply()([inputs, se])
-    return x
-
-
-def conv_block(inputs, filters, kernel_size, strides, padding):
-    channel_axis = 1 if K.image_data_format() == "channels_first" else -1
-    Z = Conv2D(filters, kernel_size, strides=strides, padding=padding, use_bias=False)(inputs)
-    Z = BatchNormalization(axis=channel_axis)(Z)
-    A = PReLU(shared_axes=[1, 2])(Z)
-    return A
-
-
-def separable_conv_block(inputs, filters, kernel_size, strides):
-    channel_axis = 1 if K.image_data_format() == "channels_first" else -1
-    Z = SeparableConv2D(filters, kernel_size, strides=strides, padding="same", use_bias=False)(inputs)
-    Z = BatchNormalization(axis=channel_axis)(Z)
-    A = PReLU(shared_axes=[1, 2])(Z)
-    return A
-
-
-def bottleneck(inputs, filters, kernel, t, s, r=False, se=False):
-    channel_axis = 1 if K.image_data_format() == "channels_first" else -1
-    tchannel = K.int_shape(inputs)[channel_axis] * t
-    Z1 = conv_block(inputs, tchannel, 1, 1, "same")
-    Z1 = DepthwiseConv2D(kernel, strides=s, padding="same", depth_multiplier=1, use_bias=False)(Z1)
-    Z1 = BatchNormalization(axis=channel_axis)(Z1)
-    A1 = PReLU(shared_axes=[1, 2])(Z1)
-    Z2 = Conv2D(filters, 1, strides=1, padding="same", use_bias=False)(A1)
-    Z2 = BatchNormalization(axis=channel_axis)(Z2)
-    if se:
-        Z2 = se_block(Z2)
-    if r:
-        Z2 = add([Z2, inputs])
-    return Z2
-
-
-def inverted_residual_block(inputs, filters, kernel, t, strides, n, se=False):
-    Z = bottleneck(inputs, filters, kernel, t, strides, se=se)
-    for i in range(1, n):
-        Z = bottleneck(Z, filters, kernel, t, 1, True, se=se)
-    return Z
-
-
-def linear_GD_conv_block(inputs, kernel_size, strides):
-    channel_axis = 1 if K.image_data_format() == "channels_first" else -1
-    Z = DepthwiseConv2D(kernel_size, strides=strides, padding="valid", depth_multiplier=1, use_bias=False)(inputs)
-    Z = BatchNormalization(axis=channel_axis)(Z)
-    return Z
-
-
-def mobile_facenet(emb_shape=128, input_shape=(112, 112, 3), dropout=1, name="mobile_facenet", weight_file=None, use_se=False, include_top=True):
-    channel_axis = 1 if K.image_data_format() == "channels_first" else -1
-    if K.image_data_format() == "channels_first":
-        X = Input(shape=(input_shape[-1], input_shape[0], input_shape[1]))
+def conv_bn_prelu(inputs, filters=-1, kernel_size=1, strides=1, padding="SAME", use_depthwise=False, use_separable=False, activation="prelu", name=""):
+    filters = filters if filters > 0 else inputs.shape[-1]
+    if use_depthwise:
+        nn = layers.DepthwiseConv2D(kernel_size, strides=strides, padding=padding, use_bias=False, name=name + "depthwise")(inputs)
+    elif use_separable:
+        nn = layers.SeparableConv2D(filters, kernel_size, strides=strides, padding="same", use_bias=False, name=name + "separable")(inputs)
+        # depthwise = layers.DepthwiseConv2D(kernel_size, strides=strides, padding=padding, use_bias=False, name=name + "depthwise")(inputs)
+        # nn = layers.Conv2D(filters, kernel_size=1, strides=1, padding="VALID", use_bias=False, name=name + "pointwise")(depthwise)
     else:
-        X = Input(shape=input_shape)
-    M = conv_block(X, 64, 3, 2, "same")  # Output Shape: (56, 56, 64)
-    M = separable_conv_block(M, 64, 3, 1)  # (56, 56, 64)
-    M = inverted_residual_block(M, 64, 3, t=2, strides=2, n=5, se=use_se)  # (28, 28, 64)
-    M = inverted_residual_block(M, 128, 3, t=4, strides=2, n=1, se=use_se)  # (14, 14, 128)
-    M = inverted_residual_block(M, 128, 3, t=2, strides=1, n=6, se=use_se)  # (14, 14, 128)
-    M = inverted_residual_block(M, 128, 3, t=4, strides=2, n=1, se=use_se)  # (7, 7, 128)
-    M = inverted_residual_block(M, 128, 3, t=2, strides=1, n=2, se=use_se)  # (7, 7, 128)
+        nn = layers.Conv2D(filters, kernel_size, strides=strides, padding=padding, use_bias=False, name=name + "conv")(inputs)
+
+    nn = layers.BatchNormalization(name=name + "bn")(nn)
+
+    if activation is not None and activation.lower() == "prelu":
+        nn = layers.PReLU(shared_axes=[1, 2], alpha_initializer=initializers.Constant(0.25), name=name + "prelu")(nn)
+    elif activation is not None:
+        nn = layers.Activation(activation=activation, name=name + activation)(nn)
+    return nn
+
+
+def bottleneck(inputs, filters, expand_ratio=1, kernel_size=1, strides=1, use_residual=False, use_se=False, name=""):
+    hidden_channels = int(inputs.shape[-1] * expand_ratio)
+
+    nn = conv_bn_prelu(inputs, hidden_channels, name=name + "1_")
+    nn = conv_bn_prelu(nn, kernel_size=kernel_size, strides=strides, use_depthwise=True, name=name + "2_")
+    nn = conv_bn_prelu(nn, filters, activation=None, name=name + "3_")
+
+    nn = se_block(nn, name=name + "se_") if use_se else nn
+    nn = layers.Add()([inputs, nn]) if use_residual else nn
+    return nn
+
+
+def MobileFaceNet(
+    num_blocks=[5, 1, 6, 1, 2],
+    out_channels=[64, 128, 128, 128, 128],
+    strides=[2, 2, 1, 2, 1],
+    expand_ratios=[2, 4, 2, 4, 2],
+    use_se=False,
+    emb_shape=256,
+    input_shape=(112, 112, 3),
+    dropout=0,
+    pretrained=None,
+    include_top=False,
+    name="mobile_facenet",
+):
+    inputs = layers.Input(shape=input_shape)  # (112, 112, 3)
+    nn = conv_bn_prelu(inputs, filters=64, kernel_size=3, strides=2, name="stem_1_")  # (56, 56, 64)
+    nn = conv_bn_prelu(nn, filters=64, kernel_size=3, strides=1, use_separable=True, name="stem_2_")  # (56, 56, 64)
+
+    for id, (num_block, out_channel, stride, expand_ratio) in enumerate(zip(num_blocks, out_channels, strides, expand_ratios)):
+        stack_name = "stack{}_".format(id + 1)
+        for block_id in range(num_block):
+            cur_strides = stride if block_id == 0 else 1
+            use_residual = False if block_id == 0 else True
+            block_name = stack_name + "block{}_".format(block_id + 1)
+            nn = bottleneck(nn, out_channel, expand_ratio, kernel_size=3, strides=cur_strides, use_residual=use_residual, use_se=use_se, name=block_name)
+
     if include_top:
+        """pointwise_conv"""
+        nn = conv_bn_prelu(nn, filters=512, name="header_pointwise_")
+
         """ GDC """
-        M = Conv2D(512, 1, use_bias=False)(M)  # (7, 7, 512)
-        M = BatchNormalization(axis=channel_axis)(M)
-        M = PReLU(shared_axes=[1, 2])(M)
-        M = DepthwiseConv2D(int(M.shape[1]), depth_multiplier=1, use_bias=False)(M)  # (1, 1, 512)
-        M = BatchNormalization(axis=channel_axis)(M)
+        nn = layers.DepthwiseConv2D(nn.shape[1], use_bias=False, name="header_gdc_depthwise")(nn)
+        nn = layers.BatchNormalization(name="header_gdc_bn")(nn)
 
         if dropout > 0 and dropout < 1:
-            M = Dropout(dropout)(M)
-        M = Conv2D(emb_shape, 1, use_bias=False, activation=None)(M)
-        M = Flatten()(M)
-        M = BatchNormalization(axis=channel_axis, name="embedding")(M)
+            nn = layers.Dropout(dropout)(nn)
+        nn = layers.Conv2D(emb_shape, 1, use_bias=False, name="header_gdc_post_conv")(nn)
+        nn = layers.Flatten()(nn)
+        nn = layers.BatchNormalization(name="pre_embedding")(nn)
+        nn = layers.Activation("linear", dtype="float32", name="embedding")(nn)
 
-    model = Model(inputs=X, outputs=M, name=name)
-    if weight_file:
-        model.load_weights(weight_file)
+    model = models.Model(inputs=inputs, outputs=nn, name=name)
+    if pretrained:
+        model.load_weights(pretrained)
     return model

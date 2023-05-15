@@ -13,11 +13,11 @@ class MarginSoftmax(tf.keras.losses.Loss):
         self.power, self.scale, self.from_logits, self.label_smoothing = power, scale, from_logits, label_smoothing
         self.scale_all = scale_all
         if power != 1 and scale == 0:
-            self.logits_reduction_func = lambda xx: xx ** power
+            self.logits_reduction_func = lambda xx: xx**power
         elif power == 1 and scale != 0:
             self.logits_reduction_func = lambda xx: xx * scale
         else:
-            self.logits_reduction_func = lambda xx: (xx ** power + xx * scale) / 2
+            self.logits_reduction_func = lambda xx: (xx**power + xx * scale) / 2
 
     def call(self, y_true, y_pred):
         # margin_soft = tf.where(tf.cast(y_true, dtype=tf.bool), (y_pred ** self.power + y_pred * self.scale) / 2, y_pred)
@@ -231,7 +231,7 @@ class CosFaceLoss(ArcfaceLossSimple):
 # [MagFace: A Universal Representation for Face Recognition and Quality Assessment](https://arxiv.org/pdf/2103.06627.pdf)
 @keras.utils.register_keras_serializable(package="keras_insightface")
 class MagFaceLoss(ArcfaceLossSimple):
-    """ Another set for fine-tune is: min_feature_norm, max_feature_norm, min_margin, max_margin, regularizer_loss_lambda = 1, 51, 0.45, 1, 5 """
+    """Another set for fine-tune is: min_feature_norm, max_feature_norm, min_margin, max_margin, regularizer_loss_lambda = 1, 51, 0.45, 1, 5"""
 
     def __init__(
         self,
@@ -254,7 +254,7 @@ class MagFaceLoss(ArcfaceLossSimple):
         self.min_margin, self.max_margin = min_margin, max_margin
         self.use_cosface_margin, self.curricular_hard_scale = use_cosface_margin, curricular_hard_scale
         self.margin_scale = (max_margin - min_margin) / (max_feature_norm - min_feature_norm)
-        self.regularizer_loss_scale = 1.0 / (self.max_feature_norm ** 2)
+        self.regularizer_loss_scale = 1.0 / (self.max_feature_norm**2)
         self.use_curricular_scale = False
         self.epislon = 1e-3
         if curricular_hard_scale >= 0:

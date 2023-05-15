@@ -180,7 +180,7 @@ def plot_tpr_far(score, label, new_figure=True, label_prefix=""):
         if label_prefix and len(label_prefix) > 0:
             label = label_prefix + " " + label
         plt.plot(fpr, tpr, lw=1, label=label)
-        plt.xlim([10 ** -6, 0.1])
+        plt.xlim([10**-6, 0.1])
         plt.xscale("log")
         plt.xticks(fpr_show)
         plt.xlabel("False Positive Rate")

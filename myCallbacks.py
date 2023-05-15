@@ -28,7 +28,7 @@ class Gently_stop_callback(keras.callbacks.Callback):
 
 
 class ExitOnNaN(keras.callbacks.Callback):
-    """ Callback that exit directly when a NaN loss is encountered, avoiding saving model """
+    """Callback that exit directly when a NaN loss is encountered, avoiding saving model"""
 
     def __init__(self):
         super().__init__()
@@ -138,7 +138,7 @@ class CosineLrSchedulerEpoch(keras.callbacks.Callback):
             self.cooldown_steps_start, self.cooldown_steps_end = np.array([]), np.array([])
         else:
             self.schedule = keras.experimental.CosineDecayRestarts(lr_base, first_restart_step, t_mul=t_mul, m_mul=m_mul, alpha=lr_min / lr_base)
-            aa = [first_restart_step * (t_mul ** ii) for ii in range(5)]
+            aa = [first_restart_step * (t_mul**ii) for ii in range(5)]
             self.cooldown_steps_start = np.array([warmup_steps + int(sum(aa[:ii]) + cooldown_steps * (ii - 1)) for ii in range(1, 5)])
             self.cooldown_steps_end = np.array([ii + cooldown_steps for ii in self.cooldown_steps_start])
 
@@ -187,7 +187,7 @@ class CosineLrScheduler(keras.callbacks.Callback):
             self.cooldown_steps_start, self.cooldown_steps_end = np.array([]), np.array([])
         else:
             self.schedule = keras.experimental.CosineDecayRestarts(self.lr_base, first_restart_batch_step, t_mul=self.t_mul, m_mul=self.m_mul, alpha=alpha)
-            aa = [first_restart_batch_step / self.steps_per_epoch * (self.t_mul ** ii) for ii in range(5)]
+            aa = [first_restart_batch_step / self.steps_per_epoch * (self.t_mul**ii) for ii in range(5)]
             self.cooldown_steps_start = np.array([self.warmup_steps + int(sum(aa[:ii]) + self.cooldown_steps * (ii - 1)) for ii in range(1, 5)])
             self.cooldown_steps_end = np.array([ii + self.cooldown_steps for ii in self.cooldown_steps_start])
 
