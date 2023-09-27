@@ -21,6 +21,7 @@ class Mxnet_model_interf:
             ctx = [self.mx.gpu(ii) for ii in range(len(cvd.split(",")))]
         else:
             ctx = [self.mx.cpu()]
+        print(">>>> mxnet ctx:", ctx)
 
         prefix, epoch = model_file.split(",")
         print(">>>> loading mxnet model:", prefix, epoch, ctx)
@@ -49,6 +50,8 @@ class Torch_model_interf:
         self.torch = torch
         cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
         device_name = "cuda:0" if len(cvd) > 0 and int(cvd) != -1 else "cpu"
+        print(">>>> device_name:", device_name)
+
         self.device = self.torch.device(device_name)
         self.model = self.torch.jit.load(model_file, map_location=device_name)
 
@@ -79,6 +82,13 @@ class ONNX_model_interf:
 def teacher_model_interf_wrapper(model_file):
     if model_file.endswith(".h5"):
         # Keras model file
+        try:
+            # Just in case some custom_objects required
+            import kecam as _
+            import tensorflow_addons as _
+        except:
+            pass
+
         mm = tf.keras.models.load_model(model_file, compile=False)
         mm.trainable = False
         interf_func = lambda imm: mm((imm - 127.5) * 0.0078125)
@@ -106,9 +116,9 @@ def teacher_model_interf_wrapper(model_file):
 
 
 class Data_distiller:
-    def __init__(self, data_path, model_file=None, dest_file=None, save_npz=False, batch_size=256, use_fp16=False, limit=-1):
+    def __init__(self, data_path, model_file=None, dest_file=None, save_npz=False, batch_size=256, use_fp16=False, limit=-1, recover=False):
         self.data_path, self.model_file, self.batch_size = data_path, model_file, batch_size
-        self.dest_file, self.save_npz, self.use_fp16, self.limit = dest_file, save_npz, use_fp16, limit
+        self.dest_file, self.save_npz, self.use_fp16, self.limit, self.recover = dest_file, save_npz, use_fp16, limit, recover
         if model_file == None and data_path.endswith(".npz"):
             image_names, image_classes, embeddings = self.__init_from_saved_npz__()
             self.emb_gen = ([image_names, image_classes, embeddings],)
@@ -116,6 +126,7 @@ class Data_distiller:
             self.tqdm_desc = "Converting"
         elif self.model_file != None:
             self.__init_ds_model_dest__()
+            self.processed = self.__read_from_tfrecord__() if self.recover else []
             self.emb_gen = self.__extract_emb_gen__()
             self.tqdm_desc = "Embedding"
         else:
@@ -140,6 +151,7 @@ class Data_distiller:
         """ Init model, it could be PyTorch model file / MXNet model file / keras model file """
         interf_func = teacher_model_interf_wrapper(self.model_file)
         emb_shape = interf_func(np.ones([1, 112, 112, 3])).shape[-1]
+        print(">>>> emb_shape:", emb_shape)
 
         """ Init dest filename """
         if self.dest_file is None:
@@ -173,10 +185,14 @@ class Data_distiller:
 
     def __extract_emb_gen__(self):
         for imm, label in self.ds:
-            imgs = tf.stack([tf_imread(ii) for ii in imm])
-            emb = self.interf_func(imgs)
-            emb = np.array(emb, dtype="float16") if self.use_fp16 else np.array(emb, dtype="float32")
-            yield imm.numpy(), label.numpy(), emb
+            if len(self.processed) > 0:
+                for _ in range(self.batch_size):
+                    yield self.processed.pop(0)
+            else:
+                imgs = tf.stack([tf_imread(ii) for ii in imm])
+                emb = self.interf_func(imgs)
+                emb = np.array(emb, dtype="float16") if self.use_fp16 else np.array(emb, dtype="float32")
+                yield imm.numpy(), label.numpy(), emb
 
     def __save_to_npz__(self):
         """Extract embeddings"""
@@ -188,6 +204,24 @@ class Data_distiller:
             embeddings.extend(emb)
         # imms, labels, embeddings = np.array(imms), np.array(labels), np.array(embeddings)
         np.savez_compressed(self.dest_file, image_names=image_names, image_classes=image_classes, embeddings=embeddings)
+
+    def __read_from_tfrecord__(self):
+        assert self.dest_file.endswith(".tfrecord"), "recover supports TFRecord only"
+        print(">>>> Recover from:", self.dest_file)
+
+        ds = tf.data.TFRecordDataset([self.dest_file])
+        decode_feature = {
+            "image_names": tf.io.FixedLenFeature([], dtype=tf.string),
+            "image_classes": tf.io.FixedLenFeature([], dtype=tf.int64),
+            # "embeddings": tf.io.FixedLenFeature([emb_shape], dtype=tf.float32),
+            "embeddings": tf.io.FixedLenFeature([], dtype=tf.string),
+        }
+        embs = [tf.io.parse_single_example(record_bytes, decode_feature) for record_bytes in ds.as_numpy_iterator()]
+        print(">>>> Read previously processed:", len(embs))
+        assert len(embs) % self.batch_size == 0, "Not an entire batch saved in TFRecord, may result data mismatch during training"
+
+        dtype = "float16" if self.use_fp16 else "float32"
+        return [[[ii['image_names'].numpy()], [ii['image_classes'].numpy()], [tf.io.decode_raw(ii['embeddings'], dtype).numpy()]] for ii in embs]
 
     def __save_to_tfrecord_by_batch__(self):
         """Encode feature definations, save also `classes` and `emb_shape`"""
@@ -231,6 +265,7 @@ if __name__ == "__main__":
     parser.add_argument("-L", "--limit", type=int, default=-1, help="Test parameter, limit converting only the first [NUM]")
     parser.add_argument("--use_fp16", action="store_true", help="Save using float16")
     parser.add_argument("--save_npz", action="store_true", help="Save as npz file, default is tfrecord")
+    parser.add_argument("-R", "--recover", action="store_true", help="recover if interrupted, works only for TFRecord format")
     args = parser.parse_known_args(sys.argv[1:])[0]
 
-    Data_distiller(args.data_path, args.model_file, args.dest_file, args.save_npz, args.batch_size, args.use_fp16, args.limit)
+    Data_distiller(args.data_path, args.model_file, args.dest_file, args.save_npz, args.batch_size, args.use_fp16, args.limit, args.recover)
