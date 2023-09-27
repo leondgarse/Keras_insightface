@@ -11,8 +11,6 @@ import tensorflow as tf
 
 # from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from sklearn.preprocessing import normalize
-from skimage.io import imread
-from skimage import transform
 from tqdm import tqdm
 from face_detector import YoloV5FaceDetector
 
@@ -27,26 +25,6 @@ def init_det_and_emb_model(model_file):
     else:
         face_model = None
     return det, face_model
-
-
-def face_align_landmarks_sk(img, landmarks, image_size=(112, 112), method="similar"):
-    tform = transform.AffineTransform() if method == "affine" else transform.SimilarityTransform()
-    src = np.array([[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.729904, 92.2041]], dtype=np.float32)
-    ret = []
-    for landmark in landmarks:
-        # landmark = np.array(landmark).reshape(2, 5)[::-1].T
-        tform.estimate(landmark, src)
-        ret.append(transform.warp(img, tform.inverse, output_shape=image_size))
-    return (np.array(ret) * 255).astype(np.uint8)
-
-
-def do_detect_in_image(image, det, image_format="BGR"):
-    imm_BGR = image if image_format == "BGR" else image[:, :, ::-1]
-    imm_RGB = image[:, :, ::-1] if image_format == "BGR" else image
-    bboxes, pps = det.detect(imm_BGR, (640, 640))
-    nimgs = face_align_landmarks_sk(imm_RGB, pps)
-    bbs, ccs = bboxes[:, :4].astype("int"), bboxes[:, -1]
-    return bbs, ccs, nimgs
 
 
 def embedding_images(det, face_model, known_user, batch_size=32, force_reload=False):
@@ -67,8 +45,7 @@ def embedding_images(det, face_model, known_user, batch_size=32, force_reload=Fa
         """ Detct faces in images, keep only those have exactly one face. """
         nimgs, image_classes = [], []
         for image_name in tqdm(image_names, "Detect"):
-            img = imread(image_name)
-            nimg = do_detect_in_image(img, det, image_format="RGB")[-1]
+            nimg = det.detect_in_image(image_name, image_format="RGB")[-1]
             if nimg.shape[0] > 0:
                 nimgs.append(nimg[0])
                 image_classes.append(os.path.basename(os.path.dirname(image_name)))
@@ -88,10 +65,7 @@ def embedding_images(det, face_model, known_user, batch_size=32, force_reload=Fa
 
 
 def image_recognize(image_classes, embeddings, det, face_model, frame, image_format="BGR"):
-    if isinstance(frame, str):
-        frame = imread(frame)
-        image_format = "RGB"
-    bbs, ccs, nimgs = do_detect_in_image(frame, det, image_format=image_format)
+    bbs, _, ccs, nimgs = det.detect_in_image(frame, image_format=image_format)
     if len(bbs) == 0:
         return [], [], [], []
 
