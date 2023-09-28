@@ -186,7 +186,7 @@ class Data_distiller:
     def __extract_emb_gen__(self):
         for imm, label in self.ds:
             if len(self.processed) > 0:
-                for _ in range(self.batch_size):
+                for _ in range(min(self.batch_size, len(self.processed))):
                     yield self.processed.pop(0)
             else:
                 imgs = tf.stack([tf_imread(ii) for ii in imm])
@@ -218,7 +218,8 @@ class Data_distiller:
         }
         embs = [tf.io.parse_single_example(record_bytes, decode_feature) for record_bytes in ds.as_numpy_iterator()]
         print(">>>> Read previously processed:", len(embs))
-        assert len(embs) % self.batch_size == 0, "Not an entire batch saved in TFRecord, may result data mismatch during training"
+        if len(embs) % self.batch_size != 0:
+            print(">>>> [WARNING] A trunced batch saved in TFRecord, result data may be trunced or missing.")
 
         dtype = "float16" if self.use_fp16 else "float32"
         return [[[ii['image_names'].numpy()], [ii['image_classes'].numpy()], [tf.io.decode_raw(ii['embeddings'], dtype).numpy()]] for ii in embs]
