@@ -436,9 +436,7 @@ def prepare_dataset(
     #     ds = ds.map(lambda imm, label: ((imm, tf.argmax(label, axis=-1, output_type=tf.int32)), label), num_parallel_calls=AUTOTUNE)
 
     ds = ds.prefetch(buffer_size=AUTOTUNE)
-    print(ds.element_spec)
     steps_per_epoch = int(np.floor(total_images / float(batch_size)))
-    print(f"STEPS PER EPOCH {steps_per_epoch}")
     # steps_per_epoch = len(ds)
     return ds, steps_per_epoch
 
