@@ -6,7 +6,6 @@ import tensorflow as tf
 from skimage.io import imread
 from tqdm import tqdm
 
-
 class ImageClassesRule_map:
     def __init__(self, dir, dir_rule="*", excludes=[]):
         raw_classes = [os.path.basename(ii) for ii in glob2.glob(os.path.join(dir, dir_rule))]
@@ -20,7 +19,6 @@ class ImageClassesRule_map:
     def __call__(self, image_name):
         raw_image_class = os.path.basename(os.path.dirname(image_name))
         return self.classes_2_indices[raw_image_class]
-
 
 def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None):
     while data_path.endswith(os.sep):
@@ -56,6 +54,7 @@ def pre_process_folder(data_path, image_names_reg=None, image_classes_rule=None)
         np.savez_compressed(dest_pickle, image_names=image_names, image_classes=image_classes)
         image_names, image_classes = np.array(image_names), np.array(image_classes)
     classes = np.max(image_classes) + 1 if len(image_classes) > 0 else 0
+    print(f">>>>> After preprocess folder Image_names: {len(image_names)}, image_classes: {len(image_classes)}, embeddings: {embeddings}, classes: {classes}, dest_pickle: {dest_pickle}")
     return image_names, image_classes, embeddings, classes, dest_pickle
 
 
@@ -66,7 +65,6 @@ def tf_imread(file_path):
     img = tf.image.decode_image(img, channels=3, expand_animations=False)  # [0, 255]
     img = tf.cast(img, "float32")  # [0, 255]
     return img
-
 
 class RandomProcessImage:
     def __init__(self, img_shape=(112, 112), random_status=2, random_crop=None, random_cutout_mask_area=0):
@@ -287,6 +285,74 @@ def partial_fc_split_gen(image_names, image_classes, batch_size, split=2, debug=
         for image_name, image_class in zip(*partial_fc_split_pick(image_names, image_classes, batch_size, split, debug)):
             yield (image_name, image_class)
 
+def prepare_dataset_tfrecord(
+    data_path,
+    image_names_reg=None,
+    image_classes_rule=None,
+    batch_size=128,
+    img_shape=(112, 112),
+    random_status=0,
+    random_crop=(100, 100, 3),
+    random_cutout_mask_area=0.0,
+    mixup_alpha=0,
+    image_per_class=0,
+    partial_fc_split=0,
+    cache=False,
+    shuffle_buffer_size=None,
+    is_train=True,
+    teacher_model_interf=None,
+):
+    AUTOTUNE = tf.data.experimental.AUTOTUNE
+    feature_description = {
+        'image_raw': tf.io.FixedLenFeature([], tf.string),
+        'label': tf.io.FixedLenFeature([], tf.int64)
+    }
+    filenames = tf.data.TFRecordDataset.list_files(data_path)
+    ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTOTUNE)
+    total_images = 5822653
+    classes = list()
+    # for example in tqdm(ds.as_numpy_iterator()):
+    #     example = tf.io.parse_single_example(example, feature_description)
+    #     y = tf.cast(example['label'], dtype=tf.int32)
+    #     classes.append(y.numpy())
+    
+    # classes = np.unique(classes)
+    print(">>>> [Base info] total images:", total_images, "total classes:", len(classes))
+    random_process_image = RandomProcessImage(
+        img_shape, random_status, random_crop)
+
+    def parse_tfrecord_fn(example):
+        example = tf.io.parse_single_example(example, feature_description)
+        return example["image_raw"], example["label"]
+    
+    ds = ds.map(parse_tfrecord_fn, num_parallel_calls=AUTOTUNE)
+
+
+    total_images = 0
+    classes = list()
+    for (_, label) in ds.as_numpy_iterator():
+        total_images += 1
+        classes.append(label)
+
+    num_classes = np.unique(classes)
+    print(">>>> [Base info] total images:", total_images, "total classes:", len(classes))
+
+    def decode_fn(img, label):
+        img = tf.io.decode_jpeg(img)
+        img = tf.reshape(img, shape=(112, 112, 3))
+        img = tf.cast(img, dtype=tf.float32)
+        img = random_process_image.process(img)
+        label = tf.one_hot(label, depth=num_classes, dtype=tf.int32)
+
+    ds = ds.shuffle(buffer_size=total_images).repeat()
+    ds = ds.batch(batch_size, drop_remainder=True)
+    ds = ds.map(decode_fn)
+    ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
+    ds = ds.prefetch(buffer_size=AUTOTUNE)
+
+    steps_per_epoch = int(np.floor(total_images / float(batch_size)))
+    return ds, steps_per_epoch
+
 
 def prepare_dataset(
     data_path,
@@ -415,6 +481,8 @@ def prepare_distill_dataset_tfrecord(data_path, batch_size=128, img_shape=(112, 
     ds = ds.batch(batch_size, drop_remainder=True)
     ds = ds.map(lambda xx, yy: ((xx - 127.5) * 0.0078125, yy))
     ds = ds.prefetch(buffer_size=AUTOTUNE)
+
+    
     steps_per_epoch = int(np.floor(total / float(batch_size)))
     return ds, steps_per_epoch
 
