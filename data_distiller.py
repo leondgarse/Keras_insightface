@@ -222,7 +222,7 @@ class Data_distiller:
             print(">>>> [WARNING] A trunced batch saved in TFRecord, result data may be trunced or missing.")
 
         dtype = "float16" if self.use_fp16 else "float32"
-        return [[[ii['image_names'].numpy()], [ii['image_classes'].numpy()], [tf.io.decode_raw(ii['embeddings'], dtype).numpy()]] for ii in embs]
+        return [[[ii["image_names"].numpy()], [ii["image_classes"].numpy()], [tf.io.decode_raw(ii["embeddings"], dtype).numpy()]] for ii in embs]
 
     def __save_to_tfrecord_by_batch__(self):
         """Encode feature definations, save also `classes` and `emb_shape`"""

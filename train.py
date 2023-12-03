@@ -48,15 +48,15 @@ class Train:
         sam_rho=0,
         vpl_start_iters=-1,  # Enable by setting value > 0, like 8000. https://openaccess.thecvf.com/content/CVPR2021/papers/Deng_Variational_Prototype_Learning_for_Deep_Face_Recognition_CVPR_2021_paper.pdf
         vpl_allowed_delta=200,
-        steps_per_execution=1
+        steps_per_execution=None,  # steps_per_execution for model.compile, default to None for not using
     ):
         from inspect import getmembers, isfunction, isclass
 
         custom_objects.update(dict([ii for ii in getmembers(losses) if isfunction(ii[1]) or isclass(ii[1])]))
         custom_objects.update({"NormDense": models.NormDense})
 
-        self.model, self.basic_model, self.save_path, self.inited_from_model, self.sam_rho, self.pretrained, self.steps_per_execution = None, None, save_path, False, sam_rho, pretrained, steps_per_execution
-        self.vpl_start_iters, self.vpl_allowed_delta = vpl_start_iters, vpl_allowed_delta
+        self.model, self.basic_model, self.save_path, self.inited_from_model, self.sam_rho, self.pretrained = None, None, save_path, False, sam_rho, pretrained
+        self.steps_per_execution, self.vpl_start_iters, self.vpl_allowed_delta = steps_per_execution, vpl_start_iters, vpl_allowed_delta
         if model is None and basic_model is None:
             model = os.path.join("checkpoints", save_path)
             print(">>>> Try reload from:", model)
@@ -183,14 +183,11 @@ class Train:
             self.is_triplet_dataset = True
         else:
             print(">>>> Init softmax dataset...")
-            if self.data_path.endswith(".tfrecord"):
-                print(
-                    f"Datasets is tfrecord, is_distill_ds : {self.is_distill_ds}")
-                if self.is_distill_ds:
-                    self.train_ds, self.steps_per_epoch = data.prepare_distill_dataset_tfrecord(**dataset_params)
-                else:
-                    print(">>>> Prepare dataset not distill_ds...")
-                    self.train_ds, self.steps_per_epoch = data.prepare_dataset_tfrecord(**dataset_params)
+            if self.data_path.endswith(".tfrecord") and "*" in self.data_path:
+                print(">>>> data_path is in format like `*.tfrecord`, regarding it as a tfrecord dataset")
+                self.train_ds, self.steps_per_epoch = data.prepare_dataset(**dataset_params, partial_fc_split=self.partial_fc_split)
+            elif self.data_path.endswith(".tfrecord"):
+                self.train_ds, self.steps_per_epoch = data.prepare_distill_dataset_tfrecord(**dataset_params)
             else:
                 self.train_ds, self.steps_per_epoch = data.prepare_dataset(**dataset_params, partial_fc_split=self.partial_fc_split)
             self.is_triplet_dataset = False
@@ -383,14 +380,14 @@ class Train:
         return emb_loss_names, emb_loss_weights
 
     def __basic_train__(self, epochs, initial_epoch=0):
-        self.model.compile(optimizer=self.optimizer, loss=self.cur_loss,
-                        metrics=self.metrics, loss_weights=self.loss_weights,
-                        steps_per_execution=self.steps_per_execution)
+        self.model.compile(
+            optimizer=self.optimizer, loss=self.cur_loss, metrics=self.metrics, loss_weights=self.loss_weights, steps_per_execution=self.steps_per_execution
+        )
         cur_optimizer = self.model.optimizer
         if not hasattr(cur_optimizer, "_variables") and hasattr(cur_optimizer, "_optimizer") and hasattr(cur_optimizer._optimizer, "_variables"):
             # Bypassing TF 2.11 error AttributeError: 'LossScaleOptimizerV3' object has no attribute '_variables'
             # setattr(self.model.optimizer, "_variables", self.model.optimizer._optimizer._variables)
-            setattr(self.model.optimizer, 'variables', self.model.optimizer._optimizer.variables)
+            setattr(self.model.optimizer, "variables", self.model.optimizer._optimizer.variables)
         self.model.fit(
             self.train_ds,
             epochs=epochs,
