@@ -290,7 +290,8 @@ def partial_fc_split_gen(image_names, image_classes, batch_size, split=2, debug=
             yield (image_name, image_class)
 
 
-def build_dataset_from_tfrecord(data_path, classes=-1, total_images=-1):
+def build_basic_dataset_from_tfrecord(data_path, classes=-1, total_images=-1):
+    """ Used for fitting https://www.kaggle.com/datasets/jasonhcwong/faces-ms1m-refine-v2-112x112-tfrecord """
     AUTOTUNE = tf.data.experimental.AUTOTUNE
     filenames = tf.data.TFRecordDataset.list_files(data_path)
     ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTOTUNE)
@@ -310,7 +311,7 @@ def build_dataset_from_tfrecord(data_path, classes=-1, total_images=-1):
     return ds.map(process_func, num_parallel_calls=AUTOTUNE), total_images
 
 
-def build_dataset_and_process_func_from_data_path(
+def build_basic_dataset_from_data_path(
     data_path, image_names_reg=None, image_classes_rule=None, batch_size=128, image_per_class=0, partial_fc_split=0, teacher_model_interf=None
 ):
     AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -370,11 +371,11 @@ def prepare_dataset(
 ):
     AUTOTUNE = tf.data.experimental.AUTOTUNE
     if isinstance(data_path, tf.data.Dataset):
-        ds = data_path
+        ds, total_images = data_path, len(data_path)
     elif data_path.endswith(".tfrecord"):
-        ds, total_images = build_dataset_from_tfrecord(data_path)
+        ds, total_images = build_basic_dataset_from_tfrecord(data_path)
     else:
-        ds, total_images = build_dataset_and_process_func_from_data_path(
+        ds, total_images = build_basic_dataset_from_data_path(
             data_path, image_names_reg, image_classes_rule, batch_size, image_per_class, partial_fc_split, teacher_model_interf
         )
 
