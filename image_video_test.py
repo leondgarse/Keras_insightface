@@ -197,4 +197,4 @@ if __name__ == "__main__":
             cv2.imwrite(result_save_path, dest_image)
     else:
         cosine_similarities, gathered_emb, gathered_bbs, gathered_ccs = mm.compare_images(args.images)
-        print("cosine_similarities:", cosine_similarities, "\ngathered_bbs:", gathered_bbs, "\ngathered_ccs:", gathered_ccs)
+        print("cosine_similarities:\n", cosine_similarities, "\ngathered_bbs:", gathered_bbs, "\ngathered_ccs:", gathered_ccs)

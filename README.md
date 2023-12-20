@@ -170,7 +170,7 @@
     - [eval_folder.py](eval_folder.py) Run model evaluation on any custom dataset folder, which is in the same format with Training dataset.
     - [face_detector.py](face_detector.py) contains face detectors. Currently 2 added, pure Keras one `YoloV5FaceDetector`, and ONNX one `SCRFD`.
     - [plot.py](plot.py) contains a history plot function.
-    - [video_test.py](video_test.py) can be used to test model using video camera.
+    - [image_video_test.py](image_video_test.py) can be used to test model using images or video camera inputs.
 ## Basic Training
   - **Training example** `train.Train` is mostly functioned as a scheduler.
     ```py
@@ -312,6 +312,33 @@
     Or create own test bin file which can be used in `train.Train` `eval_paths`:
     ```sh
     CUDA_VISIBLE_DEVICES='0' ./eval_folder.py -d {DATA_PATH} -m {BASIC_MODEL.h5} -B {BIN_FILE.bin}
+    ```
+  - **image_video_test.py** is used for testing model with either images or video inputs. May import or modify it for own usage.
+    ```sh
+    """ Comparing images """
+    python image_video_test.py --images test1.jpg test2.jpg test3.jpg
+    # >>>> image_path: test1.jpg, faces count: 1
+    # >>>> image_path: test2.jpg, faces count: 1
+    # >>>> image_path: test3.jpg, faces count: 1
+    # cosine_similarities:
+    #  [[1.0000001 1.0000001 1.0000001]
+    #  [1.0000001 1.0000001 1.0000001]
+    #  [1.0000001 1.0000001 1.0000001]]
+
+    """ Search in known users """
+    python image_video_test.py --images test.jpg --known_users test
+    # >>>> image_classes info:
+    # 0  10
+    # 1  10
+    # ...
+    # recognition_similarities: [0.47837412]
+    # recognition_classes: ['9']
+    # bbs: [[176.56265   54.588932 272.8746   181.40137 ]]
+    # ccs: [0.8820559]
+    # >>>> Saving result to: test_recognition_result.jpg
+
+    """ Video test """
+    python image_video_test.py --known_users test --video_source 0
     ```
 ## Learning rate
   - `train.Train` parameters `lr_base` / `lr_decay` / `lr_decay_steps` / `lr_warmup_steps` set different decay strategies and their parameters.
