@@ -1,20 +1,44 @@
 #!/usr/bin/env python3
 
-import pickle
 import os
 import io
-from tqdm import tqdm
-from skimage.io import imread
-from sklearn.preprocessing import normalize
-import tensorflow as tf
-import numpy as np
+import pickle
 import glob2
-import numpy as np
-from scipy import misc
-from sklearn.model_selection import KFold
-from scipy import interpolate
 import sklearn
+import numpy as np
+
+from tqdm import tqdm
+from scipy import misc
+from scipy import interpolate
+from skimage.io import imread
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA
+
+try:
+    from importlib.metadata import version
+
+    tf_version = version('tensorflow').split(".")
+    try:
+        keras_version = version('keras').split(".")
+    except:
+        keras_version = tf_version
+
+    try:
+        tf_keras_version = version('tf_keras').split(".")
+    except:
+        tf_keras_version = keras_version
+
+    is_tf_use_legacy_keras = os.environ.get("TF_USE_LEGACY_KERAS", "0") == "1"
+    if int(tf_version[0]) >= 2 and int(tf_version[1]) >= 16 and int(tf_keras_version[0]) >= 3:
+        print("[WARNING] Currently tensorflow>=2.16 with keras 3 not supported, try pip install tf-keras~=2.16 and set TF_USE_LEGACY_KERAS=1 if error.")
+    elif int(tf_version[0]) >= 2 and int(tf_version[1]) >= 16 and not is_tf_use_legacy_keras:
+        os.environ["TF_USE_LEGACY_KERAS"] = "1"
+        print("[WARNING] Setting TF_USE_LEGACY_KERAS=1. Make sure this is ahead of importing tensorflow or keras.")
+except:
+    pass
+
+import tensorflow as tf
 
 
 class eval_callback(tf.keras.callbacks.Callback):
@@ -281,7 +305,10 @@ def evaluate(embeddings, actual_issame, nrof_folds=10, pca=0):
 if __name__ == "__main__":
     import sys
     import argparse
-    import tensorflow_addons as tfa
+    try:
+        import tensorflow_addons as tfa
+    except:
+        pass
 
     # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
     # tf.get_logger().setLevel('ERROR')

@@ -4,14 +4,38 @@ import os
 import cv2
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 from tqdm import tqdm
 from glob2 import glob
 from skimage import transform
 from skimage.io import imread, imsave
 from sklearn.preprocessing import normalize
 from sklearn.metrics import roc_curve, auc
+try:
+    from importlib.metadata import version
+
+    tf_version = version('tensorflow').split(".")
+    try:
+        keras_version = version('keras').split(".")
+    except:
+        keras_version = tf_version
+
+    try:
+        tf_keras_version = version('tf_keras').split(".")
+    except:
+        tf_keras_version = keras_version
+
+    is_tf_use_legacy_keras = os.environ.get("TF_USE_LEGACY_KERAS", "0") == "1"
+    if int(tf_version[0]) >= 2 and int(tf_version[1]) >= 16 and int(tf_keras_version[0]) >= 3:
+        print("[WARNING] Currently tensorflow>=2.16 with keras 3 not supported, try pip install tf-keras~=2.16 and set TF_USE_LEGACY_KERAS=1 if error.")
+    elif int(tf_version[0]) >= 2 and int(tf_version[1]) >= 16 and not is_tf_use_legacy_keras:
+        os.environ["TF_USE_LEGACY_KERAS"] = "1"
+        print("[WARNING] Setting TF_USE_LEGACY_KERAS=1. Make sure this is ahead of importing tensorflow or keras.")
+except:
+    pass
+
+import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
 
 gpus = tf.config.experimental.list_physical_devices("GPU")
 for gpu in gpus:
@@ -202,7 +226,10 @@ def plot_tpr_far(score, label, new_figure=True, label_prefix=""):
 if __name__ == "__main__":
     import sys
     import argparse
-    import tensorflow_addons as tfa
+    try:
+        import tensorflow_addons as tfa
+    except:
+        pass
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-d", "--data_path", type=str, default=None, help="Data path, containing images in class folders")
